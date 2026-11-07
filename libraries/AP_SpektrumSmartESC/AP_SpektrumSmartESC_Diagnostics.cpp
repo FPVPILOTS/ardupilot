@@ -138,7 +138,11 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #endif
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     if (_auto == 1) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 PollLab: explicit 0xCD only; MOTOR UNPLUGGED");
+#else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: AUTO handshake TX only; no motor/control");
+#endif
     } else
 #endif
     {
@@ -264,8 +268,11 @@ bool AP_SpektrumSmartESC_Diagnostics::log_probe(uint32_t now_ms)
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 {
-    // Only the separate, unarmable AutoLab image can enter this path.
-    // Wire protocol: 0x21 handshakes only; 0xCD / motor / reverse impossible.
+    // Only separately compiled, UNARMABLE AutoLab/PollLab images enter.
+    // AutoLab: physical 0x21 handshakes only.
+    // PollLab: also exactly one user-authorized, mask=0 0xCD; NO motor
+    // channel updates, reverse or flight arming, and motor phases MUST
+    // be physically unplugged. Packet mask=0 is NOT a motor-stop command.
     if (!_auto_started) {
         return;
     }
