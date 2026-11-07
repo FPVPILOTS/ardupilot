@@ -69,6 +69,22 @@ static void valid_sensor_at_14ms_is_late()
     assert(w.snapshot().bins[3] == 22);
 }
 
+static void late_sensor_after_original_poll_timeout()
+{
+    // The physical 0xCD transaction may have closed at TC+15 ms,
+    // but its independent read-only witness remains active to TC+30 ms.
+    Witness w; uint8_t p[80] {};
+    const uint8_t n = packet(0x80, p);
+    w.begin(); w.on_true_tc(100);
+    assert(w.active());
+    feed_packet(w, p, n, 125); // 25 ms after TC; not an accepted poll reply.
+    w.finish();
+    assert(w.snapshot().bytes == 22);
+    assert(w.snapshot().sensors == 1 && w.snapshot().late_sensors == 1);
+    assert(w.snapshot().bins[3] == 22);
+    assert(!w.active());
+}
+
 static void crc_failure_and_bad_length()
 {
     Witness w; uint8_t p[80] {};
@@ -132,10 +148,11 @@ int main()
     bytes_before_tc_are_not_a_reply();
     valid_sensor_at_2ms();
     valid_sensor_at_14ms_is_late();
+    late_sensor_after_original_poll_timeout();
     crc_failure_and_bad_length();
     handshake_and_control_are_not_telemetry();
     timeout_and_truncated_frame();
     ignore_late_bytes_after_capture_window();
     timestamps_wrap();
-    std::puts("9 PostPoll RX read-only forensic tests passed");
+    std::puts("10 PostPoll RX read-only forensic tests passed");
 }
