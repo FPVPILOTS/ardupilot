@@ -12,6 +12,20 @@ public:
     static constexpr uint8_t TARGET = 0x40;
     static constexpr uint8_t DESTINATION = 0x30;
     static constexpr uint32_t LEASE_MS = 100;
+    // Half-duplex SRXL2: do not start 0xCD immediately after the ESC's
+    // recurring 0x21 frame. Native RX timestamp is independently measured
+    // from the actual UART FIFO (not the vehicle's parser clock).
+    static constexpr uint32_t MIN_RX_QUIET_MS = 2;
+    static constexpr uint32_t MAX_RX_AGE_MS = 100;
+
+    static bool rx_gap_safe(uint32_t now_ms, uint32_t last_rx_ms)
+    {
+        if (last_rx_ms == 0) {
+            return false;
+        }
+        const uint32_t age = now_ms - last_rx_ms;
+        return age >= MIN_RX_QUIET_MS && age <= MAX_RX_AGE_MS;
+    }
 
     static uint8_t encode(uint8_t *out, size_t capacity)
     {
