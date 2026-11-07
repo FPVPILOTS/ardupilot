@@ -107,6 +107,41 @@ static void no_peer_timeout_then_backoff()
     assert(s.status().successful == 0);
 }
 
+static void reconnect_repeats_valid_handshake_without_stale_link()
+{
+    Session s;
+    s.enable(0, 0x40, 0x123456U);
+    uint8_t packet[80] {};
+    assert(s.tick(1000000, true, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(s.prepare(3000000, packet, sizeof(packet), true) == 14);
+    assert(s.sent(3001500));
+    feed_peer(s, 3003000);
+    assert(s.prepare(3005000, packet, sizeof(packet), true) == 14);
+    assert(s.sent(3006500));
+    assert(s.tick(3007000, true, true, true) == Action::NONE);
+    assert(s.status().state == State::LINKED);
+    assert(s.status().successful == 1);
+
+    assert(s.tick(3400000, true, true, true) == Action::NONE);
+    assert(s.status().state == State::BACKOFF);
+    assert(s.status().lost == 1);
+    assert(s.tick(4400000, true, true, true) == Action::NONE);
+    assert(s.status().state == State::LISTEN);
+    assert(s.tick(5400000, true, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(s.prepare(7399000, packet, sizeof(packet), true) == 0);
+    assert(s.prepare(7400000, packet, sizeof(packet), true) == 14);
+    assert(s.sent(7401500));
+    feed_peer(s, 7403000);
+    assert(s.prepare(7404000, packet, sizeof(packet), true) == 0);
+    assert(s.prepare(7405000, packet, sizeof(packet), true) == 14);
+    assert(s.sent(7406500));
+    assert(s.tick(7407000, true, true, true) == Action::NONE);
+    assert(s.status().state == State::LINKED);
+    assert(s.status().successful == 2);
+    assert(s.status().attempts == 2);
+    assert(s.status().lost == 1);
+}
+
 static void master_conflict_and_unsafe_gate_latch()
 {
     Session s;
@@ -128,6 +163,7 @@ int main()
     handshake_uses_real_reader_frames();
     wrong_reply_cannot_report_connected();
     no_peer_timeout_then_backoff();
+    reconnect_repeats_valid_handshake_without_stale_link();
     master_conflict_and_unsafe_gate_latch();
-    std::puts("4 Phase 17B real-reader auto-session tests passed (simulation only)");
+    std::puts("5 Phase 17B/17C reader auto-session tests passed (simulation only)");
 }
