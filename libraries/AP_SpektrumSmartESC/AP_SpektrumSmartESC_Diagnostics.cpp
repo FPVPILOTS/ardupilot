@@ -374,6 +374,12 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       (unsigned long)hw.framing,
                       unsigned((hw.flags & 2U) != 0),
                       unsigned((hw.handshake_flags & 2U) != 0));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 PEER S%02x D%02x T%02x A%lu",
+                      unsigned(hs.last_hs_src), unsigned(hs.last_hs_dst),
+                      unsigned(hs.type), (unsigned long)hs.startup_announcements);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 PEER PRI%u BAUD%u ECHO%lu UNEXP%lu",
+                      unsigned(hs.last_hs_priority), unsigned(hs.last_hs_baud),
+                      (unsigned long)hs.echoes, (unsigned long)hs.unexpected);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 POST RX%lu",
                       (unsigned long)_auto_rx.observation().crc_frames);
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
