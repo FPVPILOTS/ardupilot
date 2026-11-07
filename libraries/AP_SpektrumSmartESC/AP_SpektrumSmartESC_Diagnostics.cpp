@@ -432,9 +432,12 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     if (_poll_active) {
         // A real 0xCD uses the *existing* native UART4 owner, but the
         // single-packet lease and response window are independently bounded.
-        if (!dry.linked || port->receive_errors() != _poll_uart_error_baseline ||
-            (_poll_tc && uint32_t(now_ms - _poll_tc_ms) >= 15U) ||
-            uint32_t(now_ms - _poll_start_ms) >= 60U) {
+        if (!dry.linked || !dry.disarmed || !dry.emergency_stop ||
+            port->receive_errors() != _poll_uart_error_baseline ||
+            hw.handshake_faults != _poll_hw_fault_baseline ||
+            (_poll_tc && !rx_restored) ||
+            AP_SpektrumSmartESC_PollLab::timeout(
+                now_ms, _poll_start_ms, _poll_tc, _poll_tc_ms)) {
             (void)port->diagnostic_poll_lab(nullptr, 0, true);
             if (!_poll_reply) {
                 _poll_fail++;
@@ -459,6 +462,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                 _poll_packet, sizeof(_poll_packet));
             if (n == 14 && port->diagnostic_poll_lab_start()) {
                 _poll_uart_error_baseline = port->receive_errors();
+                _poll_hw_fault_baseline = hw.handshake_faults;
                 if (port->diagnostic_poll_lab(_poll_packet, n, false)) {
                     _poll_active = true;
                     _poll_tc = _poll_reply = false;
