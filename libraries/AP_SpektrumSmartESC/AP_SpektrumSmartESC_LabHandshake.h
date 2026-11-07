@@ -44,6 +44,23 @@ public:
             _power_on = power_on;
             return true;
         }
+        // Independent native proof for the separate AutoLab early startup
+        // response. The user-space reader cannot simply skip the 2s gate:
+        // this lease validates the actual CRC-correct ESC advertisement again.
+        bool authorize_startup_announcement(const uint8_t *p, uint8_t n, uint32_t now_ms)
+        {
+            if (!_power_on || !active(now_ms) || _frames != 0 || _early_started ||
+                p == nullptr || n != 14 || p[0] != 0xA6 || p[1] != 0x21 ||
+                p[2] != n || p[3] != _target || p[4] != 0 ||
+                p[5] == 0 || p[5] > 100 || p[6] > 1 ||
+                AP_SpektrumSmartESC::crc16(p, n) != 0 ||
+                uint32_t(now_ms - _started_ms) >= AP_SpektrumSmartESC_Reader::PREPARE_MS) {
+                return false;
+            }
+            _early_announcement_ms = now_ms;
+            _early_approved = true;
+            return true;
+        }
         uint32_t duration_ms() const { return _power_on ? AP_SpektrumSmartESC_Reader::PREPARE_MS + AP_SpektrumSmartESC_Reader::WINDOW_MS : 200; }
         bool active(uint32_t now_ms) const { return _active && uint32_t(now_ms - _started_ms) < duration_ms(); }
         bool take(const uint8_t *packet, uint8_t length, uint32_t now_ms)
@@ -54,7 +71,14 @@ public:
                 return false;
             }
             if (_power_on) {
-                if (uint32_t(now_ms - _started_ms) < AP_SpektrumSmartESC_Reader::PREPARE_MS ||
+                // Only CRC-validated matching ESC announcements can override
+                // the original conservative 2-second prepare delay. The first
+                // actual transmit must follow within 75ms of that observation.
+                // Subsequent 0x21 confirmation retains the same bounded lease.
+                const bool before_prepare = uint32_t(now_ms - _started_ms) < AP_SpektrumSmartESC_Reader::PREPARE_MS;
+                const bool early_allowed = _early_started || (_early_approved &&
+                    uint32_t(now_ms - _early_announcement_ms) <= 75U);
+                if ((before_prepare && !early_allowed) ||
                     (packet[4] == _target && (_frames >= AP_SpektrumSmartESC_Reader::MAX_QUERIES ||
                      (_frames != 0 && uint32_t(now_ms - _last_query_ms) < AP_SpektrumSmartESC_Reader::RETRY_MS))) ||
                     (packet[4] == 0xFF && _frames == 0) || (packet[4] != _target && packet[4] != 0xFF)) {
@@ -67,6 +91,10 @@ public:
                 (uint32_t(packet[10]) << 16) | (uint32_t(packet[11]) << 24);
             if (uid != _uid) {
                 return false;
+            }
+            if (_power_on && _frames == 0 && _early_approved &&
+                uint32_t(now_ms - _started_ms) < AP_SpektrumSmartESC_Reader::PREPARE_MS) {
+                _early_started = true;
             }
             _frames++;
             _confirmed = packet[4] == 0xFF;
@@ -82,7 +110,9 @@ public:
         uint8_t frames() const { return _frames; }
     private:
         uint32_t _started_ms = 0, _uid = 0, _last_query_ms = 0;
+        uint32_t _early_announcement_ms = 0;
         uint8_t _target = 0, _frames = 0;
         bool _active = false, _used = false, _power_on = false, _confirmed = false;
+        bool _early_approved = false, _early_started = false;
     };
 };
