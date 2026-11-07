@@ -39,6 +39,10 @@ public:
     // Bounded raw prefix from this attempt, including malformed input and echoes.
     // Diagnostic caller supplies only bytes acquired by the physical UART.
     uint8_t capture(uint8_t *out, size_t capacity) const;
+    // Returns one CRC-validated unsolicited startup handshake received during
+    // the bounded power-on window; never treats it as a solicited response.
+    // The native UART gate independently validates it before early TX.
+    bool take_startup_announcement(uint8_t *out, size_t capacity);
     static bool handshake_packet(const uint8_t *p, size_t n);
 private:
     void observe(const uint8_t *p, uint8_t n, uint32_t now_us);
@@ -50,4 +54,6 @@ private:
     bool _prepared = false, _power_on = false;
     uint8_t _capture[64] {};
     uint8_t _captured = 0;
+    uint8_t _startup_packet[14] {};
+    bool _startup_pending = false;
 };
