@@ -78,6 +78,19 @@ private:
     bool _auto_started = false;
     bool _auto_leased = false, _auto_inflight = false;
     void update_auto_reader(uint32_t now_ms);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    AP_Int8 _pollack;
+    AP_Int8 _pollrun;
+    AP_SpektrumSmartESC_LabHandshake::Authorization _poll_auth;
+    bool _poll_consumed = false;
+    bool _poll_pending = false;
+    bool _poll_active = false, _poll_tc = false, _poll_reply = false;
+    uint32_t _poll_request_ms = 0, _poll_start_ms = 0, _poll_tc_ms = 0;
+    uint32_t _poll_uart_error_baseline = 0;
+    uint32_t _poll_sent = 0, _poll_accepted = 0, _poll_fail = 0;
+    AP_SpektrumSmartESC::Telemetry _poll_sample {};
+    uint8_t _poll_packet[14] {};
+#endif
 #endif
     AP_SpektrumSmartESC_LabHandshake::Authorization _hs_authorization;
     bool _hs_lab_session = false, _hs_window_reported = false;
