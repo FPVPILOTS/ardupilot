@@ -104,10 +104,12 @@ static void startup_advertisement_is_only_evidence()
     assert(s.status().state == State::HANDSHAKE);
     assert(s.status().successful == 0);
     uint8_t captured_announcement[14] {};
-    assert(s.take_startup_announcement(captured_announcement, sizeof(captured_announcement)));
+    uint32_t seen_ms = 0;
+    assert(s.take_startup_announcement(captured_announcement, sizeof(captured_announcement), seen_ms));
+    assert(seen_ms == 1200U);
     assert(captured_announcement[3] == 0x40 && captured_announcement[4] == 0);
     assert(AP_SpektrumSmartESC::crc16(captured_announcement, 14) == 0);
-    assert(!s.take_startup_announcement(captured_announcement, sizeof(captured_announcement)));
+    assert(!s.take_startup_announcement(captured_announcement, sizeof(captured_announcement), seen_ms));
     uint8_t packet[80] {};
     assert(s.prepare(1200000, packet, sizeof(packet), true) == 0);
     // The first directed 0x21 can now be prepared two milliseconds after
@@ -131,7 +133,8 @@ static void malformed_startup_cannot_start_early_tx()
         s.feed(b, 1200000);
     }
     uint8_t captured[14] {};
-    assert(!s.take_startup_announcement(captured, sizeof(captured)));
+    uint32_t seen_ms = 0;
+    assert(!s.take_startup_announcement(captured, sizeof(captured), seen_ms));
     assert(s.reader_status().startup_announcements == 0);
     uint8_t packet[80] {};
     assert(s.prepare(1202000, packet, sizeof(packet), true) == 0);
