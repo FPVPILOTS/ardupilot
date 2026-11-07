@@ -60,6 +60,11 @@ private:
     uint32_t _handshake_queued = 0, _handshake_completed = 0, _handshake_restored = 0;
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     AP_SpektrumSmartESC_LabHandshake::Lease _lab_hs_lease;
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    // Hardware lease re-arm is permitted only in the separately compiled
+    // AutoLab image; ordinary manual HSLab remains one-shot per reboot.
+    uint32_t _auto_hs_last_ms = 0;
+#endif
 #endif
     void poll();
     void register_poll();
