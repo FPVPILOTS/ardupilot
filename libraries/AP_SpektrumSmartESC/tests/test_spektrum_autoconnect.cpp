@@ -60,7 +60,7 @@ static void peer_timeout_and_recovery_clears_link()
     assert(p.update(1320, true, true) == Action::NONE);
     assert(p.status().state == State::BACKOFF);
     assert(p.status().lost == 1);
-    assert(!p.status().profile_matched);
+    assert(!p.status().device_id_matched);
     assert(p.update(2320, true, true) == Action::NONE);
     assert(p.update(3320, true, true) == Action::BEGIN_HANDSHAKE);
     assert(p.handshake_complete(3333, 0x40, true, true));
