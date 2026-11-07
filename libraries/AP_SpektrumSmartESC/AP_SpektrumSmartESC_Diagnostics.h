@@ -66,6 +66,7 @@ private:
     AP_SpektrumSmartESC_AutoSession _auto_session;
     AP_SpektrumSmartESC _auto_rx {0x30, 0x40, 50, false};
     uint8_t _auto_packet[14] {};
+    uint32_t _auto_uid = 0;
     uint32_t _auto_uart_error_baseline = 0;
     uint32_t _auto_log_ms = 0;
     bool _auto_started = false;
