@@ -69,6 +69,7 @@ private:
     AP_SpektrumSmartESC _auto_rx {0x30, 0x40, 50, false};
     AP_SpektrumSmartESC_PassiveTelemetry _auto_telem_observer;
     AP_SpektrumSmartESC_PollDryRun _auto_poll_dryrun;
+    uint32_t _auto_last_verified_peer_ms = 0; // 0x21 from the real linked ESC only
     uint8_t _auto_packet[14] {};
     uint32_t _auto_uid = 0;
     uint32_t _auto_uart_error_baseline = 0;
