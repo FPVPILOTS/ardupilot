@@ -8,6 +8,14 @@ using State = Auto::State;
 using Action = Auto::Action;
 using Reason = Auto::Reason;
 
+static void diagnostic_names_are_human_readable()
+{
+    assert(Auto::state_name(State::LISTEN)[0] == 'W');
+    assert(Auto::state_name(State::LINKED)[0] == 'S');
+    assert(Auto::reason_name(Reason::MASTER_CONFLICT)[0] == 'S');
+    assert(Auto::reason_name(Reason::PEER_TIMEOUT)[0] == 'E');
+}
+
 static void disabled_never_transmits()
 {
     Auto p;
@@ -147,6 +155,7 @@ static void timeout_and_uint32_clock_wrap()
 
 int main()
 {
+    diagnostic_names_are_human_readable();
     disabled_never_transmits();
     startup_fc_first_esc_first_simultaneous();
     requires_exact_peer_and_uart_restoration();
@@ -156,5 +165,5 @@ int main()
     never_compete_with_master();
     safety_loss_and_uart_fault_are_latched();
     timeout_and_uint32_clock_wrap();
-    std::puts("9 Phase 17 automatic startup/reconnect policy tests passed (simulation only)");
+    std::puts("10 Phase 17 automatic startup/reconnect policy tests passed (simulation only)");
 }
