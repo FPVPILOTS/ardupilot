@@ -53,6 +53,12 @@ public:
     };
     struct Observation {
         uint32_t crc_frames = 0; // CRC-valid framing, NOT accepted/authenticated ESC data.
+        // CRC-valid raw packet types. These do not prove ownership, a live peer,
+        // authorization, motor readiness or accepted ESC telemetry.
+        uint32_t handshake_frames = 0; // 0x21
+        uint32_t control_frames = 0;   // 0xCD; observed only, never sent here
+        uint32_t sensor_frames = 0;    // 0x80; may be untrusted/unsolicited
+        uint32_t other_frames = 0;
         uint32_t accepted = 0;
         uint32_t last_ms = 0;
         uint8_t type = 0;
