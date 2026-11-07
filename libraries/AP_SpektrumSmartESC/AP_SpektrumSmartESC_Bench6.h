@@ -72,23 +72,23 @@ public:
                 return zero(Reason::WAIT_DWELL, true);
             }
             if (uint32_t(now_ms - _transition_since) < DIRECTION_DWELL_MS) {
-                return zero(Reason::WAIT_DWELL);
+                return zero(Reason::WAIT_DWELL, true);
             }
             _reverse = in.reverse;
             _transition = false;
             _post_change_hold = true;
             _post_change_since = now_ms;
-            return zero(Reason::WAIT_DWELL);
+            return zero(Reason::WAIT_DWELL, true);
         }
 
         _transition = false;
         if (_post_change_hold) {
             if (!in.stopped) {
                 _post_change_since = now_ms;
-                return zero(Reason::WAIT_STOP);
+                return zero(Reason::WAIT_STOP, true);
             }
             if (uint32_t(now_ms - _post_change_since) < DIRECTION_DWELL_MS) {
-                return zero(Reason::WAIT_DWELL);
+                return zero(Reason::WAIT_DWELL, true);
             }
             _post_change_hold = false;
         }
