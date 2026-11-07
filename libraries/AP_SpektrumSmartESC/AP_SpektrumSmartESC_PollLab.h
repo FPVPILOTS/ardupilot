@@ -27,6 +27,14 @@ public:
         return age >= MIN_RX_QUIET_MS && age <= MAX_RX_AGE_MS;
     }
 
+    static bool timeout(uint32_t now_ms, uint32_t started_ms,
+                        bool tc_seen, uint32_t tc_ms)
+    {
+        const uint32_t elapsed = now_ms - started_ms;
+        return elapsed >= 60U || (!tc_seen && elapsed >= 8U) ||
+            (tc_seen && uint32_t(now_ms - tc_ms) >= 15U);
+    }
+
     static uint8_t encode(uint8_t *out, size_t capacity)
     {
         // Command=0; ReplyID=0x40; RSSI=0; frame losses=0;
