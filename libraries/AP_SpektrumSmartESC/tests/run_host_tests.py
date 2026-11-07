@@ -16,6 +16,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     executable = args.out.resolve() / 'test_spektrum_smart.exe'
     recovery_executable = args.out.resolve() / 'test_spektrum_uart_recovery.exe'
+    autoconnect_executable = args.out.resolve() / 'test_spektrum_autoconnect.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -26,6 +27,9 @@ def main():
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
              str(library / 'tests/test_spektrum_uart_recovery.cpp'), '-o', str(recovery_executable)],
             [str(recovery_executable)],
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             str(library / 'tests/test_spektrum_autoconnect.cpp'), '-o', str(autoconnect_executable)],
+            [str(autoconnect_executable)],
         ]
         if args.arm_cxx:
             commands.append([
