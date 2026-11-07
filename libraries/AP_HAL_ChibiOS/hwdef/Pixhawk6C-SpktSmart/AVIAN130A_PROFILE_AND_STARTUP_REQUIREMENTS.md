@@ -93,3 +93,15 @@ https://www.spektrumrc.com/on/demandware.static/-/Sites-horizon-master/default/d
 E-flite Viper 90mm manufacturer manual:
 https://www.e-fliterc.com/on/demandware.static/-/Sites-horizon-master/default/dwc79ce86f/Manuals/Smart%20Viper%2090mm%20EDF%20Manual_EN.pdf
 
+
+## Operator confirmation: standard Viper motor; 4S bench and 6S flight (2026-11-07)
+
+Operator confirms the installed Viper 90mm motor is factory-standard and normal flying uses a **6S LiPo**; only the current bench test uses a **4S LiPo**. Thus:
+
+- Treat the motor profile as original Viper 90mm motor. If the manufacturer's documented four physical motor poles apply to that stock motor, **2 pole pairs** converts electrical RPM to shaft RPM; this conversion must distinguish eRPM from actual motor RPM, and must be verified against an independent tachometer before claimed accurate under load.
+- **Keep LiPo Cells = Auto Calc** for current 4S/6S mixed-power testing. A fixed 6S setting is inappropriate with the 4S battery still in use. Auto detection estimates the count from voltage using 3.7 V/cell; an unusually depleted or imbalanced pack can be misclassified. For flight, preflight-confirm six cells and use independent cell-level pack monitoring.
+- The programmed **Cutoff Voltage = Disabled** is still a critical protection gap. If enabling a per-cell limit of 3.4 V/cell (engineering recommendation, not an as-shipped value), nominal cutoff thresholds would be **13.6 V for 4S** and **20.4 V for 6S**; the ESC sets those based on its detected cell count; this does *not* replace independent under-load battery supervision.
+- Software telemetry must show measured pack voltage and independent operator-declared current test pack cell count, not assume 6S whenever this ESC is discovered. Do not guess cell count from ESC 0x40 ID.
+- Never silently copy the temporary 4S test-pack configuration into 6S flight validation or use nominal battery cell count to modify throttle endpoint/ESC ID. The motor/EDF full-power behavior on 4S is not proof of 6S safety.
+
+Source for per-cell cutoff and Auto Calc: official Spektrum programming instructions; cutoff 2.8–3.8V **per cell**, Auto Calc based on 3.7V/cell. See manufacturer URL above.
