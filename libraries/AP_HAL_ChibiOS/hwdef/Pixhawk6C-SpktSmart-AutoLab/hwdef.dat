@@ -1,0 +1,5 @@
+# Separate automatic handshake-only bench target; NEVER for flight.
+# Reuses the tested HSLab hardware ownership and 0x21-only whitelist.
+include ../Pixhawk6C-SpktSmart-HSLab/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-Spkt-AutoLab"
+define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
