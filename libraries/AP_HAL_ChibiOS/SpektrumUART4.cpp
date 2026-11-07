@@ -210,6 +210,15 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
         return false;
     }
     // Do not discard an unread peer packet to make transmission possible.
+    // Independently re-check the last real RX byte before enabling TE:
+    // a valid 0x21 ESC message arrives ~every 50ms after link.
+    if (AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
+        AP_SpektrumSmartESC_PollLab::exact_packet(data, length) &&
+        !AP_SpektrumSmartESC_PollLab::rx_gap_safe(
+            AP_HAL::millis(), _rx._last_uart_rx_ms)) {
+        chSysUnlock();
+        return false;
+    }
     if (_rx._head != _rx._tail || (UART4->ISR & USART_ISR_RXNE_RXFNE)) {
         chSysUnlock();
         return false;
