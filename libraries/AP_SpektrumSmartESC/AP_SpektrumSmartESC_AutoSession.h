@@ -44,7 +44,7 @@ public:
                 // A final broadcast queued in software is not enough:
                 // Reader enters DISCOVERED only after sent() following UART TC.
                 if (uart_rx_restored) {
-                    IGNORE_RETURN(_policy.handshake_complete(now_ms, s.device,
+                    (void)_policy.handshake_complete(now_ms, s.device,
                         s.responses == 1, uart_rx_restored));
                 }
             } else if (s.state == AP_SpektrumSmartESC_Reader::State::TIMEOUT ||
