@@ -276,6 +276,23 @@ bool DiagnosticRX::diagnostic_handshake_start(uint8_t target, uint32_t uid, bool
 #endif
 }
 
+bool DiagnosticRX::diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length)
+{
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (hal.util->get_soft_armed() || !hal.scheduler->in_main_thread()) {
+        return false;
+    }
+    chSysLock();
+    const bool allowed = _initialized && _experimental_owner == nullptr &&
+        _lab_hs_lease.authorize_startup_announcement(packet, length, AP_HAL::millis());
+    chSysUnlock();
+    return allowed;
+#else
+    (void)packet; (void)length;
+    return false;
+#endif
+}
+
 bool DiagnosticRX::diagnostic_waveform(bool start, bool finish)
 {
     if (!AP_SPEKTRUM_SMART_ESC_LAB_ONLY) {
