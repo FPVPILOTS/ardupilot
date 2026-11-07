@@ -12,6 +12,7 @@ strings "$bin" | grep -F "SPK17 AUTOLAB ON" >/dev/null
 strings "$bin" | grep -F "SPK17 WHY" >/dev/null
 strings "$bin" | grep -F "SPK17 UART Q" >/dev/null
 strings "$bin" | grep -F "SPK17 HS TX" >/dev/null
+strings "$bin" | grep -F "SPK17 PEER S" >/dev/null
 # The two preceding string scans already validated the firmware's
 # AutoLab markers. Do not repeat with grep -q under pipefail: strings may
 # receive SIGPIPE and silently skip the success banner despite exit code 0.
