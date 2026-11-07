@@ -46,14 +46,17 @@ static void handshake_uses_real_reader_frames()
     feed_peer(s, 3003000);
     assert(s.reader_status().responses == 1);
 
-    assert(s.prepare(3004000, packet, sizeof(packet), true) == 14);
+    // Reader enforces a 2 ms RX-silence guard before transmitting its
+    // confirm broadcast; this is intentional half-duplex protection.
+    assert(s.prepare(3004000, packet, sizeof(packet), true) == 0);
+    assert(s.prepare(3005000, packet, sizeof(packet), true) == 14);
     assert(packet[1] == 0x21 && packet[4] == 0xFF);
-    assert(s.sent(3005500));
+    assert(s.sent(3006500));
     // Native transport must prove RX restored; UART TX complete alone is not
     // sufficient to report a link.
-    assert(s.tick(3006000, true, true, false) == Action::NONE);
+    assert(s.tick(3007000, true, true, false) == Action::NONE);
     assert(s.status().state == State::HANDSHAKE);
-    assert(s.tick(3007000, true, true, true) == Action::NONE);
+    assert(s.tick(3008000, true, true, true) == Action::NONE);
     assert(s.status().state == State::LINKED);
     assert(s.status().successful == 1);
     assert(s.prepare(3010000, packet, sizeof(packet), true) == 0);
@@ -96,6 +99,9 @@ static void no_peer_timeout_then_backoff()
     Session s;
     s.enable(0, 0x40, 123);
     assert(s.tick(1000000, true, true, true) == Action::BEGIN_HANDSHAKE);
+    // Reader's finite power-on experiment has a 7 s deadline from start,
+    // while the policy has a 7.5 s deadline. Crossing the reader deadline
+    // must transition to BACKOFF without claiming a peer.
     assert(s.tick(8000000, true, true, true) == Action::NONE);
     assert(s.status().state == State::BACKOFF);
     assert(s.status().successful == 0);
