@@ -235,6 +235,58 @@ bool DiagnosticRX::diagnostic_handshake(const uint8_t *packet, uint8_t length, b
 #endif
 }
 
+bool DiagnosticRX::diagnostic_poll_lab_start()
+{
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (hal.util->get_soft_armed() || !hal.scheduler->in_main_thread()) {
+        return false;
+    }
+    chSysLock();
+    const bool valid = _initialized && _experimental_owner == nullptr &&
+        !_lab_hs_lease.active(AP_HAL::millis()) &&
+        _head == _tail && palReadLine(PAL_LINE(GPIOA, 0)) &&
+        (GPIOA->MODER & 3U) == 2U &&
+        (GPIOA->AFRL & 15U) == 8U &&
+        (GPIOA->OTYPER & 1U) &&
+        (UART4->CR1 & (USART_CR1_UE | USART_CR1_RE | USART_CR1_TE)) ==
+            (USART_CR1_UE | USART_CR1_RE) &&
+        (UART4->CR3 & USART_CR3_HDSEL) &&
+        !(UART4->ISR & (USART_ISR_BUSY | USART_ISR_RXNE_RXFNE |
+                         USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE)) &&
+        (_handshake_port == nullptr || !_handshake_port->owned());
+    const bool permitted = valid && _poll_lab_lease.start(AP_HAL::millis());
+    chSysUnlock();
+    return permitted;
+#else
+    return false;
+#endif
+}
+
+bool DiagnosticRX::diagnostic_poll_lab(const uint8_t *packet, uint8_t length, bool finish)
+{
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (finish || hal.util->get_soft_armed()) {
+        chSysLock();
+        _poll_lab_lease.close();
+        chSysUnlock();
+        (void)diagnostic_transaction(nullptr, 0, true);
+        return false;
+    }
+    if (!hal.scheduler->in_main_thread() ||
+        !AP_SpektrumSmartESC_PollLab::exact_packet(packet, length)) {
+        return false;
+    }
+    chSysLock();
+    const bool permitted = _poll_lab_lease.active(AP_HAL::millis()) &&
+        !_lab_hs_lease.active(AP_HAL::millis());
+    chSysUnlock();
+    return permitted && diagnostic_transaction(packet, length, false);
+#else
+    (void)packet; (void)length; (void)finish;
+    return false;
+#endif
+}
+
 bool DiagnosticRX::diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on)
 {
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
