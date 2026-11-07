@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "../AP_SpektrumSmartESC_PollDryRun.h"
+#include "../AP_SpektrumSmartESC_Reader.h"
 #include <cassert>
 #include <cstdio>
 using Guard = AP_SpektrumSmartESC_PollDryRun;
@@ -165,8 +166,21 @@ static void link_loss_reenables_a_new_dryrun_not_control()
     assert(g.status().previews == 2);
 }
 
+// The existing *native UART4 gate* still only accepts 0x21 handshakes.
+static void physical_uart4_handshake_gate_rejects_cd_preview()
+{
+    uint8_t packet[14] {};
+    const uint8_t payload[9] = {0, 0x40, 0, 0, 0, 0, 0, 0, 0};
+    const uint8_t n = AP_SpektrumSmartESC::encode(
+        0xCD, payload, sizeof(payload), packet, sizeof(packet));
+    assert(n == 14);
+    assert(AP_SpektrumSmartESC::crc16(packet, n) == 0);
+    assert(!AP_SpektrumSmartESC_Reader::handshake_packet(packet, n));
+}
+
 int main()
 {
+    physical_uart4_handshake_gate_rejects_cd_preview();
     refuses_before_link();
     requires_disarmed_emergency_stop();
     requires_expected_peer();
@@ -177,5 +191,5 @@ int main()
     uart_new_error_latches_until_link_loss();
     conflicting_master_latches_until_link_loss();
     link_loss_reenables_a_new_dryrun_not_control();
-    std::puts("10 Phase 17E-C linked-bench dry-run safety tests passed (no TX)");
+    std::puts("11 Phase 17E-C linked-bench dry-run and 0xCD TX-denial tests passed (no TX)");
 }
