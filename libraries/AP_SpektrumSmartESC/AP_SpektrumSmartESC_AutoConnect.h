@@ -31,7 +31,7 @@ public:
         uint32_t rejected = 0;
         uint32_t last_peer_ms = 0;
         uint8_t peer_id = 0;
-        bool profile_matched = false; // only the bus ID can be checked here
+        bool device_id_matched = false; // only the bus ID can be checked here
     };
 
     // 1000 ms listen-before-talk; 7.5 s bounded handshake; 300 ms heartbeat
@@ -72,7 +72,7 @@ public:
             // and cannot be re-authorized by a later update().
             _status.state = State::FAULT;
             _status.reason = Reason::NOT_SAFE;
-            _status.profile_matched = false;
+            _status.device_id_matched = false;
             return Action::NONE;
         }
         if (_status.state == State::HANDSHAKE &&
@@ -116,7 +116,7 @@ public:
         _status.state = State::LINKED;
         _status.reason = Reason::NONE;
         _status.peer_id = peer_id;
-        _status.profile_matched = true; // ID matched; NOT model/firmware verified
+        _status.device_id_matched = true; // ID matched; NOT model/firmware verified
         _status.last_peer_ms = now_ms;
         _status.successful++;
         _consecutive_failures = 0;
@@ -148,7 +148,7 @@ public:
         if (_status.state != State::OFF) {
             _status.state = State::YIELDED;
             _status.reason = Reason::MASTER_CONFLICT;
-            _status.profile_matched = false;
+            _status.device_id_matched = false;
         }
     }
 
@@ -157,7 +157,7 @@ public:
         if (_status.state != State::OFF) {
             _status.state = State::FAULT;
             _status.reason = Reason::UART_ERROR;
-            _status.profile_matched = false;
+            _status.device_id_matched = false;
         }
     }
 
@@ -182,7 +182,7 @@ private:
     {
         _status.state = State::BACKOFF;
         _status.reason = why;
-        _status.profile_matched = false;
+        _status.device_id_matched = false;
         _status.peer_id = 0;
         _status.rejected++;
         _state_since_ms = now_ms;
