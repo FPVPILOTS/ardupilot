@@ -16,6 +16,7 @@
 #if HAL_SPEKTRUM_SMART_ESC_UART4_RX
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Lab.h>
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_UartRecovery.h>
+#include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_PollLab.h>
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_LabHandshake.h>
 #endif
@@ -33,6 +34,8 @@ public:
     bool diagnostic_handshake(const uint8_t *packet, uint8_t length, bool finish) override;
     bool diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on = false) override;
     bool diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length, uint32_t acquired_ms) override;
+    bool diagnostic_poll_lab_start() override;
+    bool diagnostic_poll_lab(const uint8_t *packet, uint8_t length, bool finish) override;
     bool diagnostic_waveform(bool start, bool finish) override;
     bool tx_pending() override { return false; }
     uint32_t txspace() override { return 0; }
@@ -61,6 +64,7 @@ private:
     uint32_t _handshake_queued = 0, _handshake_completed = 0, _handshake_restored = 0;
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     AP_SpektrumSmartESC_LabHandshake::Lease _lab_hs_lease;
+    AP_SpektrumSmartESC_PollLab::Lease _poll_lab_lease;
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     // Hardware lease re-arm is permitted only in the separately compiled
     // AutoLab image; ordinary manual HSLab remains one-shot per reboot.
@@ -87,6 +91,7 @@ private:
     uint32_t _errors = 0;
     AP_SpektrumSmartESC_UartRecovery _uart_recovery;
     uint32_t _framing = 0, _noise = 0, _parity = 0, _overruns = 0, _overflow = 0;
+    uint32_t _last_uart_rx_ms = 0; // Real UART FIFO timestamp, for PollLab guard only.
     uint32_t _release_errors = 0;
 };
 #endif

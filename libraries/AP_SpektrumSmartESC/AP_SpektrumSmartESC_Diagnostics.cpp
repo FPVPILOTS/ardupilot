@@ -78,6 +78,20 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
     // @RebootRequired: True
     // @User: Advanced
     AP_GROUPINFO("AUTO", 10, AP_SpektrumSmartESC_Diagnostics, _auto, 0),
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    // @Param: POLLACK
+    // @DisplayName: One-shot motor-disconnected SRXL2 polling bench consent
+    // @Description: PollLab firmware ONLY. Set 15 after physically DISCONNECTING ALL THREE MOTOR PHASE WIRES, disconnecting actuators and checking BEC/signal isolation. Then send POLLRUN=1 within ten seconds. This cannot prove physical isolation or motor safety. Never enable for flight.
+    // @Values: 0:No acknowledgement,15:Motor disconnected and bench isolated
+    // @User: Advanced
+    AP_GROUPINFO("POLLACK", 11, AP_SpektrumSmartESC_Diagnostics, _pollack, 0),
+    // @Param: POLLRUN
+    // @DisplayName: ONE SRXL2 0xCD reply-ID 0x40 bench trial only
+    // @Description: A volatile, consumed command requiring prior fresh POLLACK 15, disarmed emergency stop, linked ESC, and on-board dry-run ready. The exact no-channel-update packet is NOT a motor-stop signal. One attempt per reboot and no automatic restart. MOTOR PHASES MUST BE PHYSICALLY DISCONNECTED.
+    // @Values: 0:Idle,1:One isolated test
+    // @User: Advanced
+    AP_GROUPINFO("POLLRUN", 12, AP_SpektrumSmartESC_Diagnostics, _pollrun, 0),
+#endif
 #endif
     AP_GROUPEND
 };
@@ -87,6 +101,12 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     _hs_ack.set(0);
     _hs_authorization.cancel();
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    _pollack.set(0);
+    _pollrun.set(0); // Saved commands NEVER cause a 0xCD packet at boot.
+    _poll_auth.cancel();
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 POLLLAB: MOTOR PHASES MUST BE UNPLUGGED");
+#endif
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15C: HSLAB; NO MOTOR; UART ERROR POLICY UPDATED");
 #endif
     _waveform.set(0);
@@ -118,7 +138,11 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #endif
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     if (_auto == 1) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 PollLab: explicit 0xCD only; MOTOR UNPLUGGED");
+#else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: AUTO handshake TX only; no motor/control");
+#endif
     } else
 #endif
     {
@@ -244,16 +268,47 @@ bool AP_SpektrumSmartESC_Diagnostics::log_probe(uint32_t now_ms)
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 {
-    // Only the separate, unarmable AutoLab image can enter this path.
-    // Wire protocol: 0x21 handshakes only; 0xCD / motor / reverse impossible.
+    // Only separately compiled, UNARMABLE AutoLab/PollLab images enter.
+    // AutoLab: physical 0x21 handshakes only.
+    // PollLab: also exactly one user-authorized, mask=0 0xCD; NO motor
+    // channel updates, reverse or flight arming, and motor phases MUST
+    // be physically unplugged. Packet mask=0 is NOT a motor-stop command.
     if (!_auto_started) {
         return;
     }
     auto *port = hal.diagnostic_rx_uart();
     const bool safe = port != nullptr && !hal.util->get_soft_armed() &&
                       arming_blocked() && SRV_Channels::get_emergency_stop() &&
-                      _enable == 1 && _probe == 0 && _handshake == 0;
+                      _enable == 1 && _probe == 0 && _handshake == 0 &&
+                      (!AP_SPEKTRUM_SMART_ESC_POLL_LAB || _telem == 0);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (_pollack.get() != 0) {
+        (void)_poll_auth.acknowledge(_pollack.get(), safe, now_ms);
+        _pollack.set(0); // One-time, RAM-only authorization request.
+    }
+    if (_pollrun.get() != 0) {
+        const bool requested = _pollrun.get() == 1;
+        _pollrun.set(0); // NEVER repeat, even if the bus is busy.
+        const bool approved = requested && !_poll_consumed &&
+            _poll_auth.consume(safe, now_ms);
+        _poll_consumed = true; // A failed/unsafe attempt also latches out.
+        if (approved) {
+            _poll_pending = true;
+            _poll_request_ms = now_ms;
+        } else {
+            _poll_fail++;
+        }
+    }
+#endif
     if (!safe) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        if (_poll_active) {
+            (void)port->diagnostic_poll_lab(nullptr, 0, true);
+            _poll_active = false;
+            _poll_fail++;
+        }
+        _poll_pending = false;
+#endif
         _auto_telem_observer.invalidate();
         _auto_session.uart_fault();
         if (port != nullptr && _auto_leased) {
@@ -271,6 +326,13 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         // Never clear new framing/noise/overrun evidence just to reconnect.
         _auto_session.uart_fault();
     }
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (_poll_active && !_poll_tc && (hw.handshake_flags & 4U)) {
+        _poll_tc = true;
+        _poll_tc_ms = hw.handshake_tc_ms;
+        _poll_sent++;
+    }
+#endif
     if (_auto_inflight && (hw.handshake_flags & 4) != 0 &&
         _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
         if (!_auto_session.sent(hw.handshake_tc_ms * 1000U)) {
@@ -298,6 +360,17 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                         // AP_ESC_Telem publication or extra UART transmissions.
                         _auto_telem_observer.observe_crc_frame(
                             packet, length, acquired_ms, 0x30);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+                        if (_poll_active && _poll_tc && !_poll_reply &&
+                            packet[1] == 0x80 && length == 22 &&
+                            packet[3] == 0x30 &&
+                            int32_t(acquired_ms - _poll_tc_ms) >= 0 &&
+                            uint32_t(acquired_ms - _poll_tc_ms) <= 12U &&
+                            _auto_telem_observer.candidate(_poll_sample, acquired_ms)) {
+                            _poll_reply = true;
+                            _poll_accepted++;
+                        }
+#endif
                         if (packet[1] == 0xCD ||
                             (packet[1] == 0x21 && packet[3] >= 0x10 && packet[3] < 0x40)) {
                             // Some other controller/master owns this bus.
@@ -355,6 +428,55 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     dry.competing_master = _auto_session.status().state ==
         AP_SpektrumSmartESC_AutoConnect::State::YIELDED;
     (void)_auto_poll_dryrun.update(dry);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (_poll_active) {
+        // A real 0xCD uses the *existing* native UART4 owner, but the
+        // single-packet lease and response window are independently bounded.
+        if (!dry.linked || !dry.disarmed || !dry.emergency_stop ||
+            port->receive_errors() != _poll_uart_error_baseline ||
+            hw.handshake_faults != _poll_hw_fault_baseline ||
+            (_poll_tc && !rx_restored) ||
+            AP_SpektrumSmartESC_PollLab::timeout(
+                now_ms, _poll_start_ms, _poll_tc, _poll_tc_ms)) {
+            (void)port->diagnostic_poll_lab(nullptr, 0, true);
+            if (!_poll_reply) {
+                _poll_fail++;
+            }
+            _poll_active = false;
+        }
+    }
+    if (_poll_pending) {
+        if (uint32_t(now_ms - _poll_request_ms) >= 1000U ||
+            !dry.linked || !dry.disarmed || !dry.emergency_stop ||
+            dry.peer_id != 0x40 || port->receive_errors() !=
+                _auto_uart_error_baseline) {
+            _poll_pending = false;
+            _poll_fail++;
+        } else if (rx_restored && bus_idle &&
+                   _auto_poll_dryrun.status().reason ==
+                       AP_SpektrumSmartESC_PollDryRun::Reason::ALREADY_PREVIEWED &&
+                   _auto_last_verified_peer_ms != 0 &&
+                   uint32_t(now_ms - _auto_last_verified_peer_ms) <= 100U) {
+            _poll_pending = false;
+            const uint8_t n = AP_SpektrumSmartESC_PollLab::encode(
+                _poll_packet, sizeof(_poll_packet));
+            if (n == 14 && port->diagnostic_poll_lab_start()) {
+                _poll_uart_error_baseline = port->receive_errors();
+                _poll_hw_fault_baseline = hw.handshake_faults;
+                if (port->diagnostic_poll_lab(_poll_packet, n, false)) {
+                    _poll_active = true;
+                    _poll_tc = _poll_reply = false;
+                    _poll_start_ms = now_ms;
+                } else {
+                    (void)port->diagnostic_poll_lab(nullptr, 0, true);
+                    _poll_fail++;
+                }
+            } else {
+                _poll_fail++;
+            }
+        }
+    }
+#endif
     if (_auto_session.status().state !=
         AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
         _auto_last_verified_peer_ms = 0;
@@ -451,7 +573,25 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       AP_SpektrumSmartESC_PollDryRun::reason_name(dry_status.reason),
                       (unsigned long)dry_status.previews,
                       (unsigned long)dry_status.blocked);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 DRY; SPK20 1x0xCD EXPLICIT");
+#else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 NO TX; 0xCD PREVIEW ONLY");
+#endif
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 POLL TX%lu RX%lu FAIL%lu",
+                      (unsigned long)_poll_sent,
+                      (unsigned long)_poll_accepted,
+                      (unsigned long)_poll_fail);
+        if (_poll_reply) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 LAST FL%04x ERPM%lu",
+                          unsigned(_poll_sample.valid),
+                          (unsigned long)_poll_sample.electrical_rpm);
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 LAST V%.2f I%.2f T%.1f",
+                          double(_poll_sample.voltage), double(_poll_sample.current),
+                          double(_poll_sample.temperature_c));
+        }
+#endif
         AP_SpektrumSmartESC::Telemetry candidate {};
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED &&
             _auto_telem_observer.candidate(candidate, now_ms)) {
@@ -465,7 +605,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                           double(candidate.temperature_c));
         }
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 POLLLAB: MOTOR UNPLUGGED; NO THROTTLE");
+#else
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 NO TLM POLL/THROTTLE; RX OBS ONLY");
+#endif
         }
     }
 }

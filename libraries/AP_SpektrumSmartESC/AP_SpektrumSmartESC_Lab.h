@@ -13,6 +13,15 @@
 #ifndef AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 #define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 0
 #endif
+#ifndef AP_SPEKTRUM_SMART_ESC_POLL_LAB
+#define AP_SPEKTRUM_SMART_ESC_POLL_LAB 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB && !AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+#error "SRXL2 PollLab requires the bounded AutoLab handshake"
+#endif
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB && AP_SPEKTRUM_SMART_ESC_LAB_ONLY
+#error "Physical 0xCD PollLab must not mix with disconnected waveform lab"
+#endif
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB && !AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #error "Automatic handshake LAB requires the strict HSLab packet whitelist"
 #endif

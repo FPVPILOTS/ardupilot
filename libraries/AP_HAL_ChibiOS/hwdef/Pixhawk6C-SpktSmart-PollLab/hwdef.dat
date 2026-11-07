@@ -1,0 +1,12 @@
+# Phase 17E-D one-shot SRXL2 telemetry-polling laboratory image ONLY.
+# Explicitly separate from the proven AutoLab firmware; NEVER load for flight.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-Spkt-PollLab"
+
+# Retain original handshake + automatic reconnect behavior.
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
+
+# A separate compile-time restriction, in addition to the native UART4
+# byte-for-byte allowlist and one-shot operator approval.
+define AP_SPEKTRUM_SMART_ESC_POLL_LAB 1
