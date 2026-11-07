@@ -170,6 +170,38 @@ public:
 
     const Status &status() const { return _status; }
 
+    // These strings are ready for Mission Planner GCS text once the native
+    // integration is qualified. Do not display LINKED as "motor ready".
+    static const char *state_name(State state)
+    {
+        switch (state) {
+        case State::OFF: return "OFF";
+        case State::LISTEN: return "WAITING_FOR_ESC";
+        case State::HANDSHAKE: return "HANDSHAKING";
+        case State::LINKED: return "SRXL2_LINK_ESTABLISHED";
+        case State::BACKOFF: return "RECONNECT_DELAY";
+        case State::YIELDED: return "OTHER_MASTER_DETECTED";
+        case State::FAULT: return "LINK_FAULT";
+        }
+        return "UNKNOWN_STATE";
+    }
+
+    static const char *reason_name(Reason reason)
+    {
+        switch (reason) {
+        case Reason::NONE: return "NONE";
+        case Reason::DISABLED: return "DISABLED";
+        case Reason::NOT_SAFE: return "NOT_DISARMED_OR_BENCH_UNSAFE";
+        case Reason::PEER_TIMEOUT: return "ESC_RESPONSE_LOST";
+        case Reason::HANDSHAKE_TIMEOUT: return "HANDSHAKE_TIMEOUT";
+        case Reason::BAD_PEER: return "WRONG_ESC_OR_UNVALIDATED_HANDSHAKE";
+        case Reason::UART_ERROR: return "UART_TRANSPORT_ERROR";
+        case Reason::MASTER_CONFLICT: return "SRXL2_MASTER_CONFLICT";
+        case Reason::TRANSPORT_ERROR: return "TRANSPORT_ERROR";
+        }
+        return "UNKNOWN_REASON";
+    }
+
 private:
     static uint32_t age(uint32_t now_ms, uint32_t previous_ms)
     {
