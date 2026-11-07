@@ -303,7 +303,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                             // Some other controller/master owns this bus.
                             _auto_session.competing_master();
                         } else {
-                            (void)_auto_session.observe_peer(packet, length, acquired_ms);
+                            if (_auto_session.observe_peer(packet, length, acquired_ms)) {
+                                // Never treat a CRC-valid but source-less 0x80
+                                // sensor packet as proof that ESC 0x40 is alive.
+                                _auto_last_verified_peer_ms = acquired_ms;
+                            }
                         }
                     }
                 }
@@ -339,7 +343,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     // No additional UART operation, no 0xCD output, no motor/ESC channels.
     AP_SpektrumSmartESC_PollDryRun::Evidence dry {};
     dry.now_ms = now_ms;
-    dry.last_peer_ms = _auto_rx.observation().last_ms;
+    dry.last_peer_ms = _auto_last_verified_peer_ms;
     dry.uart_errors = port->receive_errors();
     dry.peer_id = _auto_session.status().peer_id;
     dry.linked = _auto_session.status().state ==
@@ -353,6 +357,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     (void)_auto_poll_dryrun.update(dry);
     if (_auto_session.status().state !=
         AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+        _auto_last_verified_peer_ms = 0;
         _auto_telem_observer.invalidate(); // Never replay ESC data after loss.
     }
     if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE) {
