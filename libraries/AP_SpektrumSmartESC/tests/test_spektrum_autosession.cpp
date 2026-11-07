@@ -80,6 +80,35 @@ static void handshake_uses_real_reader_frames()
     assert(s.prepare(3500000, packet, sizeof(packet), true) == 0);
 }
 
+// Observe a power-on ESC advertisement while the power-on reader is still
+// in its mandatory receive-only preparation period. This evidence must NEVER
+// be promoted to a successful directed handshake.
+static void startup_advertisement_is_only_evidence()
+{
+    Session s;
+    s.enable(0, 0x40, 0xCAFEBABEU);
+    assert(s.tick(1000000, true, true, true) == Action::BEGIN_HANDSHAKE);
+    uint8_t hello[] = {0xA6, 0x21, 14, 0x40, 0x00, 10, 0, 4,
+                       0x78, 0x56, 0x34, 0x12, 0, 0};
+    seal(hello);
+    for (uint8_t b : hello) {
+        s.feed(b, 1200000);
+    }
+    const auto &st = s.reader_status();
+    assert(st.rx_bytes == 14);
+    assert(st.rx_frames == 1);
+    assert(st.startup_announcements == 1);
+    assert(st.last_hs_src == 0x40 && st.last_hs_dst == 0x00);
+    assert(st.last_hs_priority == 10 && st.last_hs_baud == 0);
+    assert(st.responses == 0);
+    assert(s.status().state == State::HANDSHAKE);
+    assert(s.status().successful == 0);
+    uint8_t packet[80] {};
+    assert(s.prepare(1200000, packet, sizeof(packet), true) == 0);
+    assert(s.prepare(3000000, packet, sizeof(packet), true) == 14);
+    assert(packet[3] == 0x30 && packet[4] == 0x40);
+}
+
 static void wrong_reply_cannot_report_connected()
 {
     Session s;
@@ -161,9 +190,10 @@ static void master_conflict_and_unsafe_gate_latch()
 int main()
 {
     handshake_uses_real_reader_frames();
+    startup_advertisement_is_only_evidence();
     wrong_reply_cannot_report_connected();
     no_peer_timeout_then_backoff();
     reconnect_repeats_valid_handshake_without_stale_link();
     master_conflict_and_unsafe_gate_latch();
-    std::puts("5 Phase 17B/17C reader auto-session tests passed (simulation only)");
+    std::puts("6 Phase 17B/17C reader auto-session tests passed (simulation only)");
 }
