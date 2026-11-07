@@ -73,6 +73,25 @@ static void one_shot_native_lease_no_rearm()
     assert(!l.start(2000));
 }
 
+static void no_immediate_turnaround_after_esc_rx()
+{
+    assert(!Lab::rx_gap_safe(1000, 0));
+    assert(!Lab::rx_gap_safe(1000, 999));
+    assert(Lab::rx_gap_safe(1001, 999));
+    assert(Lab::rx_gap_safe(1099, 999));
+    assert(!Lab::rx_gap_safe(1100, 999));
+    assert(!Lab::rx_gap_safe(998, 999)); // acquisition is in the future
+}
+
+static void transmit_and_reply_timeouts()
+{
+    assert(!Lab::timeout(1005, 1000, false, 0));
+    assert(Lab::timeout(1008, 1000, false, 0));
+    assert(!Lab::timeout(1013, 1000, true, 1003));
+    assert(Lab::timeout(1018, 1000, true, 1003));
+    assert(Lab::timeout(1060, 1000, true, 1059));
+}
+
 static void lease_expires_before_tx()
 {
     Lab::Lease l;
@@ -91,5 +110,7 @@ int main()
     refuse_wrong_length_and_null();
     one_shot_native_lease_no_rearm();
     lease_expires_before_tx();
-    std::puts("6 Phase 17E-D one-shot 0xCD native whitelist/lease tests passed (host only)");
+    no_immediate_turnaround_after_esc_rx();
+    transmit_and_reply_timeouts();
+    std::puts("8 Phase 17E-D one-shot 0xCD native whitelist/lease tests passed (host only)");
 }
