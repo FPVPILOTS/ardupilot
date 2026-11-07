@@ -47,14 +47,16 @@ public:
         // Independent native proof for the separate AutoLab early startup
         // response. The user-space reader cannot simply skip the 2s gate:
         // this lease validates the actual CRC-correct ESC advertisement again.
-        bool authorize_startup_announcement(const uint8_t *p, uint8_t n, uint32_t now_ms)
+        bool authorize_startup_announcement(const uint8_t *p, uint8_t n, uint32_t acquired_ms, uint32_t now_ms)
         {
             if (!_power_on || !active(now_ms) || _frames != 0 || _early_started ||
                 p == nullptr || n != 14 || p[0] != 0xA6 || p[1] != 0x21 ||
                 p[2] != n || p[3] != _target || p[4] != 0 ||
                 p[5] == 0 || p[5] > 100 || p[6] > 1 ||
                 AP_SpektrumSmartESC::crc16(p, n) != 0 ||
-                uint32_t(now_ms - _started_ms) >= AP_SpektrumSmartESC_Reader::PREPARE_MS) {
+                uint32_t(now_ms - _started_ms) >= AP_SpektrumSmartESC_Reader::PREPARE_MS ||
+                int32_t(acquired_ms - _started_ms) < 0 ||
+                uint32_t(now_ms - acquired_ms) > 20U) {
                 return false;
             }
             _early_announcement_ms = now_ms;
