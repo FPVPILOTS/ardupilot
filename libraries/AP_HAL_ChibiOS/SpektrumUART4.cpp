@@ -41,7 +41,8 @@ bool SpektrumUART4::acquire()
     }
     chSysLock();
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
-    if (!_rx._lab_hs_lease.active(AP_HAL::millis())) {
+    if (!_rx._lab_hs_lease.active(AP_HAL::millis()) &&
+        !_rx._poll_lab_lease.active(AP_HAL::millis())) {
         chSysUnlock();
         return false;
     }
@@ -110,7 +111,8 @@ void SpektrumUART4::service() const
         return;
     }
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
-    if (!_rx._lab_hs_lease.active(AP_HAL::millis())) {
+    if (!_rx._lab_hs_lease.active(AP_HAL::millis()) &&
+        !_rx._poll_lab_lease.active(AP_HAL::millis())) {
         _fault = true;
         return;
     }
@@ -191,7 +193,10 @@ bool SpektrumUART4::collision() const
 
 bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
 {
-    const bool allowed = AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ? AP_SpektrumSmartESC_Reader::handshake_packet(data, length) :
+    const bool allowed = AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ?
+        (AP_SpektrumSmartESC_Reader::handshake_packet(data, length) ||
+         (AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
+          AP_SpektrumSmartESC_PollLab::exact_packet(data, length))) :
         AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? AP_SpektrumSmartESC_Lab::packet(data, length) :
         ((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED && AP_SpektrumSmartESC_Reader::handshake_packet(data, length)) ||
          (AP_SpektrumSmartESC_Motor::physical_control_available() && AP_SpektrumSmartESC_Motor::control_packet(data, length)));
@@ -214,7 +219,10 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
     service();
     const uint32_t direction = USART_CR1_UE | USART_CR1_RE | USART_CR1_TE | USART_CR1_TCIE | USART_CR1_FIFOEN;
     if (_fault || (UART4->CR1 & direction) != (USART_CR1_UE | USART_CR1_RE | USART_CR1_FIFOEN) ||
-        !_rx._lab_hs_lease.take(data, length, AP_HAL::millis())) {
+        !(AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
+          AP_SpektrumSmartESC_PollLab::exact_packet(data, length) ?
+          _rx._poll_lab_lease.take(data, length, AP_HAL::millis()) :
+          _rx._lab_hs_lease.take(data, length, AP_HAL::millis()))) {
         chSysUnlock();
         return false;
     }
