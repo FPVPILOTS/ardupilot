@@ -60,13 +60,13 @@ static void reverse_needs_neutral_confirmed_stop_and_two_dwells()
     o = gate.evaluate(i, 100);
     assert(o.reason == Gate::Reason::WAIT_DWELL && !o.reverse);
     o = gate.evaluate(i, 599);
-    assert(!o.reverse && o.magnitude == 0);
+    assert(!o.reverse && o.magnitude == 0 && o.publishable);
     o = gate.evaluate(i, 600);
     assert(o.reverse && o.magnitude == 0 && o.publishable);
     o = gate.evaluate(i, 1099);
-    assert(o.magnitude == 0 && o.reverse);
+    assert(o.magnitude == 0 && o.reverse && o.publishable);
     o = gate.evaluate(i, 1100);
-    assert(o.magnitude == 0 && o.reverse);
+    assert(o.magnitude == 0 && o.reverse && o.publishable);
     i.demand = 0.99f;
     o = gate.evaluate(i, 1110);
     assert(o.publishable && o.reverse && o.clipped);
