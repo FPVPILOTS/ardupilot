@@ -12,6 +12,9 @@
 #include "AP_SpektrumSmartESC_AutoSession.h"
 #include "AP_SpektrumSmartESC_PassiveTelemetry.h"
 #include "AP_SpektrumSmartESC_PollDryRun.h"
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+#include "AP_SpektrumSmartESC_PollLab.h"
+#endif
 #endif
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #include "AP_SpektrumSmartESC_LabHandshake.h"
