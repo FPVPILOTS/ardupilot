@@ -303,7 +303,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                             // Some other controller/master owns this bus.
                             _auto_session.competing_master();
                         } else {
-                            (void)_auto_session.observe_peer(packet, length, acquired_ms);
+                            if (_auto_session.observe_peer(packet, length, acquired_ms)) {
+                                // Never treat a CRC-valid but source-less 0x80
+                                // sensor packet as proof that ESC 0x40 is alive.
+                                _auto_last_verified_peer_ms = acquired_ms;
+                            }
                         }
                     }
                 }
@@ -335,8 +339,25 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                              (hw.cr3 & 8U) != 0;
     const bool bus_idle = (hw.handshake_flags & 32U) != 0;
     const auto action = _auto_session.tick(now_ms * 1000U, safe, bus_idle, rx_restored);
+    // Phase 17E-C: dry-run in RAM, one preview per confirmed healthy link.
+    // No additional UART operation, no 0xCD output, no motor/ESC channels.
+    AP_SpektrumSmartESC_PollDryRun::Evidence dry {};
+    dry.now_ms = now_ms;
+    dry.last_peer_ms = _auto_last_verified_peer_ms;
+    dry.uart_errors = port->receive_errors();
+    dry.peer_id = _auto_session.status().peer_id;
+    dry.linked = _auto_session.status().state ==
+        AP_SpektrumSmartESC_AutoConnect::State::LINKED;
+    dry.disarmed = !hal.util->get_soft_armed();
+    dry.emergency_stop = SRV_Channels::get_emergency_stop();
+    dry.rx_restored = rx_restored;
+    dry.bus_idle = bus_idle;
+    dry.competing_master = _auto_session.status().state ==
+        AP_SpektrumSmartESC_AutoConnect::State::YIELDED;
+    (void)_auto_poll_dryrun.update(dry);
     if (_auto_session.status().state !=
         AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+        _auto_last_verified_peer_ms = 0;
         _auto_telem_observer.invalidate(); // Never replay ESC data after loss.
     }
     if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE) {
@@ -425,6 +446,12 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       unsigned(tl.last_destination),
                       unsigned(tl.last_sensor_id),
                       unsigned(tl.last_secondary_id));
+        const auto &dry_status = _auto_poll_dryrun.status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK19 DRY R%s P%lu B%lu",
+                      AP_SpektrumSmartESC_PollDryRun::reason_name(dry_status.reason),
+                      (unsigned long)dry_status.previews,
+                      (unsigned long)dry_status.blocked);
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 NO TX; 0xCD PREVIEW ONLY");
         AP_SpektrumSmartESC::Telemetry candidate {};
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED &&
             _auto_telem_observer.candidate(candidate, now_ms)) {
