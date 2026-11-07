@@ -258,7 +258,7 @@ bool DiagnosticRX::diagnostic_handshake_start(uint8_t target, uint32_t uid, bool
     const uint32_t now_ms = AP_HAL::millis();
     const bool cooldown = _auto_hs_last_ms == 0 || uint32_t(now_ms - _auto_hs_last_ms) >= 1000;
     if (ready && cooldown && _lab_hs_lease.used() && !_lab_hs_lease.active(now_ms) &&
-        _handshake_port != nullptr && !_handshake_port->owned()) {
+        (_handshake_port == nullptr || !_handshake_port->owned())) {
         _lab_hs_lease = AP_SpektrumSmartESC_LabHandshake::Lease{};
     }
     const bool granted = ready && cooldown && _lab_hs_lease.start(target, uid, now_ms, power_on);
