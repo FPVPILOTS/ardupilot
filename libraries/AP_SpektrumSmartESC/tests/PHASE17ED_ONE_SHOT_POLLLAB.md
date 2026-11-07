@@ -2,7 +2,7 @@
 
 ## DO NOT FLIGHT / DO NOT FLASH BEFORE REVIEW
 
-New **separate** `Pixhawk6C-SpktSmart-PollLab` firmware target. Phase 17D automatic handshake and Phase 17E-C read-only dry-run remain unchanged in the original `Pixhawk6C-SpktSmart-AutoLab` image.
+New **separate** `Pixhawk6C-SpktSmart-PollLab` firmware target. **Bench GO/NO-GO:** A successful compile alone does NOT authorize flash or a physical ESC test. An independent code and electrical review must confirm motor disconnection, cable isolation, UART timing and packet semantics. Until then, remain on the known-good AutoLab image. Phase 17D automatic handshake and Phase 17E-C read-only dry-run remain unchanged in the original `Pixhawk6C-SpktSmart-AutoLab` image.
 
 A zero SRXL2 channel update mask is **not** a verified throttle-stop command. The 14-byte `0xCD` command can affect the ESC protocol state. The physical test is permissible only if **all three EDF motor phase leads are fully unplugged**, all actuators are disconnected, and the signal and BEC wiring has been separately checked. The software cannot detect disconnected motor wires. Never rely on disarm alone.
 
@@ -12,7 +12,7 @@ A zero SRXL2 channel update mask is **not** a verified throttle-stop command. Th
 - After **explicit operator parameter challenge**, exactly **one** `0xCD` Control Data frame, 14 bytes, with command 0, ReplyID 0x40, zero channel update mask and no channel data. Byte-for-byte verified at the native UART4 boundary; no variable payload, no motor demand, no reverse.
 - The PollLab one-shot native lease expires after 100ms and cannot be rearmed in the same boot, regardless of reset/retry parameter changes.
 - No other SRXL2 physical frame types can be emitted. No repeated or periodic polls.
-- Native PA0 open-drain half-duplex 115200, bus-idle checks, true-TC interrupt completion and RX restoration are inherited from the working AutoLab.
+- Native PA0 open-drain half-duplex 115200, bus-idle checks, true-TC interrupt completion and RX restoration are inherited from the working AutoLab. Before transmitting 0xCD, the native UART4 path requires a fresh last-RX FIFO timestamp with at least 2 ms silence and at most 100 ms age, and rechecks this in begin_tx. An 8 ms high-level TC timeout and 15 ms post-TC response timeout enforce fail-closed closure (native TX watchdog stays 3 ms).
 - Disarmed/emergency-stop, linked ESC ID 0x40, fresh CRC-valid peer handshake, stable dry-run, and no new UART errors are required by high-level gates.
 - Link loss, new UART error, failed write or response deadline closes the native lease and increments FAIL.
 
@@ -44,7 +44,7 @@ grep -E 'tests passed|test passed|PHASE17E-D BUILD PASS|error:|Build failed' "$H
 echo "Build exit code: $rc"
 ```
 
-This change adds 6 standalone host tests. The prior host suite had 82 cases, so 88 are expected; not yet locally confirmed. Build script also checks the compiled firmware's PollLab warning and `SPK20` strings.
+This change now adds 8 standalone host tests (including native RX gap and timeout policy). The prior host suite had 82 cases, so **90 are expected** in the updated branch; not yet locally confirmed. The earlier user-local build reported 88/88 before these guard improvements. Rebuild is mandatory. Build script also checks the compiled firmware's PollLab warning and `SPK20` strings.
 
 ## Engineering limitations
 
