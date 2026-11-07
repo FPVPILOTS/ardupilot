@@ -78,6 +78,20 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
     // @RebootRequired: True
     // @User: Advanced
     AP_GROUPINFO("AUTO", 10, AP_SpektrumSmartESC_Diagnostics, _auto, 0),
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    // @Param: POLLACK
+    // @DisplayName: One-shot motor-disconnected SRXL2 polling bench consent
+    // @Description: PollLab firmware ONLY. Set 15 after physically DISCONNECTING ALL THREE MOTOR PHASE WIRES, disconnecting actuators and checking BEC/signal isolation. Then send POLLRUN=1 within ten seconds. This cannot prove physical isolation or motor safety. Never enable for flight.
+    // @Values: 0:No acknowledgement,15:Motor disconnected and bench isolated
+    // @User: Advanced
+    AP_GROUPINFO("POLLACK", 11, AP_SpektrumSmartESC_Diagnostics, _pollack, 0),
+    // @Param: POLLRUN
+    // @DisplayName: ONE SRXL2 0xCD reply-ID 0x40 bench trial only
+    // @Description: A volatile, consumed command requiring prior fresh POLLACK 15, disarmed emergency stop, linked ESC, and on-board dry-run ready. The exact no-channel-update packet is NOT a motor-stop signal. One attempt per reboot and no automatic restart. MOTOR PHASES MUST BE PHYSICALLY DISCONNECTED.
+    // @Values: 0:Idle,1:One isolated test
+    // @User: Advanced
+    AP_GROUPINFO("POLLRUN", 12, AP_SpektrumSmartESC_Diagnostics, _pollrun, 0),
+#endif
 #endif
     AP_GROUPEND
 };
@@ -87,6 +101,12 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     _hs_ack.set(0);
     _hs_authorization.cancel();
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    _pollack.set(0);
+    _pollrun.set(0); // Saved commands NEVER cause a 0xCD packet at boot.
+    _poll_auth.cancel();
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 POLLLAB: MOTOR PHASES MUST BE UNPLUGGED");
+#endif
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15C: HSLAB; NO MOTOR; UART ERROR POLICY UPDATED");
 #endif
     _waveform.set(0);
