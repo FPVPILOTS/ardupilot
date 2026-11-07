@@ -273,7 +273,34 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     const bool safe = port != nullptr && !hal.util->get_soft_armed() &&
                       arming_blocked() && SRV_Channels::get_emergency_stop() &&
                       _enable == 1 && _probe == 0 && _handshake == 0;
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (_pollack.get() != 0) {
+        (void)_poll_auth.acknowledge(_pollack.get(), safe, now_ms);
+        _pollack.set(0); // One-time, RAM-only authorization request.
+    }
+    if (_pollrun.get() != 0) {
+        const bool requested = _pollrun.get() == 1;
+        _pollrun.set(0); // NEVER repeat, even if the bus is busy.
+        const bool approved = requested && !_poll_consumed &&
+            _poll_auth.consume(safe, now_ms);
+        _poll_consumed = true; // A failed/unsafe attempt also latches out.
+        if (approved) {
+            _poll_pending = true;
+            _poll_request_ms = now_ms;
+        } else {
+            _poll_fail++;
+        }
+    }
+#endif
     if (!safe) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        if (_poll_active) {
+            (void)port->diagnostic_poll_lab(nullptr, 0, true);
+            _poll_active = false;
+            _poll_fail++;
+        }
+        _poll_pending = false;
+#endif
         _auto_telem_observer.invalidate();
         _auto_session.uart_fault();
         if (port != nullptr && _auto_leased) {
@@ -291,6 +318,13 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         // Never clear new framing/noise/overrun evidence just to reconnect.
         _auto_session.uart_fault();
     }
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (_poll_active && !_poll_tc && (hw.handshake_flags & 4U)) {
+        _poll_tc = true;
+        _poll_tc_ms = hw.handshake_tc_ms;
+        _poll_sent++;
+    }
+#endif
     if (_auto_inflight && (hw.handshake_flags & 4) != 0 &&
         _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
         if (!_auto_session.sent(hw.handshake_tc_ms * 1000U)) {
@@ -318,6 +352,17 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                         // AP_ESC_Telem publication or extra UART transmissions.
                         _auto_telem_observer.observe_crc_frame(
                             packet, length, acquired_ms, 0x30);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+                        if (_poll_active && _poll_tc && !_poll_reply &&
+                            packet[1] == 0x80 && length == 22 &&
+                            packet[3] == 0x30 &&
+                            int32_t(acquired_ms - _poll_tc_ms) >= 0 &&
+                            uint32_t(acquired_ms - _poll_tc_ms) <= 12U &&
+                            _auto_telem_observer.candidate(_poll_sample, acquired_ms)) {
+                            _poll_reply = true;
+                            _poll_accepted++;
+                        }
+#endif
                         if (packet[1] == 0xCD ||
                             (packet[1] == 0x21 && packet[3] >= 0x10 && packet[3] < 0x40)) {
                             // Some other controller/master owns this bus.
@@ -375,6 +420,51 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     dry.competing_master = _auto_session.status().state ==
         AP_SpektrumSmartESC_AutoConnect::State::YIELDED;
     (void)_auto_poll_dryrun.update(dry);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+    if (_poll_active) {
+        // A real 0xCD uses the *existing* native UART4 owner, but the
+        // single-packet lease and response window are independently bounded.
+        if (!dry.linked || port->receive_errors() != _poll_uart_error_baseline ||
+            (_poll_tc && uint32_t(now_ms - _poll_tc_ms) >= 15U) ||
+            uint32_t(now_ms - _poll_start_ms) >= 60U) {
+            (void)port->diagnostic_poll_lab(nullptr, 0, true);
+            if (!_poll_reply) {
+                _poll_fail++;
+            }
+            _poll_active = false;
+        }
+    }
+    if (_poll_pending) {
+        if (uint32_t(now_ms - _poll_request_ms) >= 1000U ||
+            !dry.linked || !dry.disarmed || !dry.emergency_stop ||
+            dry.peer_id != 0x40 || port->receive_errors() !=
+                _auto_uart_error_baseline) {
+            _poll_pending = false;
+            _poll_fail++;
+        } else if (rx_restored && bus_idle &&
+                   _auto_poll_dryrun.status().reason ==
+                       AP_SpektrumSmartESC_PollDryRun::Reason::ALREADY_PREVIEWED &&
+                   _auto_last_verified_peer_ms != 0 &&
+                   uint32_t(now_ms - _auto_last_verified_peer_ms) <= 100U) {
+            _poll_pending = false;
+            const uint8_t n = AP_SpektrumSmartESC_PollLab::encode(
+                _poll_packet, sizeof(_poll_packet));
+            if (n == 14 && port->diagnostic_poll_lab_start()) {
+                _poll_uart_error_baseline = port->receive_errors();
+                if (port->diagnostic_poll_lab(_poll_packet, n, false)) {
+                    _poll_active = true;
+                    _poll_tc = _poll_reply = false;
+                    _poll_start_ms = now_ms;
+                } else {
+                    (void)port->diagnostic_poll_lab(nullptr, 0, true);
+                    _poll_fail++;
+                }
+            } else {
+                _poll_fail++;
+            }
+        }
+    }
+#endif
     if (_auto_session.status().state !=
         AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
         _auto_last_verified_peer_ms = 0;
@@ -472,6 +562,20 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       (unsigned long)dry_status.previews,
                       (unsigned long)dry_status.blocked);
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 NO TX; 0xCD PREVIEW ONLY");
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 POLL TX%lu RX%lu FAIL%lu",
+                      (unsigned long)_poll_sent,
+                      (unsigned long)_poll_accepted,
+                      (unsigned long)_poll_fail);
+        if (_poll_reply) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 LAST FL%04x ERPM%lu",
+                          unsigned(_poll_sample.valid),
+                          (unsigned long)_poll_sample.electrical_rpm);
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 LAST V%.2f I%.2f T%.1f",
+                          double(_poll_sample.voltage), double(_poll_sample.current),
+                          double(_poll_sample.temperature_c));
+        }
+#endif
         AP_SpektrumSmartESC::Telemetry candidate {};
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED &&
             _auto_telem_observer.candidate(candidate, now_ms)) {
