@@ -41,7 +41,8 @@ static void startup_fc_first_esc_first_simultaneous()
         assert(p.status().attempts == 1);
         assert(p.status().successful == 1);
         // Each route has a new peer timestamp; no stale RC state is restored.
-        assert(p.peer_seen(order == 0 ? 3510 : 1600, 0x40, true));
+        const uint32_t fresh = order == 0 ? 3510U : order == 1 ? 1520U : 1125U;
+        assert(p.peer_seen(fresh, 0x40, true));
     }
 }
 
@@ -97,6 +98,16 @@ static void backoff_is_bounded()
     assert(p.status().successful == 0);
 }
 
+static void late_heartbeat_cannot_revive_stale_link()
+{
+    Auto p; p.enable(0);
+    assert(p.update(1000, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(p.handshake_complete(1020, 0x40, true, true));
+    assert(!p.peer_seen(1320, 0x40, true));
+    assert(p.status().state == State::BACKOFF);
+    assert(p.status().lost == 1);
+}
+
 static void never_compete_with_master()
 {
     Auto p; p.enable(0);
@@ -141,8 +152,9 @@ int main()
     requires_exact_peer_and_uart_restoration();
     peer_timeout_and_recovery_clears_link();
     backoff_is_bounded();
+    late_heartbeat_cannot_revive_stale_link();
     never_compete_with_master();
     safety_loss_and_uart_fault_are_latched();
     timeout_and_uint32_clock_wrap();
-    std::puts("8 Phase 17 automatic startup/reconnect policy tests passed (simulation only)");
+    std::puts("9 Phase 17 automatic startup/reconnect policy tests passed (simulation only)");
 }
