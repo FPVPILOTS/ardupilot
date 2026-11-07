@@ -50,6 +50,7 @@ public:
             _active = false;
             _previewed = false;
             _fault_latched = false;
+            _latched_reason = Reason::NO_LINK;
             _status.reason = Reason::NO_LINK;
             return false;
         }
@@ -57,6 +58,7 @@ public:
             _active = true;
             _previewed = false;
             _fault_latched = false;
+            _latched_reason = Reason::NO_LINK;
             _link_ms = e.now_ms;
             _error_baseline = e.uart_errors;
             _status.link_sessions++;
@@ -66,16 +68,17 @@ public:
         // transiently clear frame to erase a prior unsafe observation.
         if (e.uart_errors != _error_baseline) {
             _fault_latched = true;
-        }
-        if (_fault_latched) {
-            return block(Reason::UART_CHANGED);
-        }
-        if (!e.disarmed || !e.emergency_stop) {
-            return block(Reason::BENCH_UNSAFE);
+            _latched_reason = Reason::UART_CHANGED;
         }
         if (e.competing_master) {
             _fault_latched = true;
-            return block(Reason::COMPETING_MASTER);
+            _latched_reason = Reason::COMPETING_MASTER;
+        }
+        if (_fault_latched) {
+            return block(_latched_reason);
+        }
+        if (!e.disarmed || !e.emergency_stop) {
+            return block(Reason::BENCH_UNSAFE);
         }
         if (e.peer_id != 0x40) {
             return block(Reason::WRONG_PEER);
@@ -108,7 +111,8 @@ public:
             !AP_SpektrumSmartESC::decode_channels(output, length, decoded) ||
             decoded.failsafe || decoded.reply_id != 0x40 || decoded.mask != 0) {
             _fault_latched = true;
-            return block(Reason::PREVIEW_INVALID);
+            _latched_reason = Reason::PREVIEW_INVALID;
+            return block(_latched_reason);
         }
         _previewed = true;
         _status.reason = Reason::READY;
@@ -140,12 +144,15 @@ public:
 private:
     bool block(Reason reason)
     {
+        if (_status.reason != reason) {
+            _status.blocked++; // count blocking transitions, not task ticks
+        }
         _status.reason = reason;
-        _status.blocked++;
         return false;
     }
 
     Status _status {};
     uint32_t _link_ms = 0, _error_baseline = 0;
     bool _active = false, _previewed = false, _fault_latched = false;
+    Reason _latched_reason = Reason::NO_LINK;
 };
