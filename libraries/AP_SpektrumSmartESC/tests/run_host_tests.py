@@ -23,6 +23,7 @@ def main():
     offline_poll_executable = args.out.resolve() / 'test_spektrum_telem_poll_sim.exe'
     poll_dryrun_executable = args.out.resolve() / 'test_spektrum_poll_dryrun.exe'
     poll_lab_executable = args.out.resolve() / 'test_spektrum_poll_lab.exe'
+    bench6_executable = args.out.resolve() / 'test_spektrum_bench6.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -72,6 +73,12 @@ def main():
              str(library / 'tests/test_spektrum_poll_lab.cpp'),
              '-o', str(poll_lab_executable)],
             [str(poll_lab_executable)],
+            # Host-only 6% limit and reverse interlock contract. No HAL, UART,
+            # on-device output or automatic motor command is compiled here.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             str(library / 'tests/test_spektrum_bench6.cpp'),
+             '-o', str(bench6_executable)],
+            [str(bench6_executable)],
         ]
         if args.arm_cxx:
             commands.append([
