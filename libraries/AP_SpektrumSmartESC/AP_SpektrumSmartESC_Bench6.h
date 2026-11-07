@@ -30,6 +30,7 @@ public:
         float magnitude = 0.0f;
         bool reverse = false;
         bool clipped = false;
+        bool publishable = false; // No UART output unless explicitly true.
         Reason reason = Reason::ZERO;
     };
 
@@ -51,24 +52,24 @@ public:
                 return zero(Reason::WAIT_NEUTRAL);
             }
             _enabled = true; // Only zero + forward + stopped may initialize.
-            return zero(Reason::ZERO);
+            return zero(Reason::ZERO, true);
         }
 
         if (in.reverse != _reverse) {
             // A direction request with nonzero demand NEVER changes direction.
             if (in.demand != 0.0f) {
                 _transition = false;
-                return zero(Reason::WAIT_NEUTRAL);
+                return zero(Reason::WAIT_NEUTRAL, true);
             }
             if (!in.stopped) {
                 _transition = false;
-                return zero(Reason::WAIT_STOP);
+                return zero(Reason::WAIT_STOP, true);
             }
             if (!_transition || _requested_reverse != in.reverse) {
                 _transition = true;
                 _requested_reverse = in.reverse;
                 _transition_since = now_ms;
-                return zero(Reason::WAIT_DWELL);
+                return zero(Reason::WAIT_DWELL, true);
             }
             if (uint32_t(now_ms - _transition_since) < DIRECTION_DWELL_MS) {
                 return zero(Reason::WAIT_DWELL);
@@ -96,6 +97,7 @@ public:
         result.magnitude = in.demand > MAX_MAGNITUDE ? MAX_MAGNITUDE : in.demand;
         result.clipped = in.demand > MAX_MAGNITUDE;
         result.reverse = _reverse;
+        result.publishable = true;
         result.reason = _reverse ? Reason::REVERSE : Reason::FORWARD;
         return result;
     }
@@ -104,13 +106,15 @@ public:
     bool enabled() const { return _enabled && !_fault; }
 
 private:
-    static Output zero(Reason r)
+    Output zero(Reason r, bool publishable = false) const
     {
         Output o;
         o.reason = r;
-        return o; // Never output a live direction during a transition.
+        o.reverse = _reverse; // Retain direction until neutral+dwell completes.
+        o.publishable = publishable;
+        return o;
     }
-    static Output fault_output() { return zero(Reason::FAULT); }
+    Output fault_output() const { return zero(Reason::FAULT); }
 
     bool _enabled = false;
     bool _fault = false;
