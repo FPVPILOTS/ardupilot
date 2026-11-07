@@ -276,7 +276,7 @@ bool DiagnosticRX::diagnostic_handshake_start(uint8_t target, uint32_t uid, bool
 #endif
 }
 
-bool DiagnosticRX::diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length)
+bool DiagnosticRX::diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length, uint32_t acquired_ms)
 {
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     if (hal.util->get_soft_armed() || !hal.scheduler->in_main_thread()) {
@@ -284,11 +284,11 @@ bool DiagnosticRX::diagnostic_handshake_startup_observed(const uint8_t *packet, 
     }
     chSysLock();
     const bool allowed = _initialized && _experimental_owner == nullptr &&
-        _lab_hs_lease.authorize_startup_announcement(packet, length, AP_HAL::millis());
+        _lab_hs_lease.authorize_startup_announcement(packet, length, acquired_ms, AP_HAL::millis());
     chSysUnlock();
     return allowed;
 #else
-    (void)packet; (void)length;
+    (void)packet; (void)length; (void)acquired_ms;
     return false;
 #endif
 }
