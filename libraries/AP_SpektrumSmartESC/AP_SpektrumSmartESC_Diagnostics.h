@@ -11,6 +11,7 @@
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 #include "AP_SpektrumSmartESC_AutoSession.h"
 #include "AP_SpektrumSmartESC_PassiveTelemetry.h"
+#include "AP_SpektrumSmartESC_PollDryRun.h"
 #endif
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #include "AP_SpektrumSmartESC_LabHandshake.h"
@@ -67,6 +68,7 @@ private:
     AP_SpektrumSmartESC_AutoSession _auto_session;
     AP_SpektrumSmartESC _auto_rx {0x30, 0x40, 50, false};
     AP_SpektrumSmartESC_PassiveTelemetry _auto_telem_observer;
+    AP_SpektrumSmartESC_PollDryRun _auto_poll_dryrun;
     uint8_t _auto_packet[14] {};
     uint32_t _auto_uid = 0;
     uint32_t _auto_uart_error_baseline = 0;
