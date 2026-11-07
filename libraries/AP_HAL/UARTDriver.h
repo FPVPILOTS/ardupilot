@@ -110,6 +110,10 @@ public:
     virtual bool diagnostic_handshake(const uint8_t *packet, uint8_t length, bool finish) { return false; }
     // Start one explicitly authorized, unqualified laboratory session. Default unavailable.
     virtual bool diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on = false) { return false; }
+    // AutoLab only: independent native gate re-validates a 14-byte CRC-correct
+    // unsolicited ESC startup message before allowing an early 0x21 response.
+    // All other UART drivers and ordinary HSLab deny it unconditionally.
+    virtual bool diagnostic_handshake_startup_observed(const uint8_t *, uint8_t, uint32_t) { return false; }
     // Separate lab image only: fixed four-byte waveform, no caller packet data.
     virtual bool diagnostic_waveform(bool start, bool finish) { return false; }
 

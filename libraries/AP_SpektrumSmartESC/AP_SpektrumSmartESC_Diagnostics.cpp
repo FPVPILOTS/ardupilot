@@ -305,6 +305,22 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         }
     }
 
+    // Forward the exact CRC-validated unsolicited handshake, not just a
+    // boolean or a guessed address. Native UART4 validates it independently
+    // before allowing a pre-2s handshake-only transaction.
+    uint8_t startup_packet[14] {};
+    uint32_t startup_acquired_ms = 0;
+    if (_auto_leased && _auto_session.take_startup_announcement(
+            startup_packet, sizeof(startup_packet), startup_acquired_ms)) {
+        if (port->diagnostic_handshake_startup_observed(
+                startup_packet, sizeof(startup_packet), startup_acquired_ms)) {
+            _auto_fast_grants++;
+        } else {
+            _auto_fast_denied++;
+            _auto_session.uart_fault();
+        }
+    }
+
     // Hardware reports USART true TC and receiver restoration separately.
     // Never count a queued packet as successful transmission.
     (void)port->receive_diagnostics(hw);
@@ -380,6 +396,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 PEER PRI%u BAUD%u ECHO%lu UNEXP%lu",
                       unsigned(hs.last_hs_priority), unsigned(hs.last_hs_baud),
                       (unsigned long)hs.echoes, (unsigned long)hs.unexpected);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 FAST OK%lu NO%lu",
+                      (unsigned long)_auto_fast_grants,
+                      (unsigned long)_auto_fast_denied);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 POST RX%lu",
                       (unsigned long)_auto_rx.observation().crc_frames);
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {

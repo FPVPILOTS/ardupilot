@@ -13,6 +13,8 @@ strings "$bin" | grep -F "SPK17 WHY" >/dev/null
 strings "$bin" | grep -F "SPK17 UART Q" >/dev/null
 strings "$bin" | grep -F "SPK17 HS TX" >/dev/null
 strings "$bin" | grep -F "SPK17 PEER S" >/dev/null
+# Phase 17D early announce must also appear in the built image.
+strings "$bin" | grep -F "SPK17 FAST OK" >/dev/null
 # The two preceding string scans already validated the firmware's
 # AutoLab markers. Do not repeat with grep -q under pipefail: strings may
 # receive SIGPIPE and silently skip the success banner despite exit code 0.

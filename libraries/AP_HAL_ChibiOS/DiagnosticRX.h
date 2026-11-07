@@ -32,6 +32,7 @@ public:
     bool set_options(uint16_t options) override;
     bool diagnostic_handshake(const uint8_t *packet, uint8_t length, bool finish) override;
     bool diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on = false) override;
+    bool diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length, uint32_t acquired_ms) override;
     bool diagnostic_waveform(bool start, bool finish) override;
     bool tx_pending() override { return false; }
     uint32_t txspace() override { return 0; }

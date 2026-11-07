@@ -38,6 +38,8 @@ def main():
              str(library / 'tests/test_spektrum_autosession.cpp'), '-o', str(autosession_executable)],
             [str(autosession_executable)],
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
              str(library / 'tests/test_spektrum_lab_lease.cpp'), '-o', str(lease_executable)],
             [str(lease_executable)],
         ]

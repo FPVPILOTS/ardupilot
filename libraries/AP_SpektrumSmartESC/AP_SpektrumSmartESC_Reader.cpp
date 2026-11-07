@@ -18,6 +18,8 @@ bool AP_SpektrumSmartESC_Reader::start(bool authorized, bool disarmed, uint8_t t
     _status = {};
     _prepared = false;
     _captured = 0;
+    _startup_pending = false;
+    _startup_acquired_ms = 0;
     _power_on = power_on;
     _status.source = power_on ? POWERON_SOURCE : SOURCE;
     if (!authorized || !disarmed || target < 0x40 || target > 0x4F) {
@@ -144,6 +146,17 @@ void AP_SpektrumSmartESC_Reader::feed(uint8_t byte, uint32_t acquisition_us)
     }
 }
 
+bool AP_SpektrumSmartESC_Reader::take_startup_announcement(uint8_t *out, size_t capacity, uint32_t &acquired_ms)
+{
+    if (!_startup_pending || out == nullptr || capacity < sizeof(_startup_packet)) {
+        return false;
+    }
+    memcpy(out, _startup_packet, sizeof(_startup_packet));
+    acquired_ms = _startup_acquired_ms;
+    _startup_pending = false;
+    return true;
+}
+
 uint8_t AP_SpektrumSmartESC_Reader::capture(uint8_t *out, size_t capacity) const
 {
     if (out == nullptr) {
@@ -177,6 +190,21 @@ void AP_SpektrumSmartESC_Reader::observe(const uint8_t *p, uint8_t n, uint32_t n
         if (p[4] == 0 && (_status.state == State::WAITING || (_power_on &&
             (_status.state == State::PREPARED || _status.state == State::RESPONSE)))) {
             _status.startup_announcements++;
+            // Only an addressed, CRC-validated, spontaneous ESC announce in
+            // PREPARED may request an early targeted handshake. No CRC-invalid
+            // data, echoes, unsolicited control, or other device may trigger it.
+            if (_power_on && _status.state == State::PREPARED &&
+                _status.tx_frames == 0 && !_startup_pending &&
+                p[3] == _target && p[5] > 0 && p[5] <= 100 &&
+                p[6] <= 1 && AP_SpektrumSmartESC::crc16(p, n) == 0) {
+                memcpy(_startup_packet, p, sizeof(_startup_packet));
+                _startup_pending = true;
+                _startup_acquired_ms = now_us / 1000U;
+                // Two full milliseconds of idle after the final received byte
+                // exceeds the SRXL2 two-character half-duplex idle requirement.
+                _next_query = now_us + 2000U;
+                _status.state = State::WAITING;
+            }
             return; // Unprompted advertisement is evidence, not the requested response.
         }
         if (p[4] == _status.source && _status.state == State::RESPONSE && uint32_t(now_us - _phase) < 50000) {
