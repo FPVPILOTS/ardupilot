@@ -355,9 +355,27 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 ID%02x TRY%lu OK%lu LOST%lu",
                       unsigned(st.peer_id), (unsigned long)st.attempts,
                       (unsigned long)st.successful, (unsigned long)st.lost);
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 RX%lu FE%lu",
-                      (unsigned long)_auto_rx.observation().crc_frames,
-                      (unsigned long)hw.framing);
+        // Diagnose transport independently of the post-link observer:
+        // _auto_rx CRC counts stay at zero until a link has succeeded.
+        // Q/C/R are lifetime UART4 queued/true-TC/RX-restoration counters.
+        const auto &hs = _auto_session.reader_status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 UART Q%lu C%lu R%lu F%lu",
+                      (unsigned long)hw.handshake_queued,
+                      (unsigned long)hw.handshake_completed,
+                      (unsigned long)hw.handshake_restored,
+                      (unsigned long)hw.handshake_faults);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 HS TX%lu RXB%lu CRC%lu RP%u",
+                      (unsigned long)hs.tx_frames,
+                      (unsigned long)hs.rx_bytes,
+                      (unsigned long)hs.rx_frames,
+                      unsigned(hs.responses));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 HW E%lu FE%lu L%u OWN%u",
+                      (unsigned long)port->receive_errors(),
+                      (unsigned long)hw.framing,
+                      unsigned((hw.flags & 2U) != 0),
+                      unsigned((hw.handshake_flags & 2U) != 0));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 POST RX%lu",
+                      (unsigned long)_auto_rx.observation().crc_frames);
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 HANDSHAKE ONLY; NO ESC TLM/THROTTLE");
         }
