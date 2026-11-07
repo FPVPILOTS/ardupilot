@@ -45,7 +45,7 @@ public:
                 // Reader enters DISCOVERED only after sent() following UART TC.
                 if (uart_rx_restored) {
                     (void)_policy.handshake_complete(now_ms, s.device,
-                        s.responses == 1, uart_rx_restored));
+                        s.responses == 1, uart_rx_restored);
                 }
             } else if (s.state == AP_SpektrumSmartESC_Reader::State::TIMEOUT ||
                        s.state == AP_SpektrumSmartESC_Reader::State::FAULT ||
