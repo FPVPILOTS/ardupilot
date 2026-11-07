@@ -309,9 +309,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     // boolean or a guessed address. Native UART4 validates it independently
     // before allowing a pre-2s handshake-only transaction.
     uint8_t startup_packet[14] {};
+    uint32_t startup_acquired_ms = 0;
     if (_auto_leased && _auto_session.take_startup_announcement(
-            startup_packet, sizeof(startup_packet)) &&
-        !port->diagnostic_handshake_startup_observed(startup_packet, sizeof(startup_packet))) {
+            startup_packet, sizeof(startup_packet), startup_acquired_ms) &&
+        !port->diagnostic_handshake_startup_observed(
+            startup_packet, sizeof(startup_packet), startup_acquired_ms)) {
         _auto_session.uart_fault();
     }
 
