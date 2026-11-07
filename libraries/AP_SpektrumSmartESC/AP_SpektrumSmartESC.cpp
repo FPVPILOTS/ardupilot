@@ -137,6 +137,14 @@ bool AP_SpektrumSmartESC::feed(uint8_t byte, uint32_t now_ms)
         return false;
     }
     _observation.crc_frames++;
+    // Count CRC-valid packet types before policy acceptance so passive
+    // diagnostics can distinguish visible traffic from trusted telemetry.
+    switch (_buffer[1]) {
+    case 0x21: _observation.handshake_frames++; break;
+    case 0xCD: _observation.control_frames++; break;
+    case 0x80: _observation.sensor_frames++; break;
+    default:   _observation.other_frames++; break;
+    }
     _observation.last_ms = now_ms;
     _observation.type = _buffer[1];
     _observation.sensor = (_buffer[1] == 0x80 && _buffer[2] == 22) ? _buffer[4] : 0;

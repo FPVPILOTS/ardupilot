@@ -623,6 +623,18 @@ void AP_SpektrumSmartESC_Diagnostics::update()
         const auto &counts = parser.counters();
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT RX%u ID%02x B%lu F%lu", status, observation.handshake_source,
                       (unsigned long)_receiver->bytes(), (unsigned long)observation.crc_frames);
+        // Mission Planner-only observability: no DataFlash log needed.
+        // RAW counters mean CRC-valid envelope only, NOT accepted telemetry.
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK16 RAW H%lu C%lu E%lu O%lu",
+                      (unsigned long)observation.handshake_frames,
+                      (unsigned long)observation.control_frames,
+                      (unsigned long)observation.sensor_frames,
+                      (unsigned long)observation.other_frames);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK16 PAR H%lu P%lu T%lu R%lu",
+                      (unsigned long)counts.handshakes,
+                      (unsigned long)counts.polls,
+                      (unsigned long)counts.telemetry,
+                      (unsigned long)counts.rejected);
         AP_HAL::UARTDriver::ReceiveDiagnostics hardware {};
         auto *port = hal.diagnostic_rx_uart();
         if (port != nullptr && port->receive_diagnostics(hardware)) {
