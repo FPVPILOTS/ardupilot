@@ -70,6 +70,15 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("LABACK", 9, AP_SpektrumSmartESC_Diagnostics, _hs_ack, 0),
 #endif
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    // @Param: AUTO
+    // @DisplayName: Automatic handshake-only laboratory sessions
+    // @Description: AutoLab firmware ONLY. On boot with ENABLE=1, automatically discover/reconnect isolated Spektrum ESC on AUX7, using 0x21-only handshake; no Control Data, throttle, reverse or arming. Requires disarmed emergency stop. No other bus master.
+    // @Values: 0:Disabled,1:Automatic handshake lab
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("AUTO", 10, AP_SpektrumSmartESC_Diagnostics, _auto, 0),
+#endif
     AP_GROUPEND
 };
 
@@ -109,6 +118,27 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #endif
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: bench RX only; arming inhibited; no TX");
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: passive silence may mean no master polling");
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (_auto == 1) {
+        uint8_t id[16] {};
+        uint8_t length = sizeof(id);
+        const bool unique = hal.util->get_system_id_unformatted(id, length) &&
+                            length > 0 && length <= sizeof(id);
+        if (!unique) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17: NO_UID; AUTO BLOCKED");
+            return;
+        }
+        uint32_t uid = 2166136261U;
+        for (uint8_t i = 0; i < length; ++i) {
+            uid = (uid ^ id[i]) * 16777619U;
+        }
+        _auto_session.enable(AP_HAL::millis(), uint8_t(_hs_target.get()), uid);
+        _auto_rx = AP_SpektrumSmartESC(0x30, uint8_t(_hs_target.get()), 50, false);
+        _auto_started = true;
+        _receiver->suspend(); // Native AutoLab owns the sole RX consumer.
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 AUTOLAB ON; NO MOTOR, NO CONTROL");
+    }
+#endif
 }
 
 bool AP_SpektrumSmartESC_Diagnostics::update_probe(uint32_t now_ms)
@@ -562,6 +592,12 @@ void AP_SpektrumSmartESC_Diagnostics::update()
     if (_native_motor != nullptr) {
         return; // The qualified backend exclusively owns RX; never close/consume it here.
     }
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (_auto == 1) {
+        update_auto_reader(now);
+        return;
+    }
+#endif
     if (update_waveform(now)) {
         return;
     }
