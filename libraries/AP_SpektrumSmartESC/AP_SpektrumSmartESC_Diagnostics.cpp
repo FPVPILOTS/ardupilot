@@ -305,6 +305,16 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         }
     }
 
+    // Forward the exact CRC-validated unsolicited handshake, not just a
+    // boolean or a guessed address. Native UART4 validates it independently
+    // before allowing a pre-2s handshake-only transaction.
+    uint8_t startup_packet[14] {};
+    if (_auto_leased && _auto_session.take_startup_announcement(
+            startup_packet, sizeof(startup_packet)) &&
+        !port->diagnostic_handshake_startup_observed(startup_packet, sizeof(startup_packet))) {
+        _auto_session.uart_fault();
+    }
+
     // Hardware reports USART true TC and receiver restoration separately.
     // Never count a queued packet as successful transmission.
     (void)port->receive_diagnostics(hw);
