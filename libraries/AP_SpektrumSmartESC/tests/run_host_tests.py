@@ -22,6 +22,7 @@ def main():
     passive_telem_executable = args.out.resolve() / 'test_spektrum_passive_telem.exe'
     offline_poll_executable = args.out.resolve() / 'test_spektrum_telem_poll_sim.exe'
     poll_dryrun_executable = args.out.resolve() / 'test_spektrum_poll_dryrun.exe'
+    poll_lab_executable = args.out.resolve() / 'test_spektrum_poll_lab.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -63,6 +64,14 @@ def main():
              str(library / 'tests/test_spektrum_poll_dryrun.cpp'),
              '-o', str(poll_dryrun_executable)],
             [str(poll_dryrun_executable)],
+            # Strict packet and native one-shot lease; physical transmission
+            # requires the separately compiled PollLab board and operator consent.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
+             str(library / 'tests/test_spektrum_poll_lab.cpp'),
+             '-o', str(poll_lab_executable)],
+            [str(poll_lab_executable)],
         ]
         if args.arm_cxx:
             commands.append([
