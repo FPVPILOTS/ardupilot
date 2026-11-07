@@ -304,10 +304,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
         if (_poll_active) {
             (void)port->diagnostic_poll_lab(nullptr, 0, true);
-            _post_poll_diag.finish();
             _poll_active = false;
             _poll_fail++;
         }
+        // Stop the independent receive witness on any unsafe transition.
+        _post_poll_diag.finish();
         _poll_pending = false;
 #endif
         _auto_telem_observer.invalidate();
@@ -437,21 +438,32 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     (void)_auto_poll_dryrun.update(dry);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
     if (_poll_active) {
-        // A real 0xCD uses the *existing* native UART4 owner, but the
-        // single-packet lease and response window are independently bounded.
-        if (!dry.linked || !dry.disarmed || !dry.emergency_stop ||
+        // Close the physical TX lease at its ORIGINAL 15-ms deadline.
+        // A separate bounded read-only witness may observe RX until 30 ms.
+        const bool bad_link_or_hardware =
+            !dry.linked || !dry.disarmed || !dry.emergency_stop ||
             port->receive_errors() != _poll_uart_error_baseline ||
             hw.handshake_faults != _poll_hw_fault_baseline ||
-            (_poll_tc && !rx_restored) ||
-            AP_SpektrumSmartESC_PollLab::timeout(
-                now_ms, _poll_start_ms, _poll_tc, _poll_tc_ms)) {
+            (_poll_tc && !rx_restored);
+        const bool timed_out = AP_SpektrumSmartESC_PollLab::timeout(
+            now_ms, _poll_start_ms, _poll_tc, _poll_tc_ms);
+        if (bad_link_or_hardware || timed_out) {
             (void)port->diagnostic_poll_lab(nullptr, 0, true);
             if (!_poll_reply) {
                 _poll_fail++;
             }
-            _post_poll_diag.finish();
+            // No TC or an unsafe close: end observation immediately.
+            // A clean poll timeout with verified TC keeps only RX recording
+            // active, without holding any TX lease or extending acceptance.
+            if (bad_link_or_hardware || !_poll_tc) {
+                _post_poll_diag.finish();
+            }
             _poll_active = false;
         }
+    }
+    if (_post_poll_diag.active() && _poll_tc &&
+        uint32_t(now_ms - _poll_tc_ms) >= 31U) {
+        _post_poll_diag.finish();
     }
     if (_poll_pending) {
         if (uint32_t(now_ms - _poll_request_ms) >= 1000U ||
