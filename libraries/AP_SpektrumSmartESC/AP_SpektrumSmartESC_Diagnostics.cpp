@@ -438,7 +438,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                           double(candidate.temperature_c));
         }
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
-            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 HANDSHAKE ONLY; NO ESC TLM/THROTTLE");
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 NO TLM POLL/THROTTLE; RX OBS ONLY");
         }
     }
 }
