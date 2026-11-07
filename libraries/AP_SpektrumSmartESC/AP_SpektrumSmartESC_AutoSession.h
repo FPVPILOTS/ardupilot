@@ -78,10 +78,10 @@ public:
         return _reader.prepare(now_us, packet, capacity, idle_high);
     }
 
-    bool take_startup_announcement(uint8_t *out, size_t capacity)
+    bool take_startup_announcement(uint8_t *out, size_t capacity, uint32_t &acquired_ms)
     {
         return _policy.status().state == State::HANDSHAKE &&
-            _reader.take_startup_announcement(out, capacity);
+            _reader.take_startup_announcement(out, capacity, acquired_ms);
     }
 
     bool sent(uint32_t tc_time_us)
