@@ -304,6 +304,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
         if (_poll_active) {
             (void)port->diagnostic_poll_lab(nullptr, 0, true);
+            _post_poll_diag.finish();
             _poll_active = false;
             _poll_fail++;
         }
@@ -330,6 +331,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     if (_poll_active && !_poll_tc && (hw.handshake_flags & 4U)) {
         _poll_tc = true;
         _poll_tc_ms = hw.handshake_tc_ms;
+        _post_poll_diag.on_true_tc(_poll_tc_ms);
         _poll_sent++;
     }
 #endif
@@ -345,6 +347,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         uint8_t byte = 0;
         uint32_t acquired_ms = 0;
         for (uint16_t i = 0; i < 512 && port->read_timed(byte, acquired_ms); i++) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+            // Observe raw FIFO data independently of the LINKED parser state.
+            // Never acknowledge, re-transmit or accept an additional packet.
+            _post_poll_diag.feed(byte, acquired_ms);
+#endif
             const auto state = _auto_session.status().state;
             if (state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
                 _auto_session.feed(byte, acquired_ms * 1000U);
@@ -442,6 +449,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
             if (!_poll_reply) {
                 _poll_fail++;
             }
+            _post_poll_diag.finish();
             _poll_active = false;
         }
     }
@@ -467,6 +475,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                     _poll_active = true;
                     _poll_tc = _poll_reply = false;
                     _poll_start_ms = now_ms;
+                    _post_poll_diag.begin();
                 } else {
                     (void)port->diagnostic_poll_lab(nullptr, 0, true);
                     _poll_fail++;
@@ -583,6 +592,26 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       (unsigned long)_poll_sent,
                       (unsigned long)_poll_accepted,
                       (unsigned long)_poll_fail);
+        if (_poll_consumed) {
+            // 1-ms UART FIFO timestamps; bins are approximate, not scope data.
+            const auto &w = _post_poll_diag.snapshot();
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK21 TC%u RX%lu PRE%lu A6%lu",
+                          unsigned(w.tc), (unsigned long)w.bytes,
+                          (unsigned long)w.pre_tc, (unsigned long)w.syncs);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK21 B%lu/%lu/%lu/%lu",
+                          (unsigned long)w.bins[0], (unsigned long)w.bins[1],
+                          (unsigned long)w.bins[2], (unsigned long)w.bins[3]);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK21 H%lu S%lu L%lu C%lu LEN%lu INC%lu",
+                          (unsigned long)w.handshake, (unsigned long)w.sensors,
+                          (unsigned long)w.late_sensors, (unsigned long)w.bad_crc,
+                          (unsigned long)w.bad_length, (unsigned long)w.incomplete);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK21 RAW%u %02X %02X %02X %02X %02X %02X %02X %02X",
+                          unsigned(w.prefix_len),
+                          unsigned(w.prefix[0]), unsigned(w.prefix[1]),
+                          unsigned(w.prefix[2]), unsigned(w.prefix[3]),
+                          unsigned(w.prefix[4]), unsigned(w.prefix[5]),
+                          unsigned(w.prefix[6]), unsigned(w.prefix[7]));
+        }
         if (_poll_reply) {
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 LAST FL%04x ERPM%lu",
                           unsigned(_poll_sample.valid),
