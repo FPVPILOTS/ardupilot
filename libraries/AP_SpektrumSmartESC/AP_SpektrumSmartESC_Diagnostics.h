@@ -14,6 +14,7 @@
 #include "AP_SpektrumSmartESC_PollDryRun.h"
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
 #include "AP_SpektrumSmartESC_PollLab.h"
+#include "AP_SpektrumSmartESC_PostPollDiag.h"
 #endif
 #endif
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
@@ -92,6 +93,7 @@ private:
     uint32_t _poll_uart_error_baseline = 0, _poll_hw_fault_baseline = 0;
     uint32_t _poll_sent = 0, _poll_accepted = 0, _poll_fail = 0;
     AP_SpektrumSmartESC::Telemetry _poll_sample {};
+    AP_SpektrumSmartESC_PostPollDiag _post_poll_diag;
     uint8_t _poll_packet[14] {};
 #endif
 #endif
