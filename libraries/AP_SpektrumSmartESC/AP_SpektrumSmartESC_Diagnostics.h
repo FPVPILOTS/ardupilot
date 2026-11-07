@@ -69,6 +69,7 @@ private:
     uint32_t _auto_uid = 0;
     uint32_t _auto_uart_error_baseline = 0;
     uint32_t _auto_log_ms = 0;
+    uint32_t _auto_fast_grants = 0, _auto_fast_denied = 0;
     bool _auto_started = false;
     bool _auto_leased = false, _auto_inflight = false;
     void update_auto_reader(uint32_t now_ms);
