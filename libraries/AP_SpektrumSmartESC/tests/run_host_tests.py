@@ -20,6 +20,7 @@ def main():
     autosession_executable = args.out.resolve() / 'test_spektrum_autosession.exe'
     lease_executable = args.out.resolve() / 'test_spektrum_lab_lease.exe'
     passive_telem_executable = args.out.resolve() / 'test_spektrum_passive_telem.exe'
+    offline_poll_executable = args.out.resolve() / 'test_spektrum_telem_poll_sim.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -48,6 +49,13 @@ def main():
              str(library / 'tests/test_spektrum_passive_telem.cpp'),
              '-o', str(passive_telem_executable)],
             [str(passive_telem_executable)],
+            # Offline-only 0xCD ReplyID experiment. No HAL, UART or firmware
+            # integration is linked, and this executable never runs on a board.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'tests/test_spektrum_telem_poll_sim.cpp'),
+             '-o', str(offline_poll_executable)],
+            [str(offline_poll_executable)],
         ]
         if args.arm_cxx:
             commands.append([
