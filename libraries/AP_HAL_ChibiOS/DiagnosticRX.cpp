@@ -243,6 +243,7 @@ bool DiagnosticRX::diagnostic_poll_lab_start()
     }
     chSysLock();
     const bool valid = _initialized && _experimental_owner == nullptr &&
+        _uart_recovery.eligible(_errors, AP_HAL::millis()) &&
         !_lab_hs_lease.active(AP_HAL::millis()) &&
         _head == _tail && palReadLine(PAL_LINE(GPIOA, 0)) &&
         (GPIOA->MODER & 3U) == 2U &&
