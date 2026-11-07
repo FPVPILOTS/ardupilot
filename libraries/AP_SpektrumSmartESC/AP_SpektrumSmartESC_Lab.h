@@ -10,6 +10,12 @@
 #ifndef AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 0
 #endif
+#ifndef AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+#define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB && !AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+#error "Automatic handshake LAB requires the strict HSLab packet whitelist"
+#endif
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #if AP_SPEKTRUM_SMART_ESC_LAB_ONLY
 #error "Handshake laboratory and disconnected waveform laboratory are separate images"
