@@ -78,7 +78,7 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     _hs_ack.set(0);
     _hs_authorization.cancel();
-    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15B: HSLAB; NO MOTOR; ELECTRICAL UNVERIFIED");
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15C: HSLAB; NO MOTOR; UART ERROR POLICY UPDATED");
 #endif
     _waveform.set(0);
     if (AP_SPEKTRUM_SMART_ESC_LAB_ONLY) {
@@ -253,14 +253,24 @@ bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
             const bool authorized = _hs_authorization.consume(request && safe && unique &&
                                     (hardware.handshake_flags & 16) != 0, now_ms);
+            // Snapshot *before* lease creation. A transient error during lease
+            // acquisition or later must not disappear into our baseline.
+            const uint32_t prior_uart_errors = port != nullptr ? port->receive_errors() : 0;
             gate = authorized && port != nullptr &&
                    port->diagnostic_handshake_start(uint8_t(_hs_target.get()), uid, _hs_power_on);
+            if (gate) {
+                _hs_uart_error_baseline = prior_uart_errors;
+                if (prior_uart_errors != 0) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15C: old FE settled; count=%lu",
+                                  (unsigned long)prior_uart_errors);
+                }
+            }
             _hs_lab_session = gate;
             _hs_window_reported = false;
             if (!gate) {
                 const char *reason = !request ? "REQUEST" : !safe ? "BENCH_STATE" : !unique ? "UID" :
                     !_hs_authorization.used() ? "ACK" : !authorized ? "USED" : port == nullptr ? "UART_UNAVAILABLE" :
-                    port->receive_errors() != 0 ? "UART_ERROR" : !(hardware.flags & 1) ? "UART_NOT_READY" :
+                    !(hardware.handshake_flags & 64) ? "UART_ERROR" : !(hardware.flags & 1) ? "UART_NOT_READY" :
                     !_hs_power_on && !(hardware.flags & 2) ? "LINE_LOW" : "UART_PREFLIGHT";
                 GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15 BLOCKED_%s", reason);
             }
@@ -293,7 +303,9 @@ bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
     }
     if (_reader.active()) {
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
-        if (port->receive_errors() != 0) {
+        if (port->receive_errors() != _hs_uart_error_baseline) {
+            // A new framing/overrun/noise/config error is never treated as
+            // historical recovery during an authorized transaction.
             _reader.fault();
         }
 #endif

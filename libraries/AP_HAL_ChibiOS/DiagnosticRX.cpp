@@ -107,6 +107,11 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
     status.handshake_flags = AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED ? 1 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? 8 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ? 16 : 0;
+    // Bit 6: historical UART error state is eligible for a fresh LAB attempt.
+    // This does not bypass hardware ISR, FIFO or ownership checks at start.
+    if (_uart_recovery.eligible(_errors, AP_HAL::millis())) {
+        status.handshake_flags |= 64;
+    }
     if (_initialized && _head == _tail && palReadLine(PAL_LINE(GPIOA, 0)) &&
         !(UART4->ISR & (USART_ISR_BUSY | USART_ISR_RXNE_RXFNE)) &&
         (UART4->CR1 & (USART_CR1_TE | USART_CR1_RE)) == USART_CR1_RE) {
@@ -238,7 +243,10 @@ bool DiagnosticRX::diagnostic_handshake_start(uint8_t target, uint32_t uid, bool
     }
     chSysLock();
     const uint32_t direction = USART_CR1_UE | USART_CR1_RE | USART_CR1_TE | USART_CR1_TCIE;
-    const bool ready = _initialized && _experimental_owner == nullptr && _errors == 0 &&
+    // A historical FE-only event can settle; every other error type stays
+    // latched out. Total error counters remain unchanged for diagnosis.
+    const bool ready = _initialized && _experimental_owner == nullptr &&
+        _uart_recovery.eligible(_errors, AP_HAL::millis()) &&
         _head == _tail && (power_on || palReadLine(PAL_LINE(GPIOA, 0))) &&
         (GPIOA->MODER & 3U) == 2U && (GPIOA->AFRL & 15U) == 8U && (GPIOA->OTYPER & 1U) &&
         (UART4->CR1 & direction) == (USART_CR1_UE | USART_CR1_RE) &&
@@ -364,6 +372,11 @@ void DiagnosticRX::poll()
         const uint32_t status = UART4->ISR;
         if (status & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE)) {
             _errors++;
+            // Only an isolated framing error is eligible for delayed recovery.
+            // Never classify noise, parity, overrun or combined flags as safe.
+            if ((status & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE)) == USART_ISR_FE) {
+                _uart_recovery.record_framing_only(AP_HAL::millis());
+            }
             _overruns += (status & USART_ISR_ORE) != 0;
             _framing += (status & USART_ISR_FE) != 0;
             _noise += (status & USART_ISR_NE) != 0;
