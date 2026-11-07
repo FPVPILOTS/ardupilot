@@ -53,6 +53,8 @@ private:
     bool _hs_inflight = false, _hs_leased = false;
     uint32_t _last_hs_request_ms = 0, _last_reader_log_ms = 0;
     uint32_t _hs_fault_base = 0;
+    // Snapshot before handshake lease creation: only new UART errors abort.
+    uint32_t _hs_uart_error_baseline = 0;
     uint8_t _hs_logged_bytes = 0;
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     AP_Int8 _hs_ack;
