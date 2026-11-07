@@ -23,14 +23,25 @@ static void startup_fc_first_esc_first_simultaneous()
         Auto p;
         p.enable(100);
         assert(p.update(1099, true, true) == Action::NONE);
-        assert(p.update(1100, true, false) == Action::NONE);
-        assert(p.update(1101, true, true) == Action::BEGIN_HANDSHAKE);
-        assert(p.status().state == State::HANDSHAKE);
-        assert(p.handshake_complete(1115, 0x40, true, true));
+        // In a 4S/6S bench, a line can be high even when the ESC is off:
+        // never treat HIGH alone as proof that the peer is ready.
+        if (order == 0) { // FC first: ESC power arrives during the 7.5 s window.
+            assert(p.update(1100, true, false) == Action::NONE);
+            assert(p.update(1101, true, true) == Action::BEGIN_HANDSHAKE);
+            assert(p.handshake_complete(3500, 0x40, true, true));
+        } else if (order == 1) { // ESC first: bus initially busy with broadcasts.
+            assert(p.update(1100, true, false) == Action::NONE);
+            assert(p.update(1500, true, true) == Action::BEGIN_HANDSHAKE);
+            assert(p.handshake_complete(1510, 0x40, true, true));
+        } else { // Simultaneous power: quiet startup followed by valid reply.
+            assert(p.update(1100, true, true) == Action::BEGIN_HANDSHAKE);
+            assert(p.handshake_complete(1115, 0x40, true, true));
+        }
         assert(p.status().state == State::LINKED);
         assert(p.status().attempts == 1);
         assert(p.status().successful == 1);
-        assert(p.update(1300, true, true) == Action::NONE);
+        // Each route has a new peer timestamp; no stale RC state is restored.
+        assert(p.peer_seen(order == 0 ? 3510 : 1600, 0x40, true));
     }
 }
 
