@@ -103,10 +103,39 @@ static void startup_advertisement_is_only_evidence()
     assert(st.responses == 0);
     assert(s.status().state == State::HANDSHAKE);
     assert(s.status().successful == 0);
+    uint8_t captured_announcement[14] {};
+    assert(s.take_startup_announcement(captured_announcement, sizeof(captured_announcement)));
+    assert(captured_announcement[3] == 0x40 && captured_announcement[4] == 0);
+    assert(AP_SpektrumSmartESC::crc16(captured_announcement, 14) == 0);
+    assert(!s.take_startup_announcement(captured_announcement, sizeof(captured_announcement)));
     uint8_t packet[80] {};
     assert(s.prepare(1200000, packet, sizeof(packet), true) == 0);
-    assert(s.prepare(3000000, packet, sizeof(packet), true) == 14);
+    // The first directed 0x21 can now be prepared two milliseconds after
+    // the CRC-verified startup announcement instead of two seconds later.
+    assert(s.prepare(1202000, packet, sizeof(packet), true) == 14);
     assert(packet[3] == 0x30 && packet[4] == 0x40);
+    assert(s.sent(1203500));
+    assert(s.status().successful == 0);
+}
+
+static void malformed_startup_cannot_start_early_tx()
+{
+    Session s;
+    s.enable(0, 0x40, 0xCAFEBABEU);
+    assert(s.tick(1000000, true, true, true) == Action::BEGIN_HANDSHAKE);
+    uint8_t malformed[] = {0xA6, 0x21, 14, 0x40, 0, 10, 0, 4,
+                           0x78, 0x56, 0x34, 0x12, 0, 0};
+    seal(malformed);
+    malformed[13] ^= 0x01;
+    for (uint8_t b : malformed) {
+        s.feed(b, 1200000);
+    }
+    uint8_t captured[14] {};
+    assert(!s.take_startup_announcement(captured, sizeof(captured)));
+    assert(s.reader_status().startup_announcements == 0);
+    uint8_t packet[80] {};
+    assert(s.prepare(1202000, packet, sizeof(packet), true) == 0);
+    assert(s.status().successful == 0);
 }
 
 static void wrong_reply_cannot_report_connected()
@@ -191,9 +220,10 @@ int main()
 {
     handshake_uses_real_reader_frames();
     startup_advertisement_is_only_evidence();
+    malformed_startup_cannot_start_early_tx();
     wrong_reply_cannot_report_connected();
     no_peer_timeout_then_backoff();
     reconnect_repeats_valid_handshake_without_stale_link();
     master_conflict_and_unsafe_gate_latch();
-    std::puts("6 Phase 17B/17C reader auto-session tests passed (simulation only)");
+    std::puts("7 Phase 17B/17D reader auto-session tests passed (simulation only)");
 }
