@@ -89,7 +89,7 @@ private:
     bool _poll_pending = false;
     bool _poll_active = false, _poll_tc = false, _poll_reply = false;
     uint32_t _poll_request_ms = 0, _poll_start_ms = 0, _poll_tc_ms = 0;
-    uint32_t _poll_uart_error_baseline = 0;
+    uint32_t _poll_uart_error_baseline = 0, _poll_hw_fault_baseline = 0;
     uint32_t _poll_sent = 0, _poll_accepted = 0, _poll_fail = 0;
     AP_SpektrumSmartESC::Telemetry _poll_sample {};
     uint8_t _poll_packet[14] {};
