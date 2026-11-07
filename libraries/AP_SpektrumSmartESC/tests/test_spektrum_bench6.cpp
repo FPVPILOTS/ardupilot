@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "../AP_SpektrumSmartESC_Bench6.h"
+#include "../AP_SpektrumSmartESC_Bench6Wire.h"
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -135,6 +136,23 @@ static void timestamp_wraparound_is_handled()
     assert(o.reverse && o.magnitude == 0); // exactly +500 ms
 }
 
+static void physical_motor_wire_value_is_capped()
+{
+    // Synthetic endpoints: an actual Avian endpoint is NOT asserted.
+    using Wire = AP_SpektrumSmartESC_Bench6Wire;
+    const uint16_t zero = 1000, full = 61000;
+    assert(Wire::throttle(0.0f, zero, full) == 1000);
+    assert(Wire::throttle(0.03f, zero, full) == 2800);
+    assert(Wire::throttle(0.06f, zero, full) == 4600);
+    assert(Wire::throttle(0.50f, zero, full) == 4600);
+    assert(Wire::throttle(1.0f, zero, full) == 4600);
+    assert(Wire::throttle(-0.5f, zero, full) == 1000);
+    assert(Wire::throttle(std::numeric_limits<float>::quiet_NaN(), zero, full) == 1000);
+    assert(Wire::throttle(std::numeric_limits<float>::infinity(), zero, full) == 1000);
+    assert(Wire::throttle(1.0f, 2000, 2000) == 0);
+    assert(Wire::throttle(1.0f, 1000, 65535) == 0);
+}
+
 int main()
 {
     no_arming_or_output_without_initial_neutral();
@@ -145,5 +163,6 @@ int main()
     reject_nan_infinity_and_negative();
     lost_stop_evidence_resets_dwell();
     timestamp_wraparound_is_handled();
-    std::puts("8 Bench6 host-only safety-contract tests passed");
+    physical_motor_wire_value_is_capped();
+    std::puts("9 Bench6 host-only safety-contract tests passed");
 }
