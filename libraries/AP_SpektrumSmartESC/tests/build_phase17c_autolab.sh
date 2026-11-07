@@ -10,7 +10,8 @@ test -s "$bin"
 test -s "${bin}.apj"
 strings "$bin" | grep -F "SPK17 AUTOLAB ON" >/dev/null
 strings "$bin" | grep -F "SPK17 WHY" >/dev/null
-if strings "$bin" | grep -Fq "SPK17 AUTOLAB ON"; then
-    printf '\nPHASE17C BUILD PASS (UNARMABLE LAB). Artifact: %s.apj\n' "$bin"
-fi
+# The two preceding string scans already validated the firmware's
+# AutoLab markers. Do not repeat with grep -q under pipefail: strings may
+# receive SIGPIPE and silently skip the success banner despite exit code 0.
+printf '\nPHASE17C BUILD PASS (UNARMABLE LAB). Artifact: %s.apj\n' "$bin"
 printf 'DO NOT FLASH until peer-reviewed checks and physical bench setup are confirmed.\n'
