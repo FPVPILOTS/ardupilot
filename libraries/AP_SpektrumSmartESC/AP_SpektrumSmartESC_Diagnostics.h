@@ -8,6 +8,9 @@
 #include "AP_SpektrumSmartESC_Reader.h"
 #include "AP_SpektrumSmartESC_Plane.h"
 #include "AP_SpektrumSmartESC_Lab.h"
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+#include "AP_SpektrumSmartESC_AutoSession.h"
+#endif
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #include "AP_SpektrumSmartESC_LabHandshake.h"
 #endif
@@ -58,6 +61,17 @@ private:
     uint8_t _hs_logged_bytes = 0;
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     AP_Int8 _hs_ack;
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    AP_Int8 _auto;
+    AP_SpektrumSmartESC_AutoSession _auto_session;
+    AP_SpektrumSmartESC _auto_rx {0x30, 0x40, 50, false};
+    uint8_t _auto_packet[14] {};
+    uint32_t _auto_uart_error_baseline = 0;
+    uint32_t _auto_log_ms = 0;
+    bool _auto_started = false;
+    bool _auto_leased = false, _auto_inflight = false;
+    void update_auto_reader(uint32_t now_ms);
+#endif
     AP_SpektrumSmartESC_LabHandshake::Authorization _hs_authorization;
     bool _hs_lab_session = false, _hs_window_reported = false;
     uint32_t _hs_lab_status_ms = 0;
