@@ -1,0 +1,776 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "AP_SpektrumSmartESC_Diagnostics.h"
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+#include <AP_Logger/AP_Logger.h>
+#include <GCS_MAVLink/GCS.h>
+#include <SRV_Channel/SRV_Channel.h>
+#include "AP_SpektrumSmartESC_Shadow.h"
+#include "AP_SpektrumSmartESC_ChibiOS.h"
+
+extern const AP_HAL::HAL &hal;
+
+const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
+    // @Param: ENABLE
+    // @DisplayName: Spektrum passive UART4 diagnostics
+    // @Description: Enable receive-only AUX7 bench diagnostics at 115200 baud and inhibit arming until disabled and rebooted. No transmitter, throttle or reverse. Qualify the electrical path before connecting an ESC or test signal.
+    // @Values: 0:Disabled,1:Receive only
+    // @RebootRequired: True
+    // @User: Advanced
+    // Independent SHADOW/PROBE controls must remain visible with legacy RX disabled.
+    AP_GROUPINFO("ENABLE", 1, AP_SpektrumSmartESC_Diagnostics, _enable, 0),
+    // @Param: TLM
+    // @DisplayName: Spektrum observed telemetry publication
+    // @Description: Publish fresh complete observed ESC measurements to fixed ESC telemetry index 14 (ESC 15), independently of output mapping. Do not configure another telemetry producer on this index. This is not an arming-health check.
+    // @Values: 0:Disabled,1:Enabled
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("TLM", 2, AP_SpektrumSmartESC_Diagnostics, _telem, 0),
+    // @Param: EXP
+    // @DisplayName: Spektrum bench experiment identifier
+    // @Description: Nonnegative label recorded with bench diagnostic logs. This label authorizes no electrical operation or transmission. Set a new label for each reviewed measurement experiment.
+    // @Range: 0 2147483647
+    // @User: Advanced
+    AP_GROUPINFO("EXP", 3, AP_SpektrumSmartESC_Diagnostics, _experiment, 0),
+    // @Param: SHADOW
+    // @DisplayName: Spektrum Plane read-only shadow observer
+    // @Description: Log final SERVO3 throttle PWM and inferred signed demand in Plane only. No ownership, packets, transmission or motor control. ESC endpoints and reverse levels remain unqualified. Independent of receive-only bench diagnostics.
+    // @Values: 0:Disabled,1:Plane observation
+    // @User: Advanced
+    // @Vehicles: Plane
+    AP_GROUPINFO("SHADOW", 4, AP_SpektrumSmartESC_Diagnostics, _shadow, 0),
+    // @Param: PROBE
+    // @DisplayName: Spektrum AUX7 disconnected hardware probe
+    // @Description: MCU-input-only AUX7 probe, with ESC and external stimuli disconnected. Requires ENABLE=0 and disarmed. Select 0 after boot before requesting a probe; persisted nonzero values cannot start it. Authorization expires after 60 seconds without extension by mode changes. Latches arming inhibition until cleared and rebooted. Internal weak pulls may affect an unknown external board buffer; they do not prove connector voltage or input tolerance.
+    // @Values: 0:Disabled,1:Input floating,2:Input weak pull-up,3:Input weak pull-down,4:UART receive only
+    // @User: Advanced
+    AP_GROUPINFO("PROBE", 5, AP_SpektrumSmartESC_Diagnostics, _probe, 0),
+    // @Param: HS
+    // @DisplayName: Spektrum single handshake request
+    // @Description: Requires ENABLE=1, PROBE=0 and disarmed emergency stop. HSLab requires fresh LABACK. Mode 1 is one 200ms directed experiment; HSLab mode 2 prepares for 2 seconds without TX then polls within a fixed 5-second ESC power-on window. No motor or Control Data packets. Requests are consumed and ignored at boot. Write -1 to abort. Ordinary firmware retains its compile-time electrical gate.
+    // @Values: -1:Abort HSLab,0:Idle,1:Single experiment,2:HSLab power-on window
+    // @User: Advanced
+    AP_GROUPINFO("HS", 6, AP_SpektrumSmartESC_Diagnostics, _handshake, 0),
+    // @Param: HSID
+    // @DisplayName: Spektrum handshake target candidate
+    // @Description: Decimal ESC candidate, default 64 (0x40). Actual reply source must match, with destination FC 49 (0x31) in HS=1 or FC 48 (0x30) in the HSLab power-on mode HS=2. Candidate is fixed during an experiment; no automatic ID scan.
+    // @Range: 64 79
+    // @User: Advanced
+    AP_GROUPINFO("HSID", 7, AP_SpektrumSmartESC_Diagnostics, _hs_target, 64),
+    // @Param: WAVE
+    // @DisplayName: Disconnected AUX7 laboratory waveform request
+    // @Description: Consumed one-shot RAM request. Only the separate LAB firmware can send the fixed non-SRXL2 55 AA 55 AA pattern. ESC and all actuators must be disconnected. Ignored at boot, ordinary firmware always refuses. No handshake, throttle or reverse.
+    // @Values: 0:Idle,1:Request one waveform
+    // @User: Advanced
+    AP_GROUPINFO("WAVE", 8, AP_SpektrumSmartESC_Diagnostics, _waveform, 0),
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+    // @Param: LABACK
+    // @DisplayName: Experimental handshake acknowledgement
+    // @Description: Handshake LAB only. Write 15 to acknowledge unverified electrical waveforms and confirm disconnected motor/actuators, isolated BEC positive and disarmed bench use. Then request HS=1 or HS=2 within 10 seconds. One experiment per reboot. Consumed in RAM, ignored at boot, not electrical qualification. HS=-1 or ENABLE=0 aborts.
+    // @Values: 0:No acknowledgement,15:Acknowledge bench uncertainty
+    // @User: Advanced
+    AP_GROUPINFO("LABACK", 9, AP_SpektrumSmartESC_Diagnostics, _hs_ack, 0),
+#endif
+    AP_GROUPEND
+};
+
+void AP_SpektrumSmartESC_Diagnostics::init()
+{
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+    _hs_ack.set(0);
+    _hs_authorization.cancel();
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15B: HSLAB; NO MOTOR; ELECTRICAL UNVERIFIED");
+#endif
+    _waveform.set(0);
+    if (AP_SPEKTRUM_SMART_ESC_LAB_ONLY) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKL: LAB ONLY; disconnect ESC and actuators");
+    }
+    _handshake.set(0); // Volatile command: never honor a saved/startup TX request.
+    _bench.observe_enable(_enable.get() != 0 || _probe.get() != 0 || _handshake.get() != 0);
+    if (bench_blocked() && !hal.util->get_soft_armed()) {
+        SRV_Channels::set_emergency_stop(true);
+    }
+    _probe_policy.request(_probe.get(), _enable.get(), !hal.util->get_soft_armed(), AP_HAL::millis());
+    if (_probe != 0 || _enable != 1 || hal.util->get_soft_armed()) {
+        return;
+    }
+    auto *port = hal.diagnostic_rx_uart();
+    if (port != nullptr) {
+        _receiver = NEW_NOTHROW AP_SpektrumSmartESC_Receive(*port);
+    }
+    if (_receiver == nullptr || !_receiver->start()) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: RX unavailable");
+        return;
+    }
+#if HAL_WITH_ESC_TELEM
+    if (_telem == 1 && AP_ESC_Telem::get_singleton() != nullptr &&
+        !_receiver->set_frontend(*AP_ESC_Telem::get_singleton(), 14)) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: telemetry index busy");
+    }
+#endif
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: bench RX only; arming inhibited; no TX");
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: passive silence may mean no master polling");
+}
+
+bool AP_SpektrumSmartESC_Diagnostics::update_probe(uint32_t now_ms)
+{
+    const bool involved = _probe != 0 || _probe_applied != 0;
+    const bool allowed = _probe_policy.request(_probe.get(), _enable.get(),
+                                               !hal.util->get_soft_armed(), now_ms);
+    if (!involved) {
+        // Keep reporting until the rate-limited status confirms the final safe mode.
+        if (_probe_report_pending && log_probe(now_ms)) {
+            _probe_report_pending = false;
+        }
+        return false; // The original ENABLE=1 receive-only path is unchanged.
+    }
+    _probe_report_pending = true;
+    auto *port = hal.diagnostic_rx_uart();
+    const uint8_t desired = allowed ? _probe_policy.active() : 0;
+    if (desired != _probe_applied || !allowed) {
+        if (_receiver != nullptr) {
+            _receiver->stop();
+        }
+        if (port != nullptr) {
+            port->end(); // PA0 input first, UART off, FIFO discarded before switching.
+        }
+        _probe_applied = 0;
+        bool ok = desired == 0;
+        if (desired == 4 && port != nullptr) {
+            if (_receiver == nullptr) {
+                _receiver = NEW_NOTHROW AP_SpektrumSmartESC_Receive(*port);
+            }
+            ok = _receiver != nullptr && _receiver->start();
+        } else if (desired != 0 && port != nullptr) {
+            const uint16_t options = desired == 2 ? AP_HAL::UARTDriver::OPTION_PULLUP_RX :
+                (desired == 3 ? AP_HAL::UARTDriver::OPTION_PULLDOWN_RX : 0);
+            ok = port->set_options(options);
+        }
+        if (ok) {
+            _probe_applied = desired;
+        } else {
+            _probe_policy.cancel();
+            if (port != nullptr) {
+                port->end();
+            }
+        }
+    }
+    AP_HAL::UARTDriver::ReceiveDiagnostics state {};
+    if (_probe_applied != 0 && (port == nullptr || !port->receive_diagnostics(state) ||
+                               state.probe_mode != _probe_applied)) {
+        _probe_policy.cancel();
+        _probe_applied = 0;
+        if (_receiver != nullptr) {
+            _receiver->stop();
+        }
+        if (port != nullptr) {
+            port->end();
+        }
+    }
+    IGNORE_RETURN(log_probe(now_ms));
+    return _probe_applied != 4; // UART-only probes reuse the existing parser/log path.
+}
+
+bool AP_SpektrumSmartESC_Diagnostics::log_probe(uint32_t now_ms)
+{
+    AP_HAL::UARTDriver::ReceiveDiagnostics state {};
+    auto *port = hal.diagnostic_rx_uart();
+    if (port != nullptr) {
+        IGNORE_RETURN(port->receive_diagnostics(state));
+    }
+    const uint32_t bytes = _receiver != nullptr ? _receiver->bytes() : 0;
+    const uint32_t frames = _receiver != nullptr ? _receiver->parser().observation().crc_frames : 0;
+    const bool reported = now_ms - _last_probe_message_ms >= 5000;
+    if (reported) {
+        _last_probe_message_ms = now_ms;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKP M%u Q%d L%u U%u G%lu", _probe_applied, int(_probe.get()),
+                      unsigned((state.flags & 2) != 0), unsigned((state.flags & 1) != 0),
+                      (unsigned long)state.release_errors);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKP B%lu F%lu FE%lu; MCU only", (unsigned long)bytes,
+                      (unsigned long)frames, (unsigned long)state.framing);
+    }
+    if (now_ms - _last_probe_log_ms < 1000) {
+        return reported;
+    }
+    _last_probe_log_ms = now_ms;
+#if HAL_LOGGING_ENABLED
+    AP::logger().WriteStreaming("SPKP", "TimeUS,Exp,Req,Mode,Level,UART,Edges,Seen,Dur,Err,Ext", "QibBBBIBIIB",
+        AP_HAL::micros64(), MAX(_experiment.get(), 0), int8_t(_probe.get()), _probe_applied,
+        uint8_t((state.flags & 2) != 0), uint8_t((state.flags & 1) != 0), state.probe_transitions,
+        state.probe_levels, state.probe_duration_ms, state.release_errors, uint8_t(0));
+    AP::logger().WriteStreaming("SPKQ", "TimeUS,Bytes,Frames,FrameErr", "QIII",
+                               AP_HAL::micros64(), bytes, frames, state.framing);
+#endif
+    return reported;
+}
+
+bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
+{
+    auto *port = hal.diagnostic_rx_uart();
+    const bool safe = !hal.util->get_soft_armed() && arming_blocked() &&
+        SRV_Channels::get_emergency_stop() && _enable == 1 && _probe == 0;
+    AP_HAL::UARTDriver::ReceiveDiagnostics hardware {};
+    if (port != nullptr) {
+        IGNORE_RETURN(port->receive_diagnostics(hardware));
+    }
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+    if (!safe) {
+        _hs_authorization.cancel();
+    }
+    if (_handshake == -1) {
+        _handshake.set(0);
+        _hs_ack.set(0);
+        _hs_authorization.cancel();
+        if (_reader.active() || _hs_lab_session) {
+            _reader.fault();
+        }
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15: ABORT requested");
+    }
+    if (_hs_ack != 0) {
+        const int8_t value = _hs_ack.get();
+        _hs_ack.set(0);
+        const bool accepted = _hs_authorization.acknowledge(value, safe && !_reader.active() &&
+                              (hardware.handshake_flags & 16) != 0 && (hardware.flags & 1) != 0, now_ms);
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15: %s", accepted ? "ACK accepted; HS=1/2 within 10s" : "BLOCKED_ACK");
+    }
+    log_handshake_lab(now_ms);
+#endif
+    if (_handshake != 0) {
+        const bool power_on = AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB && _handshake == 2;
+        const bool request = _handshake == 1 || power_on;
+        _handshake.set(0); // Consume once, without saving EEPROM or auto-retry.
+        if (!_reader.active() && (now_ms - _last_hs_request_ms >= 5000 || _last_hs_request_ms == 0)) {
+            _hs_power_on = power_on;
+            _last_hs_request_ms = now_ms;
+            uint8_t id[16], length = sizeof(id);
+            uint32_t uid = 2166136261U;
+            const bool unique = hal.util->get_system_id_unformatted(id, length) && length > 0 && length <= sizeof(id);
+            if (unique) {
+                for (uint8_t i = 0; i < length; i++) {
+                    uid = (uid ^ id[i]) * 16777619U;
+                }
+            }
+            bool gate = (hardware.handshake_flags & 1) != 0;
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+            const bool authorized = _hs_authorization.consume(request && safe && unique &&
+                                    (hardware.handshake_flags & 16) != 0, now_ms);
+            gate = authorized && port != nullptr &&
+                   port->diagnostic_handshake_start(uint8_t(_hs_target.get()), uid, _hs_power_on);
+            _hs_lab_session = gate;
+            _hs_window_reported = false;
+            if (!gate) {
+                const char *reason = !request ? "REQUEST" : !safe ? "BENCH_STATE" : !unique ? "UID" :
+                    !_hs_authorization.used() ? "ACK" : !authorized ? "USED" : port == nullptr ? "UART_UNAVAILABLE" :
+                    port->receive_errors() != 0 ? "UART_ERROR" : !(hardware.flags & 1) ? "UART_NOT_READY" :
+                    !_hs_power_on && !(hardware.flags & 2) ? "LINE_LOW" : "UART_PREFLIGHT";
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15 BLOCKED_%s", reason);
+            }
+#endif
+            IGNORE_RETURN(_reader.start(request && safe && gate && unique, safe,
+                                       uint8_t(_hs_target.get()), uid, now_ms * 1000U, _hs_power_on));
+            _hs_fault_base = hardware.handshake_faults;
+            _hs_logged_bytes = 0;
+            GCS_SEND_TEXT(gate ? MAV_SEVERITY_INFO : MAV_SEVERITY_WARNING,
+                          "SPKT HS: %s", _reader.active() ? "WAITING; one attempt" : "BLOCKED; no TX");
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+            if (_reader.active() && _hs_power_on) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15 PREPARED; 2s then 5s window");
+            }
+#endif
+        }
+    }
+    bool permission = (hardware.handshake_flags & 1) != 0;
+    bool session = _hs_leased;
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+    permission = _hs_lab_session && (hardware.handshake_flags & 16) != 0;
+    session |= _hs_lab_session;
+#endif
+    if (!_reader.active() && !session) {
+        log_reader(now_ms);
+        return false;
+    }
+    if (!safe || port == nullptr || !permission) {
+        _reader.fault();
+    }
+    if (_reader.active()) {
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+        if (port->receive_errors() != 0) {
+            _reader.fault();
+        }
+#endif
+        if (_hs_leased && (!port->diagnostic_handshake(nullptr, 0, false) ||
+                           hardware.handshake_faults != _hs_fault_base)) {
+            _reader.update(now_ms * 1000U);
+            if (_reader.active()) {
+                _reader.fault();
+            }
+        }
+        if (_hs_inflight && (hardware.handshake_flags & 4)) {
+            IGNORE_RETURN(_reader.sent(hardware.handshake_tc_ms * 1000U));
+            _hs_inflight = false;
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+            if (_reader.status().tx_frames == 1) {
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 TX_COMPLETE; UART TC");
+                if ((hardware.cr1 & 0x4D) == 5 && (hardware.flags & 9) == 9) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 RX_RESTORED; MCU state");
+                }
+            }
+#endif
+        }
+        // Only native FIFO bytes enter this reader. No synthetic response path.
+        uint8_t byte; uint32_t stamp;
+        for (uint16_t i = 0; !_hs_inflight && _reader.active() && i < 512 &&
+             port->read_timed(byte, stamp); i++) {
+            // A response can arrive before the main task observes TC. Keep it
+            // buffered until sent() establishes the actual TC timestamp.
+            _reader.feed(byte, stamp * 1000U);
+        }
+        _reader.update(now_ms * 1000U);
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+        if (_hs_power_on && !_hs_window_reported && _reader.active() &&
+            _reader.status().state != AP_SpektrumSmartESC_Reader::State::PREPARED) {
+            _hs_window_reported = true;
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15 TEST_WINDOW_ACTIVE; connect ESC now");
+        }
+#endif
+        if (!_hs_inflight && _reader.active()) {
+            // Low/floating before battery connection is not an ESC power detector.
+            // Defer polling until quiet; the native port rechecks before TE.
+            IGNORE_RETURN(port->receive_diagnostics(hardware));
+            const bool idle = !_hs_power_on || (hardware.handshake_flags & 32) != 0;
+            const uint8_t count = _reader.prepare(now_ms * 1000U, _hs_packet, sizeof(_hs_packet), idle);
+            if (count != 0) {
+                if (port->diagnostic_handshake(_hs_packet, count, false)) {
+                    _hs_inflight = _hs_leased = true;
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+                    if (_reader.status().tx_frames == 0) {
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 TX_STARTED; UART queued");
+                    }
+#if HAL_LOGGING_ENABLED
+                    char hex[64] {};
+                    static const char digits[] = "0123456789ABCDEF";
+                    for (uint8_t j = 0; j < count; j++) {
+                        hex[j*2] = digits[_hs_packet[j] >> 4];
+                        hex[j*2+1] = digits[_hs_packet[j] & 15];
+                    }
+                    AP::logger().WriteStreaming("SPKY", "TimeUS,Type,Dst,CRC,Hex", "QBBBZ", AP_HAL::micros64(),
+                        _hs_packet[1], _hs_packet[4], uint8_t(AP_SpektrumSmartESC::crc16(_hs_packet, count) == 0), hex);
+#endif
+#endif
+                    if (_receiver != nullptr) {
+                        _receiver->suspend(); // Do not end the leased native UART.
+                    }
+                } else {
+                    _reader.fault();
+                }
+            }
+        }
+    }
+    const bool consumed = _hs_leased || _reader.active();
+    if (!_reader.active()) {
+        if (port != nullptr && session) {
+            IGNORE_RETURN(port->diagnostic_handshake(nullptr, 0, true));
+            if (_receiver != nullptr) {
+                IGNORE_RETURN(_receiver->resume());
+            }
+        }
+        _hs_leased = _hs_inflight = false;
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+        _hs_lab_session = false;
+        AP_HAL::UARTDriver::ReceiveDiagnostics restored {};
+        const bool rx = port != nullptr && port->receive_diagnostics(restored) &&
+            (restored.flags & 9) == 9 && (restored.cr1 & 0x4D) == 5 && (restored.cr3 & 8) != 0;
+        const auto &status = _reader.status();
+        const char *result = "ERROR";
+        if (rx && status.state == AP_SpektrumSmartESC_Reader::State::DISCOVERED && status.responses == 1) {
+            result = "HANDSHAKE_OK";
+        } else if (rx && status.state == AP_SpektrumSmartESC_Reader::State::TIMEOUT) {
+            result = status.responses != 0 ? "TIMEOUT_FINALIZE" : status.tx_frames == 0 ? "TIMEOUT_NO_TX" :
+                status.rx_bytes == 0 ? "TIMEOUT_NO_RX" : "TIMEOUT_NO_PEER";
+        }
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15 %s; RX_RESTORED=%u", result, unsigned(rx));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 RX_BYTES=%lu ESC_ID=%02x; AUTH expired",
+                      (unsigned long)status.rx_bytes, status.device);
+#endif
+    }
+    log_reader(now_ms);
+    return consumed;
+}
+
+#if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
+void AP_SpektrumSmartESC_Diagnostics::log_handshake_lab(uint32_t now_ms)
+{
+    if (now_ms - _hs_lab_status_ms < 5000) {
+        return;
+    }
+    _hs_lab_status_ms = now_ms;
+    auto *port = hal.diagnostic_rx_uart();
+    AP_HAL::UARTDriver::ReceiveDiagnostics hardware {};
+    const bool known = port != nullptr && port->receive_diagnostics(hardware);
+    const bool rx = known && (hardware.flags & 9) == 9 && (hardware.cr1 & 0x4D) == 5;
+    const auto &s = _reader.status();
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15B HSLAB U%u RX%u ACK%u USED%u", unsigned(known && (hardware.flags & 1)),
+                  unsigned(rx), unsigned(_hs_authorization.ready(now_ms)), unsigned(_hs_authorization.used()));
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 TX%lu RXB%lu CRCOK%lu ID%02x", (unsigned long)s.tx_frames,
+                  (unsigned long)s.rx_bytes, (unsigned long)s.rx_frames, s.device);
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 TYPE%02x ECHO%lu TMO%lu BUS%lu", s.type, (unsigned long)s.echoes,
+                  (unsigned long)s.timeouts, (unsigned long)hardware.handshake_faults);
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK15 QUEUED%lu TC%lu RXREST%lu", (unsigned long)hardware.handshake_queued,
+                  (unsigned long)hardware.handshake_completed, (unsigned long)hardware.handshake_restored);
+}
+#endif
+
+void AP_SpektrumSmartESC_Diagnostics::log_reader(uint32_t now_ms)
+{
+    const auto &s = _reader.status();
+    if (s.state == AP_SpektrumSmartESC_Reader::State::DISABLED || now_ms - _last_reader_log_ms < 1000) {
+        return;
+    }
+    _last_reader_log_ms = now_ms;
+    const char *state = "ACTIVE";
+    switch (s.state) {
+    case AP_SpektrumSmartESC_Reader::State::BLOCKED: state = "BLOCKED"; break;
+    case AP_SpektrumSmartESC_Reader::State::DISCOVERED: state = "DISCOVERED"; break;
+    case AP_SpektrumSmartESC_Reader::State::TIMEOUT: state = "TIMEOUT"; break;
+    case AP_SpektrumSmartESC_Reader::State::FAULT: state = "FAULT"; break;
+    case AP_SpektrumSmartESC_Reader::State::WAITING: state = "WAITING"; break;
+    case AP_SpektrumSmartESC_Reader::State::PREPARED: state = "PREPARED"; break;
+    default: break;
+    }
+    AP_HAL::UARTDriver::ReceiveDiagnostics hardware {};
+    auto *port = hal.diagnostic_rx_uart();
+    const bool have_hardware = port != nullptr && port->receive_diagnostics(hardware);
+    if ((now_ms / 1000U) % 5U == 0) {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT LINK %s ID%02x RX%lu TX%lu", state, s.device,
+                      (unsigned long)s.rx_frames, (unsigned long)s.tx_frames);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT PEER%u ECHO%lu CRCERR%lu", unsigned(s.responses),
+                      (unsigned long)s.echoes, (unsigned long)s.crc_errors);
+        if (have_hardware) {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT UART FE%lu ERR%lu", (unsigned long)hardware.framing,
+                          (unsigned long)port->receive_errors());
+        }
+    }
+#if HAL_LOGGING_ENABLED
+    AP::logger().WriteStreaming("SPKM", "TimeUS,St,ID,RXB,RXF,CRC,TXF,TXB,Ec,Tmo,Bad,RxT,TxT", "QBBIIIIIIIIBB",
+        AP_HAL::micros64(), uint8_t(s.state), s.device, s.rx_bytes, s.rx_frames, s.crc_errors,
+        s.tx_frames, s.tx_bytes, s.echoes, s.timeouts, s.unexpected, s.type,
+        uint8_t(s.tx_frames != 0 ? 0x21 : 0));
+    AP::logger().WriteStreaming("SPKE", "TimeUS,Peer,Stale", "QBI",
+                               AP_HAL::micros64(), s.responses, s.stale_bytes);
+    uint8_t raw[64];
+    const uint8_t captured = _reader.capture(raw, sizeof(raw));
+    while (_hs_logged_bytes < captured) {
+        const uint8_t start = _hs_logged_bytes;
+        char hex[64] {};
+        static const char digits[] = "0123456789ABCDEF";
+        uint8_t count = 0;
+        while (_hs_logged_bytes < captured && count < 16) {
+            const uint8_t byte = raw[_hs_logged_bytes++];
+            hex[count * 2] = digits[byte >> 4];
+            hex[count * 2 + 1] = digits[byte & 15U];
+            count++;
+        }
+        // At most 64 bytes per attempt. TimeUS is logging time, not wire timing.
+        AP::logger().WriteStreaming("SPKX", "TimeUS,Exp,Offset,Len,Hex", "QiBBZ",
+                                   AP_HAL::micros64(), MAX(_experiment.get(), 0), start, count, hex);
+    }
+    if (have_hardware) {
+        AP::logger().WriteStreaming("SPKU", "TimeUS,Queued,TC,RXRest,CR1,CR3,ISR", "QIIIIII", AP_HAL::micros64(),
+            hardware.handshake_queued, hardware.handshake_completed, hardware.handshake_restored,
+            hardware.cr1, hardware.cr3, hardware.isr);
+        AP::logger().WriteStreaming("SPKW", "TimeUS,Gate,Flags,TCms,Fault,FE,Pri,Mask,Baud,UID", "QBBIIIBBII",
+            AP_HAL::micros64(), uint8_t((hardware.handshake_flags & 1) != 0), hardware.handshake_flags,
+            hardware.handshake_tc_ms, hardware.handshake_faults, hardware.framing,
+            s.priority, s.baud_mask, s.negotiated_baud, s.uid);
+    }
+#endif
+}
+
+bool AP_SpektrumSmartESC_Diagnostics::update_waveform(uint32_t now_ms)
+{
+    const bool request = _waveform.get() != 0;
+    const int8_t command = _waveform.get();
+    _waveform.set(0); // No persistent or boot-time transmission authorization.
+    if (!AP_SPEKTRUM_SMART_ESC_LAB_ONLY) {
+        if (request) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKL: BLOCKED; ordinary firmware");
+        }
+        return false;
+    }
+    auto *port = hal.diagnostic_rx_uart();
+    const bool permitted = !hal.util->get_soft_armed() && arming_blocked() &&
+        SRV_Channels::get_emergency_stop() && _enable == 1 && _probe == 0 && _handshake == 0;
+    if (!_wave_active && request) {
+        if (!permitted || command != 1 || port == nullptr ||
+            (_wave_requested && uint32_t(now_ms - _wave_last_ms) < 5000)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKL: request denied; no TX");
+            return true;
+        }
+        _wave_requested = true;
+        _wave_last_ms = _wave_start_ms = now_ms;
+        if (_receiver != nullptr) {
+            _receiver->suspend();
+        }
+        _wave_active = port->diagnostic_waveform(true, false);
+        if (!_wave_active) {
+            port->diagnostic_waveform(false, true);
+            if (_receiver != nullptr) { _receiver->resume(); }
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKL: acquisition denied; RX restored");
+            return true;
+        }
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKL: one 55 AA 55 AA waveform requested");
+        return true;
+    }
+    if (!_wave_active) {
+        return false;
+    }
+    AP_HAL::UARTDriver::ReceiveDiagnostics state {};
+    const bool healthy = port != nullptr && port->diagnostic_waveform(false, false) &&
+        port->receive_diagnostics(state);
+    const bool complete = healthy && (state.handshake_flags & 4) != 0;
+    if (!permitted || !healthy || complete || request || uint32_t(now_ms - _wave_start_ms) >= 200) {
+        if (port != nullptr) {
+            port->diagnostic_waveform(false, true);
+        }
+        _wave_active = false;
+        if (_receiver != nullptr && !hal.util->get_soft_armed()) { _receiver->resume(); }
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKL: %s; RX restored", complete ? "TC observed" : "aborted/timeout");
+    }
+    return true;
+}
+
+void AP_SpektrumSmartESC_Diagnostics::update()
+{
+    _bench.observe_enable(_enable.get() != 0 || _probe.get() != 0 || _handshake.get() != 0);
+    if (bench_blocked() && !hal.util->get_soft_armed()) {
+        // Keep existing motor-function suppression latched during bench work,
+        // including after ENABLE is cleared pending the required reboot.
+        SRV_Channels::set_emergency_stop(true);
+    }
+    const uint32_t now = AP_HAL::millis();
+    if (_native_motor != nullptr) {
+        return; // The qualified backend exclusively owns RX; never close/consume it here.
+    }
+    if (update_waveform(now)) {
+        return;
+    }
+    if (update_reader(now)) {
+        return;
+    }
+    if (update_probe(now)) {
+        return;
+    }
+    if ((_enable != 1 && _probe_applied != 4) || hal.util->get_soft_armed()) {
+        if (_receiver != nullptr) {
+            _receiver->stop();
+        }
+        _bench.update_silence(AP_HAL::millis(), 0, 0, false);
+        return;
+    }
+    if (_receiver != nullptr) {
+        _receiver->update(now);
+    }
+    _bench.update_silence(now, _receiver != nullptr ? _receiver->bytes() : 0,
+                          _receiver != nullptr ? _receiver->last_byte_ms() : 0,
+                          _receiver != nullptr && _receiver->running());
+    const bool log_due = now - _last_log_ms >= 1000;
+    if (log_due) {
+        _last_log_ms = now;
+#if HAL_LOGGING_ENABLED
+        AP_HAL::UARTDriver::ReceiveDiagnostics status;
+        auto *port = hal.diagnostic_rx_uart();
+        if (port != nullptr && port->receive_diagnostics(status)) {
+            AP::logger().WriteStreaming("SPKH", "TimeUS,Exp,Flg,CR1,CR3,ISR,FE,NE,PE,ORE,OVF,RelErr,Tmo",
+                                       "QiBIIIIIIIIII", AP_HAL::micros64(), MAX(_experiment.get(), 0),
+                                       status.flags, status.cr1, status.cr3, status.isr, status.framing,
+                                       status.noise, status.parity, status.overruns, status.overflow,
+                                       status.release_errors, _bench.timeouts());
+        }
+#endif
+    }
+    if (_receiver == nullptr) {
+        return;
+    }
+    AP_SpektrumSmartESC::Device device {};
+    AP_SpektrumSmartESC::Telemetry telemetry {};
+    const auto &parser = _receiver->parser();
+    uint8_t status = _receiver->running() ? 1 : 0;
+    if (parser.device(device, now)) {
+        status = 2;
+    }
+    if (parser.telemetry(telemetry, now)) {
+        status = 3;
+    }
+#if HAL_WITH_ESC_TELEM
+    if (_receiver->frontend_conflict()) {
+        status = 4;
+    }
+#endif
+    const auto &observation = parser.observation();
+    if (now - _last_message_ms >= 5000) {
+        _last_message_ms = now;
+        const auto &counts = parser.counters();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT RX%u ID%02x B%lu F%lu", status, observation.handshake_source,
+                      (unsigned long)_receiver->bytes(), (unsigned long)observation.crc_frames);
+        AP_HAL::UARTDriver::ReceiveDiagnostics hardware {};
+        auto *port = hal.diagnostic_rx_uart();
+        if (port != nullptr && port->receive_diagnostics(hardware)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT U%u L%u C%lu FE%lu T%02x S%02x",
+                          unsigned((hardware.flags & 1) != 0), unsigned((hardware.flags & 2) != 0),
+                          (unsigned long)counts.crc_errors, (unsigned long)hardware.framing,
+                          observation.type, observation.sensor);
+        }
+    }
+    if (!log_due) {
+        return;
+    }
+#if HAL_LOGGING_ENABLED
+    AP::logger().WriteStreaming("SPKR", "TimeUS,Exp,Frames,Accepted,LastMs,Type,Sensor,HSID", "QiIIIBBB",
+                               AP_HAL::micros64(), MAX(_experiment.get(), 0), observation.crc_frames,
+                               observation.accepted, observation.last_ms, observation.type,
+                               observation.sensor, observation.handshake_source);
+    const auto &counts = parser.counters();
+    AP::logger().WriteStreaming("SPKT", "TimeUS,St,ID,UID,RXB,HWE,CRC,Len,Part,Rej,Unk,HS,Poll,Tlm,LRX",
+                               "QBBIIIIIIIIIIII", AP_HAL::micros64(), status, device.id, device.uid,
+                               _receiver->bytes(), _receiver->errors(), counts.crc_errors, counts.length_errors,
+                               counts.incomplete, counts.rejected, counts.unsupported, counts.handshakes,
+                               counts.polls, counts.telemetry, _receiver->last_byte_ms());
+#endif
+}
+#endif
+
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+bool AP_SpektrumSmartESC_Diagnostics::motor_arming_ready() const
+{
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+    return AP_SpektrumSmartESC_Motor::physical_control_available() && _native_motor != nullptr &&
+        _native_motor->ready_to_arm();
+#else
+    return false;
+#endif
+}
+
+bool AP_SpektrumSmartESC_Diagnostics::prepare_motor(const AP_SpektrumSmartESC_Commands::Profile &profile,
+    const AP_SpektrumSmartESC_Motor::Qualification &qualification, uint8_t target, uint32_t uid, uint32_t nonce)
+{
+    _motor_selected = true; // Explicit API selection latches arming protection even on failure.
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+    if (!AP_SpektrumSmartESC_Motor::physical_control_available() || !hal.scheduler->in_main_thread() || hal.util->get_soft_armed() ||
+        _native_motor != nullptr || _enable != 0 || _probe != 0 || _handshake != 0) {
+        return false;
+    }
+    auto *uart = static_cast<DiagnosticRX *>(hal.diagnostic_rx_uart());
+    if (uart == nullptr) { return false; }
+    if (_receiver == nullptr) { _receiver = NEW_NOTHROW AP_SpektrumSmartESC_Receive(*uart); }
+    if (_receiver == nullptr) { return false; }
+#if HAL_WITH_ESC_TELEM
+    if (_telem == 1 && (AP_ESC_Telem::get_singleton() == nullptr ||
+        !_receiver->set_frontend(*AP_ESC_Telem::get_singleton(),14))) { return false; }
+#endif
+    _native_motor = NEW_NOTHROW AP_SpektrumSmartESC_ChibiOS(*uart, *_receiver, profile);
+    if (_native_motor == nullptr) { return false; }
+    if (!_native_motor->start(qualification,target,uid,nonce,AP_HAL::millis())) {
+        delete _native_motor;
+        _native_motor = nullptr;
+        return false;
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool AP_SpektrumSmartESC_Diagnostics::motor_evidence(const MotorEvidence &evidence)
+{
+    if (!AP_SpektrumSmartESC_Motor::physical_control_available() || !hal.scheduler->in_main_thread() || _native_motor == nullptr) {
+        return false;
+    }
+    _motor_evidence = evidence;
+    return true;
+}
+
+void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool failsafe,
+    bool reverse_available, bool reverse_permitted, bool reverse_configured, bool reverse_selected)
+{
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+    if (!AP_SpektrumSmartESC_Motor::physical_control_available() || _native_motor == nullptr) {
+        return;
+    }
+    AP_SpektrumSmartESC_Plane::Snapshot s;
+    const auto *channel = SRV_Channels::srv_channel(2);
+    s.servo_index = 2;
+    if (channel != nullptr) {
+        s.function = uint16_t(channel->get_function()); s.pwm = channel->get_output_pwm();
+        s.minimum = channel->get_output_min(); s.maximum = channel->get_output_max();
+        s.trim = channel->get_trim(); s.reversed = channel->get_reversed();
+    }
+    s.bipolar = reverse_available; s.armed = armed; s.rc_ok = rc_ok;
+    s.control_ok = !failsafe;
+    s.failsafe = failsafe || SRV_Channels::get_emergency_stop() || _enable != 0 || _probe != 0 || _handshake != 0;
+    s.reverse_configured = reverse_configured;
+    s.reverse_selected = reverse_selected;
+    s.reverse_permitted = reverse_permitted;
+    AP_SpektrumSmartESC_Motor::Demand d;
+    if (!AP_SpektrumSmartESC_Plane::convert(s,AP_HAL::millis(),d)) { d.failsafe = true; }
+    d.ground_authorized = _motor_evidence.ground; d.ground_ms = _motor_evidence.ground_ms;
+    d.stopped = _motor_evidence.stopped; d.stopped_ms = _motor_evidence.stopped_ms;
+    _native_motor->update(d,AP_HAL::micros(),AP_HAL::millis());
+#endif
+}
+
+void AP_SpektrumSmartESC_Diagnostics::plane_shadow(bool armed, bool rc_ok, bool failsafe,
+                                                  bool reverse_available, bool reverse_permitted)
+{
+    if (_shadow != 1) {
+        _plane_intent = {};
+        return;
+    }
+    const uint32_t now = AP_HAL::millis();
+    const auto *channel = SRV_Channels::srv_channel(2); // Explicit user SERVO3, never RC3 or SERVO1.
+    AP_SpektrumSmartESC_Control::Demand d;
+    d.armed = armed;
+    d.rc_ok = rc_ok;
+    d.failsafe = failsafe;
+    d.reverse_permitted = reverse_permitted;
+    const bool mapped = channel != nullptr && channel->get_function() == SRV_Channel::k_throttle;
+    const uint16_t pwm = mapped ? channel->get_output_pwm() : 0;
+    const bool valid = mapped && AP_SpektrumSmartESC_Shadow::plane_demand(pwm,
+        channel->get_output_min(), channel->get_trim(), channel->get_output_max(),
+        channel->get_reversed(), reverse_available, d);
+    AP_SpektrumSmartESC_Plane::Snapshot snapshot;
+    snapshot.servo_index = 2;
+    if (mapped) {
+        snapshot.function = uint16_t(channel->get_function());
+        snapshot.pwm = pwm;
+        snapshot.minimum = channel->get_output_min();
+        snapshot.trim = channel->get_trim();
+        snapshot.maximum = channel->get_output_max();
+        snapshot.reversed = channel->get_reversed();
+    }
+    snapshot.bipolar = reverse_available;
+    snapshot.armed = armed;
+    snapshot.rc_ok = rc_ok;
+    snapshot.control_ok = !failsafe;
+    snapshot.failsafe = failsafe || SRV_Channels::get_emergency_stop();
+    // No validated reverse-source configuration exists yet. In particular,
+    // negative PWM-derived demand and raw RC7 never grant direction authority.
+    const bool intent_valid = AP_SpektrumSmartESC_Plane::convert(snapshot, now, _plane_intent);
+    if (now - _last_shadow_ms < 1000) {
+        return;
+    }
+    _last_shadow_ms = now;
+    const uint8_t flags = uint8_t(valid) | (uint8_t(armed) << 1) | (uint8_t(rc_ok) << 2) |
+        (uint8_t(failsafe) << 3) | (uint8_t(reverse_permitted) << 4) |
+        (uint8_t(SRV_Channels::get_emergency_stop()) << 5);
+#if HAL_LOGGING_ENABLED
+    // Demand preview only. No raw channel values without verified ESC calibration.
+    AP::logger().WriteStreaming("SPKS", "TimeUS,PWM,Pct,Rev,Flags", "QHfBB",
+                               AP_HAL::micros64(), pwm, d.throttle_percent, uint8_t(d.reverse_request), flags);
+    AP::logger().WriteStreaming("SPKI", "TimeUS,Valid,Mag,Rev,Phys", "QBfBB", AP_HAL::micros64(),
+        uint8_t(intent_valid), _plane_intent.magnitude, uint8_t(_plane_intent.reverse),
+        uint8_t(AP_SpektrumSmartESC_Motor::physical_control_available()));
+#else
+    (void)flags;
+    (void)intent_valid;
+#endif
+}
+#endif

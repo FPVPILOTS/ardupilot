@@ -1,0 +1,10 @@
+experiment,status,pcb_revision,voltage_selection,firmware_sha256,parameter_file,power_setup,metric,measured_value,units,scope_capture,log_file,reviewer,manual_authorization,decision
+E00,NOT_RUN,,,,,,Revision and AUX7 circuit,,,,,,,UNVERIFIED
+E01,NOT_RUN,,,,,,Passive idle and boot voltage,,,,,,,UNVERIFIED
+E02,NOT_RUN,,,,,,Receive-only bench and arming veto,,,,,,,UNVERIFIED
+E03,NOT_RUN,,,,,,Release impedance under approved load,,,,,,,UNVERIFIED
+E04,NOT_RUN,,,,,,Approved UART input and framing,,,,,,,UNVERIFIED
+E05,NOT_RUN,,,,,,Buffer direction and power-state behavior,,,,,,,UNVERIFIED
+E06,NOT_RUN,,,,,,Separately authorized UART TX and turnaround,,,,,,,UNVERIFIED
+E07,NOT_RUN,,,,,,Contention protection without opposing drivers,,,,,,,UNVERIFIED
+E08,NOT_RUN,,,,,,Separately authorized AUX8 independence test,,,,,,,UNVERIFIED

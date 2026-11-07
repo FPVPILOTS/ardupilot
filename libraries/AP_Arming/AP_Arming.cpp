@@ -303,6 +303,14 @@ uint16_t AP_Arming::compass_magfield_expected() const
 
 bool AP_Arming::is_armed() const
 {
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    // Preserve an already-armed vehicle if someone edits a reboot-required
+    // parameter in flight. A configured bench at boot must not auto-arm when
+    // ARMING_REQUIRE=0; actual arming requests are independently vetoed below.
+    if (!armed && !hal.util->get_soft_armed() && !spektrum_bench_checks(false)) {
+        return false;
+    }
+#endif
     return armed || arming_required() == Required::NO;
 }
 
@@ -1674,6 +1682,11 @@ bool AP_Arming::estop_checks(bool display_failure)
 
 bool AP_Arming::pre_arm_checks(bool report)
 {
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    if (!spektrum_bench_checks(report)) {
+        return false;
+    }
+#endif
 #if !APM_BUILD_COPTER_OR_HELI
     if (armed || arming_required() == Required::NO) {
         // if we are already armed or don't need any arming checks
@@ -1854,6 +1867,9 @@ bool AP_Arming::crashdump_checks(bool report)
 bool AP_Arming::mandatory_checks(bool report)
 {
     bool ret = true;
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    ret &= spektrum_bench_checks(report);
+#endif
 #if AP_OPENDRONEID_ENABLED
     ret &= opendroneid_checks(report);
 #endif
@@ -1862,9 +1878,27 @@ bool AP_Arming::mandatory_checks(bool report)
     return ret;
 }
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+bool AP_Arming::spektrum_bench_checks(bool report) const
+{
+    const auto *vehicle = AP::vehicle();
+    if (vehicle != nullptr && vehicle->spektrum_bench_active()) {
+        check_failed(report, "SPKT bench active: disable and reboot");
+        return false;
+    }
+    return true;
+}
+#endif
+
 //returns true if arming occurred successfully
 bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
 {
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    // Applies to ordinary, skip-check and forced arming paths.
+    if (!spektrum_bench_checks(true)) {
+        return false;
+    }
+#endif
     if (armed) { //already armed
         return false;
     }

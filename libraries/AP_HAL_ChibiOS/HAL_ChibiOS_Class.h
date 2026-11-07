@@ -31,6 +31,7 @@ class HAL_ChibiOS : public AP_HAL::HAL {
 public:
     HAL_ChibiOS();
     void run(int argc, char* const* argv, Callbacks* callbacks) const override;
+    AP_HAL::UARTDriver* diagnostic_rx_uart() const override;
 };
 void hal_chibios_set_priority(uint8_t priority);
 #if HAL_NUM_CAN_IFACES

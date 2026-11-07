@@ -1,0 +1,8 @@
+# Experimental companion IO image only. Never installed/bundled automatically.
+include ../iomcu-f103/hwdef.dat
+
+# Physical MAIN3 cannot be enabled by PWM, failsafe, DShot, GPIO or IO restart.
+# Other physical PWM numbers stay unchanged; MAIN4 remains TIM4_CH4.
+undef PB8
+PB8 SPKTSMART_MAIN3_INHIBITED INPUT
+define AP_IOMCU_SMART_ESC_INHIBIT 1

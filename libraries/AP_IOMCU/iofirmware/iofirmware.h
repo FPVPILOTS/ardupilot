@@ -9,6 +9,10 @@
 #include "hal.h"
 #include "ch.h"
 #include "ioprotocol.h"
+#include "../SmartESCInhibit.h"
+#ifndef AP_IOMCU_SMART_ESC_INHIBIT
+#define AP_IOMCU_SMART_ESC_INHIBIT 0
+#endif
 
 #if AP_HAL_SHARED_DMA_ENABLED
 #include <AP_HAL_ChibiOS/shared_dma.h>
@@ -23,6 +27,9 @@
 
 class AP_IOMCU_FW {
 public:
+#if AP_IOMCU_SMART_ESC_INHIBIT
+    AP_IOMCU_SmartESCInhibit smart_esc_inhibit;
+#endif
     void process_io_packet();
 
     struct IOPacket rx_io_packet, tx_io_packet;

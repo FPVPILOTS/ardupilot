@@ -1,0 +1,22 @@
+# Experimental passive Spektrum Smart ESC development target for all vehicles.
+include ../Pixhawk6C/hwdef.dat
+USE_BOOTLOADER_FROM_BOARD Pixhawk6C
+
+# Reserve AUX1 until its electrical and transport compatibility is verified.
+# Keep the original PWM numbers on AUX2-8.
+undef PA8
+PA8 SPKTSMART_RESERVED INPUT GPIO(50)
+
+# AUX7 is the selected UART4 candidate. Keep it high impedance until the
+# physical signal path and SRXL2 transport have been verified. No PWM fallback.
+undef PA0
+PA0 SPKTSMART_AUX7_RESERVED INPUT
+
+# Dedicated receive-only UART4 is not a SERIALn port and has no TX capability.
+define HAL_SPEKTRUM_SMART_ESC_UART4_RX 1
+define AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED 1
+
+# No board-level electrical validation exists. This is not a user parameter.
+define AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED 0
+define AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED 0
+define AP_IOMCU_SMART_ESC_CLIENT 1

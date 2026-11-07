@@ -86,6 +86,33 @@ public:
     virtual bool set_options(uint16_t options) { _last_options = options; return options==0; }
     virtual uint16_t get_options(void) const { return _last_options; }
 
+    // Optional receive-only diagnostic backend. Timestamps are acquisition
+    // milliseconds, not the time a buffered byte is consumed by a vehicle.
+    virtual bool is_receive_only() const { return false; }
+    virtual bool read_timed(uint8_t &byte, uint32_t &timestamp_ms) { return false; }
+    virtual uint32_t receive_errors() const { return 0; }
+    struct ReceiveDiagnostics {
+        uint32_t cr1 = 0, cr3 = 0, isr = 0;
+        uint32_t framing = 0, noise = 0, parity = 0, overruns = 0, overflow = 0;
+        uint32_t release_errors = 0; // Software configuration faults, not an impedance measurement.
+        uint32_t probe_transitions = 0, probe_duration_ms = 0;
+        uint32_t handshake_tc_ms = 0, handshake_faults = 0;
+        uint32_t handshake_queued = 0, handshake_completed = 0, handshake_restored = 0;
+        uint8_t handshake_flags = 0; // bit0:qualification, bit1:owned, bit2:TC, bit3:wave LAB, bit4:HS LAB, bit5:quiet RX.
+        uint8_t probe_mode = 0, probe_levels = 0; // Modes 0..4; levels bit0:low seen, bit1:high seen.
+        // Probe observations are MCU-only. External connector response is never inferred.
+        uint8_t flags = 0; // bit0:running, bit1:pad high, bit2:GPIO input, bit3:AF8 open-drain.
+    };
+    virtual bool receive_diagnostics(ReceiveDiagnostics &status) const { return false; }
+
+    // Optional isolated handshake transaction, never a general serial transmitter.
+    // A supported backend must whitelist packets and enforce a non-parameter hardware gate.
+    virtual bool diagnostic_handshake(const uint8_t *packet, uint8_t length, bool finish) { return false; }
+    // Start one explicitly authorized, unqualified laboratory session. Default unavailable.
+    virtual bool diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on = false) { return false; }
+    // Separate lab image only: fixed four-byte waveform, no caller packet data.
+    virtual bool diagnostic_waveform(bool start, bool finish) { return false; }
+
     enum Option {
         OPTION_RXINV              = (1U<<0),  // invert RX line
         OPTION_TXINV              = (1U<<1),  // invert TX line

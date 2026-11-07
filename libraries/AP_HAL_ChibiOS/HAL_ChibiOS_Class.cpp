@@ -38,6 +38,17 @@
 #include <AP_HAL/SIMState.h>
 
 #include <hwdef.h>
+#include "DiagnosticRX.h"
+
+AP_HAL::UARTDriver* HAL_ChibiOS::diagnostic_rx_uart() const
+{
+#if HAL_SPEKTRUM_SMART_ESC_UART4_RX
+    static DiagnosticRX receiver;
+    return &receiver;
+#else
+    return nullptr;
+#endif
+}
 
 #ifndef DEFAULT_SERIAL0_BAUD
 #define SERIAL0_BAUD 115200

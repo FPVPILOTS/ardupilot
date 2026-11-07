@@ -124,6 +124,10 @@ public:
     // callback to update the data in the frontend, should be called by the driver when new data is available
     void update_telem_data(const uint8_t esc_index, const AP_ESC_Telem_Backend::TelemetryData& new_data, const uint16_t data_mask);
 
+    // A backend exclusively owning an index can withdraw its measurements on
+    // communication loss, rather than waiting for the generic frontend timeout.
+    void invalidate_telem_data(uint8_t esc_index);
+
 #if AP_SCRIPTING_ENABLED
     /*
       set RPM scale factor from script

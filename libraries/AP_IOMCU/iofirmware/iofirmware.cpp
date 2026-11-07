@@ -891,6 +891,12 @@ bool AP_IOMCU_FW::handle_code_read()
 	} while(0);
 
     switch (rx_io_packet.page) {
+#if AP_IOMCU_SMART_ESC_INHIBIT
+    case PAGE_SMART_ESC_INHIBIT:
+        smart_esc_inhibit.uptime_ms = AP_HAL::millis();
+        COPY_PAGE(smart_esc_inhibit);
+        break;
+#endif
     case PAGE_CONFIG:
         COPY_PAGE(config);
         break;
@@ -955,6 +961,15 @@ bool AP_IOMCU_FW::handle_code_read()
 bool AP_IOMCU_FW::handle_code_write()
 {
     switch (rx_io_packet.page) {
+#if AP_IOMCU_SMART_ESC_INHIBIT
+    case PAGE_SMART_ESC_INHIBIT:
+        // Only a nonce may be written. Mask/version are immutable capabilities.
+        if (rx_io_packet.offset != 2 || rx_io_packet.count != 2) {
+            return false;
+        }
+        smart_esc_inhibit.nonce = uint32_t(rx_io_packet.regs[0]) | (uint32_t(rx_io_packet.regs[1]) << 16);
+        break;
+#endif
     case PAGE_SETUP:
         switch (rx_io_packet.offset) {
         case PAGE_REG_SETUP_ARMING:

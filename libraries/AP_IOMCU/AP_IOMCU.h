@@ -12,6 +12,11 @@
 
 #include "iofirmware/ioprotocol.h"
 #include <AP_HAL/RCOutput.h>
+#include <AP_HAL/Semaphores.h>
+#include "SmartESCInhibit.h"
+#ifndef AP_IOMCU_SMART_ESC_CLIENT
+#define AP_IOMCU_SMART_ESC_CLIENT 0
+#endif
 #include <AP_ESC_Telem/AP_ESC_Telem_Backend.h>
 
 typedef uint32_t eventmask_t;
@@ -31,6 +36,11 @@ public:
     AP_IOMCU(AP_HAL::UARTDriver &uart);
 
     void init(void);
+
+    // Optional companion-image proof. Asynchronous; never touches PWM masks.
+    bool request_smart_esc_inhibit(uint32_t nonce, uint32_t expected_crc);
+    void cancel_smart_esc_inhibit(uint32_t nonce);
+    bool smart_esc_inhibit(AP_IOMCU_SmartESCInhibit &proof, uint32_t &received_ms);
 
     // write to one channel
     void write_channel(uint8_t chan, uint16_t pwm);
@@ -194,6 +204,15 @@ public:
     }
 
 private:
+    void update_smart_esc_inhibit(uint32_t now_ms);
+#if AP_IOMCU_SMART_ESC_CLIENT
+    HAL_Semaphore _smart_esc_sem;
+    AP_IOMCU_SmartESCInhibit _smart_esc_proof;
+    uint32_t _smart_esc_expected_crc = 0;
+    uint32_t _smart_esc_nonce = 0, _smart_esc_sent = 0, _smart_esc_received_ms = 0, _smart_esc_poll_ms = 0;
+    bool _smart_esc_valid = false;
+    bool _smart_esc_revoked = false;
+#endif
     AP_HAL::UARTDriver &uart;
 
     void thread_main(void);

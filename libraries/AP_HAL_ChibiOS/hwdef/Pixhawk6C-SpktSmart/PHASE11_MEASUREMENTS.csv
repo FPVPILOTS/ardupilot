@@ -1,0 +1,6 @@
+EXP,PROBE,MCU_Level,UART_Init,Edges,Seen,Duration_ms,ConfigErrors,Connector_DC_V,Scope_File,Power,ESC_connected,Conclusion,Status
+1100,0,,,,,,,,,USB only,NO,,NOT_RUN
+1101,1,,,,,,,,,USB only,NO,,NOT_RUN
+1102,2,,,,,,,,,USB only,NO,,NOT_RUN
+1103,3,,,,,,,,,USB only,NO,,NOT_RUN
+1104,4,,,,,,,,,USB only,NO,,NOT_RUN

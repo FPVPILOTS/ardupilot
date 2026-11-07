@@ -508,6 +508,20 @@ void AP_ESC_Telem::send_esc_telemetry_mavlink(uint8_t mav_chan)
 }
 
 // record an update to the telemetry data together with timestamp
+void AP_ESC_Telem::invalidate_telem_data(uint8_t esc_index)
+{
+    if (esc_index >= ESC_TELEM_MAX_ESCS) {
+        return;
+    }
+    auto &data = _telem_data[esc_index];
+    data.any_data_valid = false;
+    data.types = 0;
+    data.last_update_ms = 0;
+    data.voltage = 0;
+    data.current = 0;
+    data.temperature_cdeg = 0;
+}
+
 // this should be called by backends when new telemetry values are available
 void AP_ESC_Telem::update_telem_data(const uint8_t esc_index, const AP_ESC_Telem_Backend::TelemetryData& new_data, const uint16_t data_mask)
 {

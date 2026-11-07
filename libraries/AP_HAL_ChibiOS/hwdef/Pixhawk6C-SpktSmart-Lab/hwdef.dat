@@ -1,0 +1,4 @@
+# DISCONNECTED AUX7 waveform only. Not for an ESC or aircraft operation.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define AP_SPEKTRUM_SMART_ESC_LAB_ONLY 1
+# Hardware qualification remains false. Handshake/control TX remain blocked.

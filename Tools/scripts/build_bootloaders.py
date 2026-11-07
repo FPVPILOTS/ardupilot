@@ -93,10 +93,16 @@ if args.signing_key is not None:
     validate_signing_keys(args.signing_key)
 
 def run_program(cmd_list):
-    print("Running (%s)" % " ".join(cmd_list))
-    retcode = subprocess.call(cmd_list)
+    normalized_cmd = list(cmd_list)
+    if os.name == 'nt' and normalized_cmd:
+        if normalized_cmd[0] == './waf':
+            normalized_cmd = [sys.executable, 'waf'] + normalized_cmd[1:]
+        elif normalized_cmd[0].startswith('./Tools/'):
+            normalized_cmd = [sys.executable, normalized_cmd[0][2:]] + normalized_cmd[1:]
+    print("Running (%s)" % " ".join(normalized_cmd))
+    retcode = subprocess.call(normalized_cmd)
     if retcode != 0:
-        print("Build failed: %s" % ' '.join(cmd_list))
+        print("Build failed: %s" % ' '.join(normalized_cmd))
         return False
     return True
 

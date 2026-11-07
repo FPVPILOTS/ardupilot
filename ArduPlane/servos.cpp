@@ -1058,6 +1058,19 @@ void Plane::servos_output(void)
 
     srv.push();
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    // Observe after PWM overrides, final slew/mixing and output processing. Never writes outputs.
+    spektrum_smart_esc.plane_shadow(arming.is_armed_and_safety_off(), !rc_failsafe_active(),
+                                  any_failsafe_triggered(), have_reverse_thrust(), allow_reverse_thrust());
+    // Separate explicitly qualified writer; SHADOW remains read-only. Both
+    // physical validation gates are zero in ordinary and laboratory firmware.
+    if (AP_SpektrumSmartESC_Motor::physical_control_available()) {
+        spektrum_smart_esc.plane_control(arming.is_armed_and_safety_off(), !rc_failsafe_active(),
+            any_failsafe_triggered(), have_reverse_thrust(), allow_reverse_thrust(),
+            rc().find_channel_for_option(RC_Channel::AUX_FUNC::REVERSE_THROTTLE) != nullptr, reversed_throttle);
+    }
+#endif
+
     if (g2.servo_channels.auto_trim_enabled()) {
         servos_auto_trim();
     }

@@ -1,0 +1,7 @@
+# Experimental handshake ONLY: motor/actuators disconnected, never flight.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-Spkt-HSLab"
+
+# Separate permission for a manually acknowledged, bounded functional test.
+# HARDWARE_TX_VALIDATED and MOTOR_TX_VALIDATED intentionally remain ZERO.
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1

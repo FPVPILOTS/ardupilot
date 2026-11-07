@@ -7,6 +7,7 @@
 #include <AP_BoardConfig/AP_BoardConfig_config.h>
 
 #include "AP_Arming_config.h"
+#include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_config.h>
 #include "AP_InertialSensor/AP_InertialSensor_config.h"
 #include "AP_Proximity/AP_Proximity_config.h"
 
@@ -279,6 +280,9 @@ protected:
 
     // mandatory checks that cannot be bypassed.  This function will only be called if ARMING_SKIPCHK skips all or arming forced
     virtual bool mandatory_checks(bool report);
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    bool spektrum_bench_checks(bool report) const;
+#endif
 
     // returns true if a particular check is enabled
     bool check_enabled(const AP_Arming::Check check) const;

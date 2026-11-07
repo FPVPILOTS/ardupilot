@@ -50,6 +50,7 @@
 #include <AP_OpenDroneID/AP_OpenDroneID.h>
 #include <AP_Hott_Telem/AP_Hott_Telem.h>
 #include <AP_ESC_Telem/AP_ESC_Telem.h>
+#include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Diagnostics.h>
 #include <AP_Servo_Telem/AP_Servo_Telem.h>
 #include <AP_GyroFFT/AP_GyroFFT.h>
 #include <AP_Networking/AP_Networking.h>
@@ -106,6 +107,9 @@ public:
     CLASS_NO_COPY(AP_Vehicle);
 
     static AP_Vehicle *get_singleton();
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    bool spektrum_bench_active() const { return spektrum_smart_esc.arming_blocked(); }
+#endif
 
     // setup() is called once during vehicle startup to initialise the
     // vehicle object and the objects it contains.  The
@@ -417,6 +421,10 @@ protected:
 
 #if HAL_WITH_ESC_TELEM
     AP_ESC_Telem esc_telem;
+#endif
+
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    AP_SpektrumSmartESC_Diagnostics spektrum_smart_esc;
 #endif
 
 #if AP_SERVO_TELEM_ENABLED

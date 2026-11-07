@@ -292,6 +292,11 @@ const AP_Param::GroupInfo AP_Vehicle::var_info[] = {
     AP_SUBGROUPINFO(rpm_sensor, "RPM", 32, AP_Vehicle, AP_RPM),
 #endif
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    // @Group: SPKT_
+    // @Path: ../AP_SpektrumSmartESC/AP_SpektrumSmartESC_Diagnostics.cpp
+    AP_SUBGROUPINFO(spektrum_smart_esc, "SPKT_", 33, AP_Vehicle, AP_SpektrumSmartESC_Diagnostics),
+#endif
     AP_GROUPEND
 };
 
@@ -524,6 +529,10 @@ void AP_Vehicle::setup()
     filters.init();
 #endif
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    spektrum_smart_esc.init();
+#endif
+
 #if HAL_WITH_ESC_TELEM && HAL_GYROFFT_ENABLED
     for (uint8_t i = 0; i<ESC_TELEM_MAX_ESCS; i++) {
         esc_noise[i].set_cutoff_frequency(2);
@@ -645,6 +654,9 @@ const AP_Scheduler::Task AP_Vehicle::scheduler_tasks[] = {
     SCHED_TASK_CLASS(AP_Tramp,     &vehicle.tramp,          update,                   50,  50, 225),
 #endif
     SCHED_TASK(send_watchdog_reset_statustext,         0.1,     20, 225),
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+    SCHED_TASK_CLASS(AP_SpektrumSmartESC_Diagnostics, &vehicle.spektrum_smart_esc, update, 100, 200, 229),
+#endif
 #if HAL_WITH_ESC_TELEM
     // This update function is responsible for checking timeouts and invalidating the ESC telemetry data.
     // Be mindful of this if you are planning to reduce the frequency from 100Hz.

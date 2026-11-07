@@ -78,6 +78,7 @@ enum iopage {
     PAGE_RAW_DSHOT_TELEM_5_8 = 205,
     PAGE_RAW_DSHOT_TELEM_9_12 = 206,
     PAGE_RAW_DSHOT_TELEM_13_16 = 207,
+    PAGE_SMART_ESC_INHIBIT = 209, // Optional, dedicated pin-inhibited IO image only.
 #if AP_IOMCU_PROFILED_SUPPORT_ENABLED
     PAGE_PROFILED = 208,
 #endif

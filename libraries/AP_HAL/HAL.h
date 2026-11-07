@@ -143,6 +143,10 @@ public:
     // access to serial ports using SERIALn_ numbering
     UARTDriver* serial(uint8_t sernum) const;
 
+    // Optional board-reserved diagnostic receiver, never a transmitting port.
+    // Not exposed through SERIALn, scripting serial ports or receiver inputs.
+    virtual UARTDriver* diagnostic_rx_uart() const { return nullptr; }
+
     static constexpr uint8_t num_serial = 10;
 
 private:

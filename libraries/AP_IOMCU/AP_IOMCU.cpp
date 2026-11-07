@@ -63,6 +63,113 @@ AP_IOMCU::AP_IOMCU(AP_HAL::UARTDriver &_uart) :
 
 #define IOMCU_DEBUG_ENABLE 0
 
+bool AP_IOMCU::request_smart_esc_inhibit(uint32_t nonce, uint32_t expected_crc)
+{
+#if AP_IOMCU_SMART_ESC_CLIENT
+    if (nonce == 0 || expected_crc == 0 || hal.util->get_soft_armed()) {
+        return false;
+    }
+    WITH_SEMAPHORE(_smart_esc_sem);
+    if (_smart_esc_nonce == nonce && (_smart_esc_revoked || _smart_esc_expected_crc != expected_crc)) {
+        return false; // Neither a revoked cookie nor another image may reuse this lease.
+    }
+    if (_smart_esc_nonce != nonce) {
+        _smart_esc_nonce = nonce;
+        _smart_esc_expected_crc = expected_crc;
+        _smart_esc_valid = false;
+        _smart_esc_revoked = false;
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
+void AP_IOMCU::cancel_smart_esc_inhibit(uint32_t nonce)
+{
+#if AP_IOMCU_SMART_ESC_CLIENT
+    WITH_SEMAPHORE(_smart_esc_sem);
+    if (nonce != 0 && nonce == _smart_esc_nonce) {
+        // Retain the last cookie so a later request cannot reuse its old ACK.
+        _smart_esc_revoked = true;
+        _smart_esc_valid = false; // Stop polling; never send an output-enable command.
+    }
+#endif
+}
+
+bool AP_IOMCU::smart_esc_inhibit(AP_IOMCU_SmartESCInhibit &proof, uint32_t &received_ms)
+{
+#if AP_IOMCU_SMART_ESC_CLIENT
+    WITH_SEMAPHORE(_smart_esc_sem);
+    if (!_smart_esc_valid || !_smart_esc_proof.matches(_smart_esc_nonce) ||
+        uint32_t(AP_HAL::millis() - _smart_esc_received_ms) >= 50) {
+        return false;
+    }
+    proof = _smart_esc_proof;
+    received_ms = _smart_esc_received_ms;
+    return true;
+#else
+    return false;
+#endif
+}
+
+void AP_IOMCU::update_smart_esc_inhibit(uint32_t now_ms)
+{
+#if AP_IOMCU_SMART_ESC_CLIENT
+    uint32_t nonce, expected_crc;
+    {
+        WITH_SEMAPHORE(_smart_esc_sem);
+        if (_smart_esc_revoked) {
+            return; // Only a fresh, explicit disarmed lease can restart validation.
+        }
+        nonce = _smart_esc_nonce;
+        expected_crc = _smart_esc_expected_crc;
+    }
+    if (nonce == 0 || uint32_t(now_ms - _smart_esc_poll_ms) < 20) {
+        return; // No additional IO traffic in conventional/unrequested operation.
+    }
+    _smart_esc_poll_ms = now_ms;
+    uint32_t observed_crc = 0;
+    if (!read_registers(PAGE_SETUP, PAGE_REG_SETUP_CRC, 2, (uint16_t *)&observed_crc) ||
+        !AP_IOMCU_SmartESCInhibit::firmware_matches(expected_crc, observed_crc)) {
+        WITH_SEMAPHORE(_smart_esc_sem);
+        if (nonce == _smart_esc_nonce) {
+            _smart_esc_valid = false;
+            _smart_esc_revoked = true;
+        }
+        return; // Read-only identity check; never invokes the firmware uploader.
+    }
+    if (_smart_esc_sent != nonce) {
+        const uint16_t words[] = {uint16_t(nonce), uint16_t(nonce >> 16)};
+        // One write per explicit new lease. An IO reboot must never silently
+        // receive a repeated nonce and re-authorize an old motor session.
+        _smart_esc_sent = nonce;
+        if (!write_registers(PAGE_SMART_ESC_INHIBIT, 2, 2, words)) {
+            WITH_SEMAPHORE(_smart_esc_sem);
+            if (nonce == _smart_esc_nonce) {
+                _smart_esc_valid = false;
+                _smart_esc_revoked = true;
+            }
+            return;
+        }
+    }
+    AP_IOMCU_SmartESCInhibit proof;
+    const bool ok = read_registers(PAGE_SMART_ESC_INHIBIT, 0, sizeof(proof)/2, (uint16_t *)&proof);
+    WITH_SEMAPHORE(_smart_esc_sem);
+    if (nonce != _smart_esc_nonce) {
+        return; // Never apply an old transaction result to a newly requested lease.
+    }
+    if (!ok || !proof.matches(nonce) || (_smart_esc_valid && !proof.continues(_smart_esc_proof, nonce))) {
+        _smart_esc_revoked = true; // A new disarmed nonce is required; no automatic recovery.
+    }
+    _smart_esc_valid = !_smart_esc_revoked && ok && nonce == _smart_esc_nonce && proof.matches(nonce);
+    if (_smart_esc_valid) {
+        _smart_esc_proof = proof;
+        _smart_esc_received_ms = AP_HAL::millis();
+    }
+#endif
+}
+
 #if IOMCU_DEBUG_ENABLE
 #include <stdio.h>
 #define debug(fmt, args ...)  do {printf("%s:%d: " fmt "\n", __FUNCTION__, __LINE__, ## args); } while(0)
@@ -145,6 +252,7 @@ void AP_IOMCU::thread_main(void)
         }
 
         eventmask_t mask = chEvtWaitAnyTimeout(~0, chTimeMS2I(10));
+        update_smart_esc_inhibit(AP_HAL::millis());
 
         // check for pending IO events
         if (mask & EVENT_MASK(IOEVENT_SEND_PWM_OUT)) {
