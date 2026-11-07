@@ -132,6 +132,7 @@ void AP_SpektrumSmartESC_Diagnostics::init()
         for (uint8_t i = 0; i < length; ++i) {
             uid = (uid ^ id[i]) * 16777619U;
         }
+        _auto_uid = uid;
         _auto_session.enable(AP_HAL::millis(), uint8_t(_hs_target.get()), uid);
         _auto_rx = AP_SpektrumSmartESC(0x30, uint8_t(_hs_target.get()), 50, false);
         _auto_started = true;
@@ -232,6 +233,127 @@ bool AP_SpektrumSmartESC_Diagnostics::log_probe(uint32_t now_ms)
 #endif
     return reported;
 }
+
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
+{
+    // Only the separate, unarmable AutoLab image can enter this path.
+    // Wire protocol: 0x21 handshakes only; 0xCD / motor / reverse impossible.
+    if (!_auto_started) {
+        return;
+    }
+    auto *port = hal.diagnostic_rx_uart();
+    const bool safe = port != nullptr && !hal.util->get_soft_armed() &&
+                      arming_blocked() && SRV_Channels::get_emergency_stop() &&
+                      _enable == 1 && _probe == 0 && _handshake == 0;
+    if (!safe) {
+        _auto_session.uart_fault();
+        if (port != nullptr && _auto_leased) {
+            (void)port->diagnostic_handshake(nullptr, 0, true);
+        }
+        _auto_inflight = _auto_leased = false;
+        return;
+    }
+
+    AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+    if (!port->receive_diagnostics(hw)) {
+        _auto_session.uart_fault();
+    }
+    if (_auto_leased && port->receive_errors() != _auto_uart_error_baseline) {
+        // Never clear new framing/noise/overrun evidence just to reconnect.
+        _auto_session.uart_fault();
+    }
+    if (_auto_inflight && (hw.handshake_flags & 4) != 0 &&
+        _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+        if (!_auto_session.sent(hw.handshake_tc_ms * 1000U)) {
+            _auto_session.uart_fault();
+        }
+        _auto_inflight = false;
+    }
+
+    if (!_auto_inflight) {
+        uint8_t byte = 0;
+        uint32_t acquired_ms = 0;
+        for (uint16_t i = 0; i < 512 && port->read_timed(byte, acquired_ms); i++) {
+            const auto state = _auto_session.status().state;
+            if (state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+                _auto_session.feed(byte, acquired_ms * 1000U);
+            } else if (state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+                const uint32_t previous = _auto_rx.observation().crc_frames;
+                _auto_rx.feed(byte, acquired_ms);
+                if (_auto_rx.observation().crc_frames != previous) {
+                    uint8_t packet[AP_SpektrumSmartESC::MAX_PACKET] {};
+                    uint8_t length = 0;
+                    if (_auto_rx.observed_frame(packet, sizeof(packet), length)) {
+                        if (packet[1] == 0xCD ||
+                            (packet[1] == 0x21 && packet[3] >= 0x10 && packet[3] < 0x40)) {
+                            // Some other controller/master owns this bus.
+                            _auto_session.competing_master();
+                        } else {
+                            (void)_auto_session.observe_peer(packet, length, acquired_ms);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Hardware reports USART true TC and receiver restoration separately.
+    // Never count a queued packet as successful transmission.
+    (void)port->receive_diagnostics(hw);
+    const bool rx_restored = (hw.flags & 9U) == 9U &&
+                             (hw.cr1 & 0x4DU) == 5U &&
+                             (hw.cr3 & 8U) != 0;
+    const bool bus_idle = (hw.handshake_flags & 32U) != 0;
+    const auto action = _auto_session.tick(now_ms * 1000U, safe, bus_idle, rx_restored);
+    if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE) {
+        _auto_uart_error_baseline = port->receive_errors();
+        if (_auto_leased ||
+            !port->diagnostic_handshake_start(uint8_t(_hs_target.get()), _auto_uid, true)) {
+            _auto_session.uart_fault();
+        } else {
+            _auto_leased = true;
+            _auto_inflight = false;
+            _auto_rx.reset_observation();
+        }
+    }
+
+    if (_auto_leased &&
+        _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE &&
+        !_auto_inflight) {
+        (void)port->receive_diagnostics(hw);
+        const uint8_t length = _auto_session.prepare(now_ms * 1000U, _auto_packet,
+                                                      sizeof(_auto_packet),
+                                                      (hw.handshake_flags & 32U) != 0);
+        if (length != 0) {
+            if (port->diagnostic_handshake(_auto_packet, length, false)) {
+                _auto_inflight = true;
+            } else {
+                _auto_session.uart_fault();
+            }
+        }
+    }
+
+    if (_auto_leased &&
+        _auto_session.status().state != AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+        (void)port->diagnostic_handshake(nullptr, 0, true);
+        _auto_leased = _auto_inflight = false;
+        _auto_rx.reset_observation();
+    }
+    if (now_ms - _auto_log_ms >= 5000U) {
+        _auto_log_ms = now_ms;
+        const auto &st = _auto_session.status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 %s", AP_SpektrumSmartESC_AutoConnect::state_name(st.state));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 WHY %s", AP_SpektrumSmartESC_AutoConnect::reason_name(st.reason));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 ID%02x TRY%lu OK%lu LOST%lu",
+                      unsigned(st.peer_id), (unsigned long)st.attempts,
+                      (unsigned long)st.successful, (unsigned long)st.lost);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 RX%lu FE%lu",
+                      (unsigned long)_auto_rx.observation().crc_frames,
+                      (unsigned long)hw.framing);
+    }
+}
+#endif
 
 bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
 {
