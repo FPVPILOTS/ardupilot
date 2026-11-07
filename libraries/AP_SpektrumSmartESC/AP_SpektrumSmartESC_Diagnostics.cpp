@@ -272,7 +272,8 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     auto *port = hal.diagnostic_rx_uart();
     const bool safe = port != nullptr && !hal.util->get_soft_armed() &&
                       arming_blocked() && SRV_Channels::get_emergency_stop() &&
-                      _enable == 1 && _probe == 0 && _handshake == 0;
+                      _enable == 1 && _probe == 0 && _handshake == 0 &&
+                      (!AP_SPEKTRUM_SMART_ESC_POLL_LAB || _telem == 0);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
     if (_pollack.get() != 0) {
         (void)_poll_auth.acknowledge(_pollack.get(), safe, now_ms);
@@ -561,7 +562,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       AP_SpektrumSmartESC_PollDryRun::reason_name(dry_status.reason),
                       (unsigned long)dry_status.previews,
                       (unsigned long)dry_status.blocked);
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 DRY; SPK20 1x0xCD EXPLICIT");
+#else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 NO TX; 0xCD PREVIEW ONLY");
+#endif
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 POLL TX%lu RX%lu FAIL%lu",
                       (unsigned long)_poll_sent,
@@ -589,7 +594,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                           double(candidate.temperature_c));
         }
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+#if AP_SPEKTRUM_SMART_ESC_POLL_LAB
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 POLLLAB: MOTOR UNPLUGGED; NO THROTTLE");
+#else
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 NO TLM POLL/THROTTLE; RX OBS ONLY");
+#endif
         }
     }
 }
