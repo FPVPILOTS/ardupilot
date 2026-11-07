@@ -91,6 +91,7 @@ private:
     uint32_t _errors = 0;
     AP_SpektrumSmartESC_UartRecovery _uart_recovery;
     uint32_t _framing = 0, _noise = 0, _parity = 0, _overruns = 0, _overflow = 0;
+    uint32_t _last_uart_rx_ms = 0; // Real UART FIFO timestamp, for PollLab guard only.
     uint32_t _release_errors = 0;
 };
 #endif
