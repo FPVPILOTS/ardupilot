@@ -157,6 +157,14 @@ uint8_t AP_SpektrumSmartESC_Reader::capture(uint8_t *out, size_t capacity) const
 void AP_SpektrumSmartESC_Reader::observe(const uint8_t *p, uint8_t n, uint32_t now_us)
 {
     _status.type = p[1];
+    if (n == 14 && p[1] == 0x21) {
+        // Protocol evidence only. Never promote unsolicited 0x40->0x00
+        // announcements to a targeted response, control, or motor readiness.
+        _status.last_hs_src = p[3];
+        _status.last_hs_dst = p[4];
+        _status.last_hs_priority = p[5];
+        _status.last_hs_baud = p[6];
+    }
     if (n == 14 && p[1] == 0x21 && p[3] == _status.source) {
         const uint32_t uid = uint32_t(p[8]) | (uint32_t(p[9]) << 8) |
                              (uint32_t(p[10]) << 16) | (uint32_t(p[11]) << 24);
@@ -168,6 +176,7 @@ void AP_SpektrumSmartESC_Reader::observe(const uint8_t *p, uint8_t n, uint32_t n
     if (n == 14 && p[1] == 0x21 && p[3] == _target && p[5] >= 1 && p[5] <= 100 && p[6] <= 1) {
         if (p[4] == 0 && (_status.state == State::WAITING || (_power_on &&
             (_status.state == State::PREPARED || _status.state == State::RESPONSE)))) {
+            _status.startup_announcements++;
             return; // Unprompted advertisement is evidence, not the requested response.
         }
         if (p[4] == _status.source && _status.state == State::RESPONSE && uint32_t(now_us - _phase) < 50000) {

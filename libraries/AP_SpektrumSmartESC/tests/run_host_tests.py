@@ -18,6 +18,7 @@ def main():
     recovery_executable = args.out.resolve() / 'test_spektrum_uart_recovery.exe'
     autoconnect_executable = args.out.resolve() / 'test_spektrum_autoconnect.exe'
     autosession_executable = args.out.resolve() / 'test_spektrum_autosession.exe'
+    lease_executable = args.out.resolve() / 'test_spektrum_lab_lease.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -36,6 +37,9 @@ def main():
              str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
              str(library / 'tests/test_spektrum_autosession.cpp'), '-o', str(autosession_executable)],
             [str(autosession_executable)],
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
+             str(library / 'tests/test_spektrum_lab_lease.cpp'), '-o', str(lease_executable)],
+            [str(lease_executable)],
         ]
         if args.arm_cxx:
             commands.append([

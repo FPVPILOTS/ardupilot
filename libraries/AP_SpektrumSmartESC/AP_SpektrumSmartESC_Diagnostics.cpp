@@ -70,6 +70,15 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("LABACK", 9, AP_SpektrumSmartESC_Diagnostics, _hs_ack, 0),
 #endif
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    // @Param: AUTO
+    // @DisplayName: Automatic handshake-only laboratory sessions
+    // @Description: AutoLab firmware ONLY. On boot with ENABLE=1, automatically discover/reconnect isolated Spektrum ESC on AUX7, using 0x21-only handshake; no Control Data, throttle, reverse or arming. Requires disarmed emergency stop. No other bus master.
+    // @Values: 0:Disabled,1:Automatic handshake lab
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("AUTO", 10, AP_SpektrumSmartESC_Diagnostics, _auto, 0),
+#endif
     AP_GROUPEND
 };
 
@@ -107,8 +116,37 @@ void AP_SpektrumSmartESC_Diagnostics::init()
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: telemetry index busy");
     }
 #endif
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: bench RX only; arming inhibited; no TX");
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: passive silence may mean no master polling");
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (_auto == 1) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: AUTO handshake TX only; no motor/control");
+    } else
+#endif
+    {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: bench RX only; arming inhibited; no TX");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: passive silence may mean no master polling");
+    }
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (_auto == 1) {
+        uint8_t id[16] {};
+        uint8_t length = sizeof(id);
+        const bool unique = hal.util->get_system_id_unformatted(id, length) &&
+                            length > 0 && length <= sizeof(id);
+        if (!unique) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17: NO_UID; AUTO BLOCKED");
+            return;
+        }
+        uint32_t uid = 2166136261U;
+        for (uint8_t i = 0; i < length; ++i) {
+            uid = (uid ^ id[i]) * 16777619U;
+        }
+        _auto_uid = uid;
+        _auto_session.enable(AP_HAL::millis(), uint8_t(_hs_target.get()), uid);
+        _auto_rx = AP_SpektrumSmartESC(0x30, uint8_t(_hs_target.get()), 50, false);
+        _auto_started = true;
+        _receiver->suspend(); // Native AutoLab owns the sole RX consumer.
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 AUTOLAB ON; NO MOTOR, NO CONTROL");
+    }
+#endif
 }
 
 bool AP_SpektrumSmartESC_Diagnostics::update_probe(uint32_t now_ms)
@@ -202,6 +240,154 @@ bool AP_SpektrumSmartESC_Diagnostics::log_probe(uint32_t now_ms)
 #endif
     return reported;
 }
+
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
+{
+    // Only the separate, unarmable AutoLab image can enter this path.
+    // Wire protocol: 0x21 handshakes only; 0xCD / motor / reverse impossible.
+    if (!_auto_started) {
+        return;
+    }
+    auto *port = hal.diagnostic_rx_uart();
+    const bool safe = port != nullptr && !hal.util->get_soft_armed() &&
+                      arming_blocked() && SRV_Channels::get_emergency_stop() &&
+                      _enable == 1 && _probe == 0 && _handshake == 0;
+    if (!safe) {
+        _auto_session.uart_fault();
+        if (port != nullptr && _auto_leased) {
+            (void)port->diagnostic_handshake(nullptr, 0, true);
+        }
+        _auto_inflight = _auto_leased = false;
+        return;
+    }
+
+    AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+    if (!port->receive_diagnostics(hw)) {
+        _auto_session.uart_fault();
+    }
+    if (_auto_leased && port->receive_errors() != _auto_uart_error_baseline) {
+        // Never clear new framing/noise/overrun evidence just to reconnect.
+        _auto_session.uart_fault();
+    }
+    if (_auto_inflight && (hw.handshake_flags & 4) != 0 &&
+        _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+        if (!_auto_session.sent(hw.handshake_tc_ms * 1000U)) {
+            _auto_session.uart_fault();
+        }
+        _auto_inflight = false;
+    }
+
+    if (!_auto_inflight) {
+        uint8_t byte = 0;
+        uint32_t acquired_ms = 0;
+        for (uint16_t i = 0; i < 512 && port->read_timed(byte, acquired_ms); i++) {
+            const auto state = _auto_session.status().state;
+            if (state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+                _auto_session.feed(byte, acquired_ms * 1000U);
+            } else if (state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+                const uint32_t previous = _auto_rx.observation().crc_frames;
+                _auto_rx.feed(byte, acquired_ms);
+                if (_auto_rx.observation().crc_frames != previous) {
+                    uint8_t packet[AP_SpektrumSmartESC::MAX_PACKET] {};
+                    uint8_t length = 0;
+                    if (_auto_rx.observed_frame(packet, sizeof(packet), length)) {
+                        if (packet[1] == 0xCD ||
+                            (packet[1] == 0x21 && packet[3] >= 0x10 && packet[3] < 0x40)) {
+                            // Some other controller/master owns this bus.
+                            _auto_session.competing_master();
+                        } else {
+                            (void)_auto_session.observe_peer(packet, length, acquired_ms);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Hardware reports USART true TC and receiver restoration separately.
+    // Never count a queued packet as successful transmission.
+    (void)port->receive_diagnostics(hw);
+    const bool rx_restored = (hw.flags & 9U) == 9U &&
+                             (hw.cr1 & 0x4DU) == 5U &&
+                             (hw.cr3 & 8U) != 0;
+    const bool bus_idle = (hw.handshake_flags & 32U) != 0;
+    const auto action = _auto_session.tick(now_ms * 1000U, safe, bus_idle, rx_restored);
+    if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE) {
+        _auto_uart_error_baseline = port->receive_errors();
+        if (_auto_leased ||
+            !port->diagnostic_handshake_start(uint8_t(_hs_target.get()), _auto_uid, true)) {
+            _auto_session.uart_fault();
+        } else {
+            _auto_leased = true;
+            _auto_inflight = false;
+            _auto_rx.reset_observation();
+        }
+    }
+
+    if (_auto_leased &&
+        _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE &&
+        !_auto_inflight) {
+        (void)port->receive_diagnostics(hw);
+        const uint8_t length = _auto_session.prepare(now_ms * 1000U, _auto_packet,
+                                                      sizeof(_auto_packet),
+                                                      (hw.handshake_flags & 32U) != 0);
+        if (length != 0) {
+            if (port->diagnostic_handshake(_auto_packet, length, false)) {
+                _auto_inflight = true;
+            } else {
+                _auto_session.uart_fault();
+            }
+        }
+    }
+
+    if (_auto_leased &&
+        _auto_session.status().state != AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+        (void)port->diagnostic_handshake(nullptr, 0, true);
+        _auto_leased = _auto_inflight = false;
+        _auto_rx.reset_observation();
+    }
+    if (now_ms - _auto_log_ms >= 5000U) {
+        _auto_log_ms = now_ms;
+        const auto &st = _auto_session.status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 %s", AP_SpektrumSmartESC_AutoConnect::state_name(st.state));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 WHY %s", AP_SpektrumSmartESC_AutoConnect::reason_name(st.reason));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 ID%02x TRY%lu OK%lu LOST%lu",
+                      unsigned(st.peer_id), (unsigned long)st.attempts,
+                      (unsigned long)st.successful, (unsigned long)st.lost);
+        // Diagnose transport independently of the post-link observer:
+        // _auto_rx CRC counts stay at zero until a link has succeeded.
+        // Q/C/R are lifetime UART4 queued/true-TC/RX-restoration counters.
+        const auto &hs = _auto_session.reader_status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 UART Q%lu C%lu R%lu F%lu",
+                      (unsigned long)hw.handshake_queued,
+                      (unsigned long)hw.handshake_completed,
+                      (unsigned long)hw.handshake_restored,
+                      (unsigned long)hw.handshake_faults);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 HS TX%lu RXB%lu CRC%lu RP%u",
+                      (unsigned long)hs.tx_frames,
+                      (unsigned long)hs.rx_bytes,
+                      (unsigned long)hs.rx_frames,
+                      unsigned(hs.responses));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 HW E%lu FE%lu L%u OWN%u",
+                      (unsigned long)port->receive_errors(),
+                      (unsigned long)hw.framing,
+                      unsigned((hw.flags & 2U) != 0),
+                      unsigned((hw.handshake_flags & 2U) != 0));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 PEER S%02x D%02x T%02x A%lu",
+                      unsigned(hs.last_hs_src), unsigned(hs.last_hs_dst),
+                      unsigned(hs.type), (unsigned long)hs.startup_announcements);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 PEER PRI%u BAUD%u ECHO%lu UNEXP%lu",
+                      unsigned(hs.last_hs_priority), unsigned(hs.last_hs_baud),
+                      (unsigned long)hs.echoes, (unsigned long)hs.unexpected);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 POST RX%lu",
+                      (unsigned long)_auto_rx.observation().crc_frames);
+        if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 HANDSHAKE ONLY; NO ESC TLM/THROTTLE");
+        }
+    }
+}
+#endif
 
 bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
 {
@@ -562,6 +748,12 @@ void AP_SpektrumSmartESC_Diagnostics::update()
     if (_native_motor != nullptr) {
         return; // The qualified backend exclusively owns RX; never close/consume it here.
     }
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (_auto == 1) {
+        update_auto_reader(now);
+        return;
+    }
+#endif
     if (update_waveform(now)) {
         return;
     }

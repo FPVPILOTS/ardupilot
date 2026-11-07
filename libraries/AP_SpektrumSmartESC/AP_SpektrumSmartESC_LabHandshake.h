@@ -76,6 +76,9 @@ public:
             return true;
         }
         void close() { _active = false; }
+        // Read-only observation for the separate AutoLab native lease manager.
+        // Regular HSLab remains one-shot; this does not reset authorization.
+        bool used() const { return _used; }
         uint8_t frames() const { return _frames; }
     private:
         uint32_t _started_ms = 0, _uid = 0, _last_query_ms = 0;

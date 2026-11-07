@@ -252,7 +252,22 @@ bool DiagnosticRX::diagnostic_handshake_start(uint8_t target, uint32_t uid, bool
         (UART4->CR1 & direction) == (USART_CR1_UE | USART_CR1_RE) &&
         (UART4->CR3 & USART_CR3_HDSEL) && !(UART4->CR2 & USART_CR2_SWAP) &&
         !(UART4->ISR & (USART_ISR_BUSY | USART_ISR_RXNE_RXFNE | USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE));
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    // Only AutoLab permits another bounded HANDSHAKE lease, and only after
+    // the prior native owner released the port. Regular HSLab stays one-shot.
+    const uint32_t now_ms = AP_HAL::millis();
+    const bool cooldown = _auto_hs_last_ms == 0 || uint32_t(now_ms - _auto_hs_last_ms) >= 1000;
+    if (ready && cooldown && _lab_hs_lease.used() && !_lab_hs_lease.active(now_ms) &&
+        (_handshake_port == nullptr || !_handshake_port->owned())) {
+        _lab_hs_lease = AP_SpektrumSmartESC_LabHandshake::Lease{};
+    }
+    const bool granted = ready && cooldown && _lab_hs_lease.start(target, uid, now_ms, power_on);
+    if (granted) {
+        _auto_hs_last_ms = now_ms;
+    }
+#else
     const bool granted = ready && _lab_hs_lease.start(target, uid, AP_HAL::millis(), power_on);
+#endif
     chSysUnlock();
     return granted;
 #else
