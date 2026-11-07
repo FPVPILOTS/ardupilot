@@ -59,6 +59,7 @@ def main():
             [str(offline_poll_executable)],
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
              str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
              str(library / 'tests/test_spektrum_poll_dryrun.cpp'),
              '-o', str(poll_dryrun_executable)],
             [str(poll_dryrun_executable)],
