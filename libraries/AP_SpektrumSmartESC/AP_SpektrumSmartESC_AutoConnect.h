@@ -130,6 +130,13 @@ public:
         if (_status.state != State::LINKED || !crc_valid || peer_id != _expected_id) {
             return false;
         }
+        // A late callback must not resurrect a stale link after a scheduler
+        // stall. Force a fresh handshake rather than reusing old controls.
+        if (age(now_ms, _status.last_peer_ms) >= PEER_TIMEOUT_MS) {
+            _status.lost++;
+            fail(now_ms, Reason::PEER_TIMEOUT);
+            return false;
+        }
         _status.last_peer_ms = now_ms;
         return true;
     }
