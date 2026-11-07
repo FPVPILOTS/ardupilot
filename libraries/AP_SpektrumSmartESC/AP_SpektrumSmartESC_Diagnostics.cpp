@@ -605,7 +605,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                           (unsigned long)w.handshake, (unsigned long)w.sensors,
                           (unsigned long)w.late_sensors, (unsigned long)w.bad_crc,
                           (unsigned long)w.bad_length, (unsigned long)w.incomplete);
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK21 RAW%u %02X %02X %02X %02X %02X %02X %02X %02X",
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK21 RAW%u %02X%02X%02X%02X%02X%02X%02X%02X",
                           unsigned(w.prefix_len),
                           unsigned(w.prefix[0]), unsigned(w.prefix[1]),
                           unsigned(w.prefix[2]), unsigned(w.prefix[3]),
