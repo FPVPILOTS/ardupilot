@@ -1,5 +1,14 @@
-# Separate automatic handshake-only bench target; NEVER for flight.
-# Reuses the tested HSLab hardware ownership and 0x21-only whitelist.
-include ../Pixhawk6C-SpktSmart-HSLab/hwdef.dat
+# Automatic SRXL2 handshake ONLY; unarmable laboratory image; never for flight.
+# Include the common, passive base directly rather than HSLab:
+# HSLab defines CHIBIOS_SHORT_BOARD_NAME itself and re-including it followed by
+# a different definition causes a compiler -Werror macro-redefinition failure.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-Spkt-AutoLab"
+
+# Preserve *all* original HSLab electrical, packet and arming restrictions:
+# the 0x21-only whitelist stays active and both motor-related compile-time
+# validation flags remain 0 as defined by the shared base.
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1
+
+# Only this dedicated image enables the automatic, bounded lab handshake.
 define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
