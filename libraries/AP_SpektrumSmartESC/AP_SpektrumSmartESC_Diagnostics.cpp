@@ -116,8 +116,15 @@ void AP_SpektrumSmartESC_Diagnostics::init()
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: telemetry index busy");
     }
 #endif
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: bench RX only; arming inhibited; no TX");
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: passive silence may mean no master polling");
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
+    if (_auto == 1) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: AUTO handshake TX only; no motor/control");
+    } else
+#endif
+    {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: bench RX only; arming inhibited; no TX");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPKT: passive silence may mean no master polling");
+    }
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     if (_auto == 1) {
         uint8_t id[16] {};
