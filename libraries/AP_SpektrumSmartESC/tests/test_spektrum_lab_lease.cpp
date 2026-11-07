@@ -41,14 +41,14 @@ int main()
     assert(early.start(0x40, 0x1234U, 100U, true));
     assert(!early.take(directed, sizeof(directed), 110U));
     hello[13] ^= 1;
-    assert(!early.authorize_startup_announcement(hello, sizeof(hello), 111U));
+    assert(!early.authorize_startup_announcement(hello, sizeof(hello), 111U, 111U));
     hello[13] ^= 1;
     hello[3] = 0x41;
     seal(hello);
-    assert(!early.authorize_startup_announcement(hello, sizeof(hello), 112U));
+    assert(!early.authorize_startup_announcement(hello, sizeof(hello), 112U, 112U));
     hello[3] = 0x40;
     seal(hello);
-    assert(early.authorize_startup_announcement(hello, sizeof(hello), 113U));
+    assert(early.authorize_startup_announcement(hello, sizeof(hello), 113U, 113U));
     assert(early.take(directed, sizeof(directed), 115U));
     // The same native 0x21-only lease allows one final broadcast, but not
     // another transmission after the confirmation packet.
@@ -59,14 +59,19 @@ int main()
 
     Lease expired;
     assert(expired.start(0x40, 0x1234U, 100U, true));
-    assert(expired.authorize_startup_announcement(hello, sizeof(hello), 110U));
+    assert(expired.authorize_startup_announcement(hello, sizeof(hello), 110U, 110U));
     directed[4] = 0x40;
     seal(directed);
     assert(!expired.take(directed, sizeof(directed), 186U));
 
+    Lease stale;
+    assert(stale.start(0x40, 0x1234U, 100U, true));
+    assert(!stale.authorize_startup_announcement(hello, sizeof(hello), 105U, 130U));
+    assert(!stale.authorize_startup_announcement(hello, sizeof(hello), 99U, 101U));
+
     Lease ordinary;
     assert(ordinary.start(0x40, 0x1234U, 100U, false));
-    assert(!ordinary.authorize_startup_announcement(hello, sizeof(hello), 110U));
+    assert(!ordinary.authorize_startup_announcement(hello, sizeof(hello), 110U, 110U));
 
     std::puts("2 Phase 17D HSLab lease/accessor and early-startup native-gate tests passed (simulation only)");
 }
