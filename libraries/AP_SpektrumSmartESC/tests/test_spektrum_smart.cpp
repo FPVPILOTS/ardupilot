@@ -553,6 +553,36 @@ TEST(SpektrumSmart, ObservationReportsUnsolicitedSensorWithoutPublishing)
     EXPECT_EQ(e.observation().crc_frames, 2U); EXPECT_EQ(e.observation().accepted, 0U);
 }
 
+TEST(SpektrumSmart, RawPacketTypeCountsNeverImplyAuthentication)
+{
+    Engine e;
+    uint8_t wrong_handshake[] = {0xA6, 0x21, 14, 0x41, 0x30, 10, 0, 0, 1, 2, 3, 4, 0, 0};
+    seal(wrong_handshake);
+    EXPECT_FALSE(send(e, wrong_handshake, 1));
+    uint8_t control[5] {};
+    EXPECT_EQ(Engine::encode(0xCD, nullptr, 0, control, sizeof(control)), 5);
+    EXPECT_FALSE(send(e, control, 2));
+    uint8_t sensor[22] {};
+    telemetry_packet(sensor);
+    EXPECT_FALSE(send(e, sensor, 3));
+    uint8_t unknown[5] {};
+    EXPECT_EQ(Engine::encode(0x99, nullptr, 0, unknown, sizeof(unknown)), 5);
+    EXPECT_FALSE(send(e, unknown, 4));
+    const auto &obs = e.observation();
+    EXPECT_EQ(obs.crc_frames, 4U);
+    EXPECT_EQ(obs.handshake_frames, 1U);
+    EXPECT_EQ(obs.control_frames, 1U);
+    EXPECT_EQ(obs.sensor_frames, 1U);
+    EXPECT_EQ(obs.other_frames, 1U);
+    EXPECT_EQ(obs.accepted, 0U);
+    EXPECT_EQ(e.counters().telemetry, 0U);
+    e.reset_observation();
+    EXPECT_EQ(obs.crc_frames, 4U); // cumulative diagnostics survive a session reset
+    unknown[4] ^= 1;
+    EXPECT_FALSE(send(e, unknown, 5));
+    EXPECT_EQ(obs.other_frames, 1U); // corrupt CRC never counts
+}
+
 #ifdef SPKTSMART_STANDALONE_TEST
 int main()
 {
@@ -586,7 +616,8 @@ int main()
     PassiveObserverRequiresNewMasterAfterLoss();
     PassiveObserverRejectsHigherNegotiatedBaud();
     ObservationSeparatesFramingFromDeviceProof(); ObservationReportsUnsolicitedSensorWithoutPublishing();
-    std::puts("31 Spektrum Smart protocol/planner/observation tests passed");
+    RawPacketTypeCountsNeverImplyAuthentication();
+    std::puts("32 Spektrum Smart protocol/planner/observation tests passed");
 }
 #else
 AP_GTEST_MAIN()
