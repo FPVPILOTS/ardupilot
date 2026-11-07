@@ -358,6 +358,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 RX%lu FE%lu",
                       (unsigned long)_auto_rx.observation().crc_frames,
                       (unsigned long)hw.framing);
+        if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 HANDSHAKE ONLY; NO ESC TLM/THROTTLE");
+        }
     }
 }
 #endif
