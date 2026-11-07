@@ -246,6 +246,7 @@ bool DiagnosticRX::diagnostic_poll_lab_start()
         _uart_recovery.eligible(_errors, AP_HAL::millis()) &&
         !_lab_hs_lease.active(AP_HAL::millis()) &&
         _head == _tail && palReadLine(PAL_LINE(GPIOA, 0)) &&
+        AP_SpektrumSmartESC_PollLab::rx_gap_safe(AP_HAL::millis(), _last_uart_rx_ms) &&
         (GPIOA->MODER & 3U) == 2U &&
         (GPIOA->AFRL & 15U) == 8U &&
         (GPIOA->OTYPER & 1U) &&
@@ -473,6 +474,7 @@ void DiagnosticRX::poll()
         // diagnostic errors, never silently interpreted as a healthy link.
         for (uint8_t i = 0; i < 16 && (UART4->ISR & USART_ISR_RXNE_RXFNE); i++) {
             const uint8_t value = UART4->RDR;
+            _last_uart_rx_ms = now;
             const uint16_t next = (_head + 1U) % SIZE;
             if (next == _tail) {
                 _errors++;
