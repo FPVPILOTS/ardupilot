@@ -10,6 +10,7 @@ bin="build/Pixhawk6C-SpktSmart-PollLab/bin/arduplane"
 test -s "$bin"
 test -s "${bin}.apj"
 strings "$bin" | grep -F "SPK20 POLL TX" >/dev/null
+strings "$bin" | grep -F "SPK21 TC" >/dev/null
 strings "$bin" | grep -F "SPK20 POLLLAB: MOTOR PHASES MUST BE UNPLUGGED" >/dev/null
 strings "$bin" | grep -F "SPK17 FAST OK" >/dev/null
 printf '\nPHASE17E-D BUILD PASS (EXPERIMENTAL POLLLAB; NOT FOR FLIGHT)\n'
