@@ -254,6 +254,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       arming_blocked() && SRV_Channels::get_emergency_stop() &&
                       _enable == 1 && _probe == 0 && _handshake == 0;
     if (!safe) {
+        _auto_telem_observer.invalidate();
         _auto_session.uart_fault();
         if (port != nullptr && _auto_leased) {
             (void)port->diagnostic_handshake(nullptr, 0, true);
@@ -292,6 +293,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                     uint8_t packet[AP_SpektrumSmartESC::MAX_PACKET] {};
                     uint8_t length = 0;
                     if (_auto_rx.observed_frame(packet, sizeof(packet), length)) {
+                        // Phase 17E-A: CRC-valid packet inventory and optional
+                        // untrusted 0x80 sensor candidate. No poll, motor control,
+                        // AP_ESC_Telem publication or extra UART transmissions.
+                        _auto_telem_observer.observe_crc_frame(
+                            packet, length, acquired_ms, 0x30);
                         if (packet[1] == 0xCD ||
                             (packet[1] == 0x21 && packet[3] >= 0x10 && packet[3] < 0x40)) {
                             // Some other controller/master owns this bus.
@@ -329,6 +335,10 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                              (hw.cr3 & 8U) != 0;
     const bool bus_idle = (hw.handshake_flags & 32U) != 0;
     const auto action = _auto_session.tick(now_ms * 1000U, safe, bus_idle, rx_restored);
+    if (_auto_session.status().state !=
+        AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
+        _auto_telem_observer.invalidate(); // Never replay ESC data after loss.
+    }
     if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE) {
         _auto_uart_error_baseline = port->receive_errors();
         if (_auto_leased ||
@@ -401,6 +411,32 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       (unsigned long)_auto_fast_denied);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 POST RX%lu",
                       (unsigned long)_auto_rx.observation().crc_frames);
+        const auto &tl = _auto_telem_observer.status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK18 FRM H%lu C%lu T%lu O%lu",
+                      (unsigned long)tl.handshake_frames,
+                      (unsigned long)tl.control_frames,
+                      (unsigned long)tl.sensor_frames,
+                      (unsigned long)tl.other_frames);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK18 ESC CAND%lu BAD%lu OTHER%lu",
+                      (unsigned long)tl.esc_candidates,
+                      (unsigned long)tl.rejected_sensors,
+                      (unsigned long)tl.other_sensors);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK18 LAST D%02x S%02x SUB%02x",
+                      unsigned(tl.last_destination),
+                      unsigned(tl.last_sensor_id),
+                      unsigned(tl.last_secondary_id));
+        AP_SpektrumSmartESC::Telemetry candidate {};
+        if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED &&
+            _auto_telem_observer.candidate(candidate, now_ms)) {
+            // Not yet authenticated to an ESC source: diagnostic ONLY.
+            // ERPM must not be mislabeled as mechanical shaft RPM.
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK18 UNVERIFIED FL%04x ERPM%lu",
+                          unsigned(candidate.valid),
+                          (unsigned long)candidate.electrical_rpm);
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK18 OBS V%.2f I%.2f T%.1f",
+                          double(candidate.voltage), double(candidate.current),
+                          double(candidate.temperature_c));
+        }
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 HANDSHAKE ONLY; NO ESC TLM/THROTTLE");
         }
