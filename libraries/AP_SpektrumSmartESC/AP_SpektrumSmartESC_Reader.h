@@ -17,6 +17,11 @@ public:
         uint32_t rx_bytes = 0, rx_frames = 0, crc_errors = 0;
         uint32_t tx_frames = 0, tx_bytes = 0, echoes = 0, timeouts = 0, unexpected = 0;
         uint32_t stale_bytes = 0;
+        // CRC-valid startup announcements are observed, never accepted as a
+        // solicited response or proof of LINKED state.
+        uint32_t startup_announcements = 0;
+        uint8_t last_hs_src = 0, last_hs_dst = 0;
+        uint8_t last_hs_priority = 0, last_hs_baud = 0;
         uint8_t responses = 0; // Requested, CRC-valid peer replies; excludes advertisements/echoes.
         uint32_t uid = 0, negotiated_baud = 0;
         uint8_t device = 0, priority = 0, baud_mask = 0, info = 0, type = 0;
