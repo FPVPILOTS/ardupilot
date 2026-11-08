@@ -15,6 +15,11 @@ public:
         uint16_t forward = 0;
         uint16_t reverse = 0;
         uint32_t direction_dwell_ms = 0;
+        // Explicit bench-only fallback: permit ongoing observed 0x21 peer
+        // handshakes when an ESC supplies no 0x80 reply to control frames.
+        // This is not proof that the ESC acted on throttle and cannot grant
+        // flight arming without real telemetry.
+        bool handshake_only_bench = false;
     };
     struct Demand {
         float throttle = 0; // Normalized forward/reverse magnitude, 0..1.
