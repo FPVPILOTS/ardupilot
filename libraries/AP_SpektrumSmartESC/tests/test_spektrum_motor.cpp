@@ -417,6 +417,8 @@ TEST(SpektrumMotor, HandshakeOnlyBenchDoesNotPretendToHaveTelemetry)
     f.feed(p,n,80000);
     f.tick(83000);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    f.port.complete=true; f.tick(85000); // Complete the second control TX.
+    f.tick(90000); // Optional 0x80 reply timed out; still not armed.
     f.tick(200000); // Stale handshake: no infinite run without a live peer.
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
 }
