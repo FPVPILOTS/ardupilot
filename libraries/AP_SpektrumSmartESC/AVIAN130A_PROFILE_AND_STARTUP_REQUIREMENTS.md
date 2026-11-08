@@ -66,10 +66,26 @@ controller or PWM fallback is part of this architecture.
 5. Verify ESC-applied zero throttle, stopped eRPM and full failure behavior
    using a restrained, **rotorless** motor test. Do not test with a mounted
    90mm EDF rotor or a flight-ready aircraft.
+   The native code now sends only CH1 zero while disarmed to bootstrap
+   telemetry and requires a fresh zero-throttle/eRPM=0 observation before
+   approving the motor for arming. A source-less 0x80 sensor frame cannot
+   replace a live, separately validated ESC 0x21 handshake.
+   The ArduPlane producer now supplies fresh `!is_flying()` ground evidence
+   and the native receiver supplies sensor-derived stop evidence.
+   Physical corroboration is still required before flight.
 6. Only then enable hardware production flags on a separately reviewed
    target, set the physically measured production profile, run host/sanitizer
    and firmware builds, and bench-validate live full-range command, switch
    direction and all independent loss cases before flight.
+
+## Production handshake detail still to validate
+
+The physically proven AutoLab handshake uses flight controller ID `0x30`.
+The existing native motor coordinator's `AP_SpektrumSmartESC_Reader::SOURCE`
+is `0x31` (a valid Spektrum FC unit ID), which has **not** been verified
+with this exact ESC on the bench. Do not treat the proven 0x30 exchange as
+a demonstrated 0x31 motor-controller start. The real production handshake,
+including every restart/failsafe scenario, remains an acceptance test.
 
 ## External references
 
