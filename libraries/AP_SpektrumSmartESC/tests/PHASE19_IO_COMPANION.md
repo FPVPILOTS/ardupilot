@@ -33,11 +33,26 @@ The script compiles the dedicated IO target into
 flash**, does not modify `Tools/IO_Firmware`, and does not bypass the
 FMU's `AP_IOMCU_FIRMWARE_UPDATE_ENABLED=0` setting.
 
-The build does not itself prove that the user's particular Pixhawk6C has
-an STM32F103 IO chip with compatible bootloader/clock/pin mapping.
-**Verify actual hardware identification before selecting any IO image.**
-Avoid installing or auto-installing either generated image until compatibility
-and rollback procedure are reviewed.
+Holybro explicitly specifies the Pixhawk 6C IO processor as
+**STM32F103**, and the repository's own
+`libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C/hwdef.dat` explicitly embeds
+`Tools/IO_Firmware/iofirmware_f103_lowpolh.bin` (not `highpolh`).
+Accordingly, the F103 **lowpolh** companion build is the sole candidate for
+further qualification on this target. The highpolh binary is generated only
+to confirm the target can build both variants; it is **not** a recommended
+flash choice for Pixhawk 6C.
+
+These references establish the board family's processor and stock IO image
+selection, but not that a specific unit has a compatible bootloader revision
+or that the modified special image electrically inhibits MAIN3.
+**Verify the physical board and IO identity, the correct IO pin mapping, and
+a recovery procedure before selecting an image to install.** Do not
+install either build automatically.
+
+References:
+- https://docs.holybro.com/autopilot/pixhawk-6c/technical-specification
+- `libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C/hwdef.dat` (stock ROMFS IO binary mapping).
+
 
 ## Qualification still required, in order
 
