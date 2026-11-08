@@ -1128,8 +1128,8 @@ void AP_SpektrumSmartESC_Diagnostics::update()
         SRV_Channels::set_emergency_stop(true);
     }
     const uint32_t now = AP_HAL::millis();
-    if (_native_motor != nullptr) {
-        return; // The qualified backend exclusively owns RX; never close/consume it here.
+    if (_native_motor != nullptr || _motor_selected) {
+        return; // Native selection (even when invalid) never falls back to a bench RX master.
     }
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     if (_auto == 1
