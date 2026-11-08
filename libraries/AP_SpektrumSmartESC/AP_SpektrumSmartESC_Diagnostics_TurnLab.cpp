@@ -30,6 +30,19 @@ void AP_SpektrumSmartESC_Diagnostics::observe_turn(const uint8_t *packet, uint8_
     if (!_turn_active) { return; }
     _turn_rx++; // Physical CRC-valid inventory, never simulated or generated TX.
     if (packet[1] == 0x80 && length == 22 && packet[3] == 0x30) {
+        // Decode what the ESC-class sensor actually reports; unlike an
+        // addressed 0x21 handshake, a 0x80 packet carries no source ID.
+        // This is a candidate only, never an ESC-arm/motor-stop confirmation.
+        AP_SpektrumSmartESC::Telemetry esc {};
+        if (packet[4] == 0x20 &&
+            AP_SpektrumSmartESC::decode_esc(packet + 4, 16, esc)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "SPK22 ESC CAND V%u ERPM%lu TH%u VALID%04X",
+                          unsigned(esc.voltage * 100.0f),
+                          (unsigned long)esc.electrical_rpm,
+                          unsigned(esc.throttle_pct * 10.0f),
+                          unsigned(esc.valid));
+        }
         // A source-less telemetry candidate is not proof of peer identity or
         // applied throttle. Unsolicited 0x21 frames do not count as telemetry.
         if (_turn_last_tc_ms != 0 && int32_t(ms - _turn_last_tc_ms) >= 0 &&
@@ -117,7 +130,23 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         receipt.main3_inhibited && receipt.failsafe_inhibited && receipt.aux7_reserved &&
         uint32_t(now - receipt.acquired_ms) < 50;
     e.owner_ms = receipt.acquired_ms;
-    if (!e.safe(now)) { finish_turn("FAULT_SAFETY"); return; }
+    if (!e.safe(now)) {
+        // Report the EXACT failed predicate from the first real bench trial.
+        // A generic FAULT_SAFETY cannot distinguish peer silence, IO receipt
+        // staleness, emergency-stop changes or UART faults.
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                      "SPK22 SAFE D%u STOP%u IO%u PEER%u UART%u",
+                      unsigned(e.disarmed), unsigned(e.emergency_stop),
+                      unsigned(e.owner), unsigned(e.peer), unsigned(e.uart_ok));
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                      "SPK22 AGE P%lu IO%lu ERR%lu HF%lu",
+                      (unsigned long)(e.peer_ms ? uint32_t(now-e.peer_ms) : 0xFFFFFFFFUL),
+                      (unsigned long)(e.owner_ms ? uint32_t(now-e.owner_ms) : 0xFFFFFFFFUL),
+                      (unsigned long)(port ? port->receive_errors()-_turn_error_base : 0UL),
+                      (unsigned long)(hw.handshake_faults-_turn_fault_base));
+        finish_turn("FAULT_SAFETY");
+        return;
+    }
     if (_turn_pending) {
         if (_auto_leased || (hw.handshake_flags & 32U) == 0 || (hw.flags & 9U) != 9U) { return; }
         uint32_t started = now;
