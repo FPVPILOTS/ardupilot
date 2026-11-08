@@ -42,6 +42,7 @@ test -s "$bin"
 test -s "$apj"
 strings "$bin" | grep -F "SPK22 TURNLAB; UNARMABLE; PROFILE" >/dev/null
 strings "$bin" | grep -F "SPK22 TC S%u CH1=%u CH7=%u RX%u" >/dev/null
+strings "$bin" | grep -F "SPK22 IO INSTALLED CRC 0x%08lX" >/dev/null
 
 python3 - "$apj" <<'PY'
 import json
