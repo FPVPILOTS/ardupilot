@@ -120,9 +120,42 @@ bool AP_IOMCU::smart_esc_inhibit(AP_IOMCU_SmartESCInhibit &proof, uint32_t &rece
 #endif
 }
 
+bool AP_IOMCU::smart_esc_firmware_crc(uint32_t &observed_crc)
+{
+#if AP_IOMCU_SMART_ESC_CLIENT
+    WITH_SEMAPHORE(_smart_esc_sem);
+    if (!_smart_esc_crc_valid ||
+        uint32_t(AP_HAL::millis() - _smart_esc_crc_received_ms) > 10000U) {
+        return false;
+    }
+    observed_crc = _smart_esc_observed_crc;
+    return true;
+#else
+    (void)observed_crc;
+    return false;
+#endif
+}
+
 void AP_IOMCU::update_smart_esc_inhibit(uint32_t now_ms)
 {
 #if AP_IOMCU_SMART_ESC_CLIENT
+    // Read the identity of the *currently installed* IO firmware without
+    // requesting a motor lease. Keep the IO UART transaction in its owning
+    // IOMCU thread, never in the vehicle/main thread. This does NOT install
+    // firmware or assert that MAIN3 is physically isolated.
+    if (_smart_esc_crc_poll_ms == 0 ||
+        uint32_t(now_ms - _smart_esc_crc_poll_ms) >= 2000U) {
+        _smart_esc_crc_poll_ms = now_ms;
+        uint32_t observed_crc = 0;
+        const bool read_ok = read_registers(PAGE_SETUP, PAGE_REG_SETUP_CRC,
+                                           2, (uint16_t *)&observed_crc);
+        WITH_SEMAPHORE(_smart_esc_sem);
+        _smart_esc_crc_valid = read_ok && observed_crc != 0;
+        if (_smart_esc_crc_valid) {
+            _smart_esc_observed_crc = observed_crc;
+            _smart_esc_crc_received_ms = AP_HAL::millis();
+        }
+    }
     uint32_t nonce, expected_crc;
     {
         WITH_SEMAPHORE(_smart_esc_sem);
