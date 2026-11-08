@@ -37,7 +37,7 @@ void AP_SpektrumSmartESC_Diagnostics::observe_turn(const uint8_t *packet, uint8_
         if (packet[4] == 0x20 &&
             AP_SpektrumSmartESC::decode_esc(packet + 4, 16, esc)) {
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "SPK22 ESC CAND V%u ERPM%lu TH%u VALID%04X",
+                          "SPK22 ESC CAND VcV%u eRPM%lu THd10%u M%04X",
                           unsigned(esc.voltage * 100.0f),
                           (unsigned long)esc.electrical_rpm,
                           unsigned(esc.throttle_pct * 10.0f),
