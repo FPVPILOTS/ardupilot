@@ -25,6 +25,7 @@ def main():
     poll_lab_executable = args.out.resolve() / 'test_spektrum_poll_lab.exe'
     bench6_executable = args.out.resolve() / 'test_spektrum_bench6.exe'
     rx_witness_executable = args.out.resolve() / 'test_spektrum_post_poll_diag.exe'
+    motor_executable = args.out.resolve() / 'test_spektrum_motor.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -87,6 +88,16 @@ def main():
              str(library / 'tests/test_spektrum_post_poll_diag.cpp'),
              '-o', str(rx_witness_executable)],
             [str(rx_witness_executable)],
+            # Exercise the SAME motor coordinator used by the native board,
+            # using a mock UART/IO owner. Physical hardware TX remains disabled.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
+             str(library / 'AP_SpektrumSmartESC_ChannelData.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Motor.cpp'),
+             str(library / 'tests/test_spektrum_motor.cpp'),
+             '-o', str(motor_executable)],
+            [str(motor_executable)],
         ]
         if args.arm_cxx:
             commands.append([
