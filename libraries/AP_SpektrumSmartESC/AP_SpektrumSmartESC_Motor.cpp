@@ -222,13 +222,22 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
         transmit(n, now_us, true);
         return;
     }
-    if (uint32_t(now_us - _last_peer) >= 50000) {
+    // Some physical ESCs continue sending valid 0x21 handshakes but do not
+    // answer a 0xCD control frame with 0x80. Preserve the strict telemetry
+    // contract by default; allow a separately qualified BENCH-only fallback.
+    const uint32_t peer_deadline_us = _profile.handshake_only_bench ? 100000U : 50000U;
+    if (uint32_t(now_us - _last_peer) >= peer_deadline_us) {
         fault(Fault::ESC_LOSS);
         return;
     }
     if (_waiting_reply) {
-        if (uint32_t(now_us - _reply_since) >= 5000) {
-            fault(Fault::ESC_LOSS);
+        if (uint32_t(now_us - _reply_since) >= 5000U) {
+            if (_profile.handshake_only_bench) {
+                // This does NOT claim an accepted command or any telemetry.
+                _waiting_reply = false;
+            } else {
+                fault(Fault::ESC_LOSS);
+            }
         }
         return;
     }
@@ -314,9 +323,21 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     if (_parser.observation().crc_frames == before) {
         return;
     }
-    uint8_t packet[80], n;
-    if (!_parser.observed_frame(packet, sizeof(packet), n) || !_waiting_reply ||
-        uint32_t(acquisition_us - _reply_since) >= 5000 || n != 22 || packet[1] != 0x80 ||
+    uint8_t packet[80] {}, n = 0;
+    if (!_parser.observed_frame(packet, sizeof(packet), n)) {
+        fault(Fault::PROTOCOL);
+        return;
+    }
+    // A real Avian sends unsolicited 0x21 every ~50ms after linking.
+    // Do not classify its correctly addressed handshake as a protocol
+    // failure, whether or not a 0x80 control reply is currently pending.
+    if (n == 14 && packet[1] == 0x21 && packet[3] == _target &&
+        packet[4] == AP_SpektrumSmartESC_Reader::SOURCE) {
+        _last_peer = acquisition_us;
+        return;
+    }
+    if (!_waiting_reply ||
+        uint32_t(acquisition_us - _reply_since) >= 5000U || n != 22 || packet[1] != 0x80 ||
         packet[3] != AP_SpektrumSmartESC_Reader::SOURCE) {
         fault(Fault::PROTOCOL);
         return;
