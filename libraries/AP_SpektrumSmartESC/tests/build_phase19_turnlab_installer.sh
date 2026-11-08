@@ -5,6 +5,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
+# Validate native packet generation and all existing safety-contract tests
+# before producing any operator-loadable firmware image.
+python3 libraries/AP_SpektrumSmartESC/tests/run_host_tests.py
+
 io_board="iomcu-f103-spktsmart"
 fmu_board="Pixhawk6C-SpktSmart-TurnLab-IOInstall"
 io="build/$io_board/bin/iofirmware_lowpolh.bin"
@@ -43,6 +47,7 @@ test -s "$apj"
 strings "$bin" | grep -F "SPK22 TURNLAB; UNARMABLE; PROFILE" >/dev/null
 strings "$bin" | grep -F "SPK22 TC S%u CH1=%u CH7=%u RX%u" >/dev/null
 strings "$bin" | grep -F "SPK22 IO INSTALLED CRC 0x%08lX" >/dev/null
+strings "$bin" | grep -F "SPK22 ZERO TRIAL CH1=%u CH7 OMITTED; NO MOTION TX" >/dev/null
 
 python3 - "$apj" <<'PY'
 import json
