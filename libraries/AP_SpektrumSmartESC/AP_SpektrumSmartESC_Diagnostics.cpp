@@ -4,6 +4,9 @@
 #include <AP_Logger/AP_Logger.h>
 #include <GCS_MAVLink/GCS.h>
 #include <SRV_Channel/SRV_Channel.h>
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB && HAL_WITH_IO_MCU
+#include <AP_IOMCU/AP_IOMCU.h>
+#endif
 #include "AP_SpektrumSmartESC_Shadow.h"
 #include "AP_SpektrumSmartESC_ChibiOS.h"
 
@@ -651,6 +654,17 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         // separately qualified profile. Never label this image RX-only.
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TURNLAB PROFILE %u; TEST TX GATED",
                       unsigned(spektrum_turnlab_profile().valid()));
+#if HAL_WITH_IO_MCU
+        // Report the *observed* installed IOMCU image, not the firmware
+        // embedded in the FMU APJ. CRC alone is not a pin-isolation proof.
+        uint32_t installed_crc = 0;
+        if (AP::iomcu() != nullptr && AP::iomcu()->smart_esc_firmware_crc(installed_crc)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 IO INSTALLED CRC 0x%08lX",
+                          (unsigned long)installed_crc);
+        } else {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 IO CRC NOT AVAILABLE");
+        }
+#endif
 #else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 NO TX; 0xCD PREVIEW ONLY");
 #endif
