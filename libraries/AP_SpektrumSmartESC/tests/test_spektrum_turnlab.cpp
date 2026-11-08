@@ -204,6 +204,28 @@ int main()
         ++tests;
     }
     {
+        // Hardware observation at 20:17:51: P101 aborted all-zero trial.
+        // Only CH1-minimum observation tolerates a longer *authenticated*
+        // 0x21 gap during sensor 0x80 replies. Motor-turn retains 100ms.
+        auto e = evidence(1020);
+        e.peer_ms = 901; // 119ms since the last 0x21 from ESC 0x40.
+        assert(!e.safe(1020));        // motor-start safety unchanged
+        assert(e.safe(1020, true));   // zero-only diagnostic
+        Turn t(spektrum_turnlab_profile());
+        assert(t.start(true, evidence(1000), 1000, true));
+        uint8_t frame[Turn::LENGTH] {};
+        assert(t.prepare(evidence(1000), 1000, frame, sizeof(frame)) == Turn::ZERO_LENGTH);
+        assert(t.take(frame, Turn::ZERO_LENGTH, evidence(1000), 1000));
+        assert(t.complete(1002, true));
+        assert(t.prepare(e, 1020, frame, sizeof(frame)) == Turn::ZERO_LENGTH);
+        assert(frame[8] == 1 && frame[12] == 0 && frame[13] == 3);
+        assert(t.take(frame, Turn::ZERO_LENGTH, e, 1020));
+        assert(t.complete(1022, true));
+        e.peer_ms = 820; // 200ms stale: zero-only still fails closed.
+        assert(!e.safe(1020, true));
+        ++tests;
+    }
+    {
         // Fail closed for a wrong CH1 code or wrong/unknown IO image.
         auto p = spektrum_turnlab_profile();
         p.channels.zero = 4000;
