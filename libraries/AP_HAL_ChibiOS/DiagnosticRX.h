@@ -38,7 +38,7 @@ public:
     bool diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on = false) override;
     bool diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length, uint32_t acquired_ms) override;
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
-    bool diagnostic_turn_lab_start(uint32_t nonce, uint32_t &started_ms) override;
+    bool diagnostic_turn_lab_start(uint32_t nonce, bool zero_only, uint32_t &started_ms) override;
     bool diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bool finish,
                              uint32_t control_ms, uint32_t peer_ms) override;
 #endif
