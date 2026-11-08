@@ -1293,6 +1293,16 @@ bool AP_SpektrumSmartESC_Diagnostics::motor_evidence(const MotorEvidence &eviden
     return true;
 }
 
+bool AP_SpektrumSmartESC_Diagnostics::esc_reports_stopped() const
+{
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+    return AP_SpektrumSmartESC_Motor::physical_control_available() &&
+           _native_motor != nullptr && _native_motor->stopped_observed();
+#else
+    return false;
+#endif
+}
+
 void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool failsafe,
     bool reverse_available, bool reverse_permitted, bool reverse_configured, bool reverse_selected)
 {
@@ -1315,7 +1325,21 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
     s.reverse_selected = reverse_selected;
     s.reverse_permitted = reverse_permitted;
     AP_SpektrumSmartESC_Motor::Demand d;
-    if (!AP_SpektrumSmartESC_Plane::convert(s,AP_HAL::millis(),d)) { d.failsafe = true; }
+    const uint32_t now = AP_HAL::millis();
+    if (!armed) {
+        // ArduPlane suppresses or forces SERVO3 while disarmed; it is NOT a
+        // raw throttle source or an ESC-idle calibration. Request only zero
+        // so the physical ESC can first reply with its stopped telemetry.
+        d = {};
+        d.rc_ok = rc_ok;
+        d.control_ok = !s.failsafe;
+        d.failsafe = s.failsafe;
+        d.acquired_ms = now;
+    } else if (!AP_SpektrumSmartESC_Plane::convert(s,now,d)) {
+        d = {};
+        d.failsafe = true;
+        d.acquired_ms = now;
+    }
     d.ground_authorized = _motor_evidence.ground; d.ground_ms = _motor_evidence.ground_ms;
     d.stopped = _motor_evidence.stopped; d.stopped_ms = _motor_evidence.stopped_ms;
     _native_motor->update(d,AP_HAL::micros(),AP_HAL::millis());
