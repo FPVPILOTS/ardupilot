@@ -22,12 +22,22 @@ controller or PWM fallback is part of this architecture.
   measurement has been supplied. Do not equate CRC with pin-level proof.
 - `TURNRUN=2` sent true hardware-TC-completed `0xCD` frames with the
   candidate `CH1=768` and **no CH7 update**. The ESC produced correlated
-  `0x80` telemetry candidates, including about 15.44V, eRPM=0, throttle=0.
+  `0x80` telemetry candidates, including about 15.45V and eRPM=0.
+  **Correction (22:15 bench log):** `THd100` means 10.0% reported sensor
+  throttle, NOT zero. The previous diagnostic printed ten times the sensor
+  percentage. CH1=768 is therefore *not proven* to be accepted idle.
+  The source-less `0x80` frame is only a candidate, not authenticated ESC
+  identity, and the SRXL2 sensor voltage is a different data path from
+  the Pixhawk power-module battery monitor.
   This is useful protocol evidence, not proof that the ESC was armed or that
   a motor will stop after an unexpected control/link loss.
 - The original zero-only trial aborted with `AGE P101` and `FAULT_SAFETY`.
   The zero-only candidate path now tolerates up to 200ms between genuine
   `0x21` announcements, while the forward-motor TurnLab remains at 100ms.
+  The 22:15 run then aborted with `FAULT_TX_DENIED Q5 TC4`. The zero-only
+  coordinator has since been modified to wait for the *native UART physical*
+  2..100ms RX gap before consuming a frame, with defer and denial logging.
+  That change is not yet compiled/flashed/verified on hardware.
 - RP4TD raw RC3 input responded across 990..2011us, valid RC/failsafe
   `RC1 FS0`. `SERVO3_FUNCTION=70` was mapped (`MAP1`), but while the
   flight controller was disarmed, SERVO3 remained at 1100 and
