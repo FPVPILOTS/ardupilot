@@ -72,6 +72,8 @@ public:
         return _leased && (_status.state == State::IDLE || _status.state == State::FORWARD) &&
             owned(now_ms) && _initial_idle && !_armed_seen && !_waiting_reply &&
             _status.fault == Fault::NONE && _status.controls != 0 &&
+            // A handshake-only bench session never qualifies for flight arming.
+            (!_profile.handshake_only_bench || _status.telemetry != 0) &&
             _status.throttle == _profile.zero && !_status.reverse &&
             uint32_t(now_us - _last_peer) < 50000;
     }
