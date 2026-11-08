@@ -45,6 +45,7 @@ public:
                        const AP_SpektrumSmartESC_Motor::Qualification &qualification,
                        uint8_t target, uint32_t uid, uint32_t nonce);
     bool motor_evidence(const MotorEvidence &evidence);
+    bool esc_reports_stopped() const;
     void plane_control(bool armed, bool rc_ok, bool failsafe, bool reverse_available,
                        bool reverse_permitted, bool reverse_configured, bool reverse_selected);
     bool arming_blocked() const { return bench_blocked() || (_motor_enable.get() == 1 && !motor_arming_ready()) || (_motor_selected && !motor_arming_ready()); }
