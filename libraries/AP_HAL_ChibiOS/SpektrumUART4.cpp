@@ -211,7 +211,7 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
          (AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
           AP_SpektrumSmartESC_PollLab::exact_packet(data, length))
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
-         || (data != nullptr && data[1] == 0xCD &&
+         || (data != nullptr && length >= 2 && data[1] == 0xCD &&
              length == (_rx._turn_lease.zero_only() ?
                          AP_SpektrumSmartESC_TurnLab::ZERO_LENGTH :
                          AP_SpektrumSmartESC_TurnLab::LENGTH) &&
