@@ -63,6 +63,7 @@ private:
     bool _turn_zero_only = false; // One-shot CH1=minimum candidate; never sends CH7 or 6%.
     uint32_t _turn_nonce = 0, _turn_requested_ms = 0, _turn_error_base = 0, _turn_fault_base = 0;
     uint32_t _turn_tc_base = 0, _turn_last_tc_ms = 0, _turn_rx = 0, _turn_reply = 0, _turn_late = 0;
+    uint32_t _turn_gap_wait = 0; // Deferred frames; never consume an on-wire lease.
     AP_SpektrumSmartESC_TurnLab::State _turn_logged = AP_SpektrumSmartESC_TurnLab::State::IDLE;
 #endif
     bool bench_blocked() const { return AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB || _bench.arming_blocked(_enable.get()) || _probe.get() != 0 || _handshake.get() != 0; }
