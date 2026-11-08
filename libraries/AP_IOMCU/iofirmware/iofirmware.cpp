@@ -58,6 +58,17 @@ void loop();
 
 #define DEBUG_ENABLED 0
 
+// MAIN3 is physically absent from the dedicated IO hwdef. Filter all
+// software output masks as well, so later requests cannot reconfigure it.
+static constexpr uint32_t io_output_mask(uint32_t requested)
+{
+#if AP_IOMCU_SMART_ESC_INHIBIT
+    return AP_IOMCU_SmartESCInhibit::permitted_outputs(requested);
+#else
+    return requested;
+#endif
+}
+
 #if defined(IOMCU_DEBUG) && DEBUG_ENABLED
 #include "chprintf.h"
 #define DEBUG(...) do { chprintf((BaseSequentialStream*)&IOMCU_DEBUG, __VA_ARGS__); } while (0)
@@ -370,6 +381,11 @@ void setup(void)
 {
     hal.rcin->init();
     hal.rcout->init();
+#if AP_IOMCU_SMART_ESC_INHIBIT
+    // Dedicated IOMCU image: MAIN3 / PB8 is INPUT in hwdef; never enable
+    // output channel index 2, including after a warm restart.
+    hal.rcout->disable_ch(AP_IOMCU_SmartESCInhibit::MAIN3_INDEX);
+#endif
     iomcu.init();
 
 #ifdef IOMCU_DEBUG
@@ -659,6 +675,11 @@ void AP_IOMCU_FW::pwm_out_update()
     memcpy(reg_servo.pwm, reg_direct_pwm.pwm, sizeof(reg_direct_pwm));
     hal.rcout->cork();
     for (uint8_t i = 0; i < SERVO_COUNT; i++) {
+#if AP_IOMCU_SMART_ESC_INHIBIT
+        if (!AP_IOMCU_SmartESCInhibit::output_allowed(i)) {
+            continue; // Never write MAIN3, including failsafe or RC override.
+        }
+#endif
         if (reg_status.flag_safety_off || (reg_setup.ignore_safety & (1U<<i))) {
             hal.rcout->write(i, reg_servo.pwm[i]);
         } else {
@@ -708,7 +729,7 @@ void AP_IOMCU_FW::rcin_update()
         rc_input.flags_rc_ok = false;
     }
     if (update_rcout_freq) {
-        hal.rcout->set_freq(reg_setup.pwm_rates, reg_setup.pwm_altrate);
+        hal.rcout->set_freq(io_output_mask(reg_setup.pwm_rates), reg_setup.pwm_altrate);
         update_rcout_freq = false;
     }
     if (update_default_rate) {
@@ -1351,6 +1372,12 @@ void AP_IOMCU_FW::rcout_config_update(void)
     // so needs to be done here
     if (GPIO.channel_mask != last_GPIO_channel_mask) {
         for (uint8_t i=0; i<8; i++) {
+#if AP_IOMCU_SMART_ESC_INHIBIT
+            if (!AP_IOMCU_SmartESCInhibit::output_allowed(i)) {
+                hal.rcout->disable_ch(i);
+                continue; // Also reject GPIO pinMode(103, OUTPUT).
+            }
+#endif
             if ((GPIO.channel_mask & (1U << i)) != 0) {
                 hal.rcout->disable_ch(i);
                 hal.gpio->pinMode(101+i, HAL_GPIO_OUTPUT);
@@ -1363,6 +1390,12 @@ void AP_IOMCU_FW::rcout_config_update(void)
 
     if (last_channel_mask != reg_setup.channel_mask) {
         for (uint8_t i=0; i<IOMCU_MAX_CHANNELS; i++) {
+#if AP_IOMCU_SMART_ESC_INHIBIT
+            if (!AP_IOMCU_SmartESCInhibit::output_allowed(i)) {
+                hal.rcout->disable_ch(i);
+                continue;
+            }
+#endif
             if (reg_setup.channel_mask & 1U << i) {
                 hal.rcout->enable_ch(i);
             } else {
@@ -1391,11 +1424,11 @@ void AP_IOMCU_FW::rcout_config_update(void)
     case AP_HAL::RCOutput::MODE_PWM_DSHOT600:
 #endif
 #ifdef HAL_WITH_BIDIR_DSHOT
-        hal.rcout->set_bidir_dshot_mask(mode_out.bdmask);
+        hal.rcout->set_bidir_dshot_mask(io_output_mask(mode_out.bdmask));
 #endif
-        hal.rcout->set_reversible_mask(mode_out.reversible_mask);
+        hal.rcout->set_reversible_mask(io_output_mask(mode_out.reversible_mask));
         hal.rcout->set_dshot_esc_type(AP_HAL::RCOutput::DshotEscType(mode_out.esc_type));
-        hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
+        hal.rcout->set_output_mode(io_output_mask(mode_out.mask), (AP_HAL::RCOutput::output_mode)mode_out.mode);
         // enabling dshot changes the memory allocation
         reg_status.freemem = hal.util->available_memory();
         last_output_mode_mask |= mode_out.mask;
@@ -1406,16 +1439,16 @@ void AP_IOMCU_FW::rcout_config_update(void)
     case AP_HAL::RCOutput::MODE_PWM_ONESHOT:
     case AP_HAL::RCOutput::MODE_PWM_ONESHOT125:
         // setup to use a 1Hz frequency, so we only get output when we trigger
-        hal.rcout->set_freq(mode_out.mask, 1);
-        hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
+        hal.rcout->set_freq(io_output_mask(mode_out.mask), 1);
+        hal.rcout->set_output_mode(io_output_mask(mode_out.mask), (AP_HAL::RCOutput::output_mode)mode_out.mode);
         last_output_mode_mask |= mode_out.mask;
         break;
     case AP_HAL::RCOutput::MODE_PWM_BRUSHED:
         // default to 2kHz for all channels for brushed output
-        hal.rcout->set_freq(mode_out.mask, 2000);
+        hal.rcout->set_freq(io_output_mask(mode_out.mask), 2000);
         hal.rcout->set_esc_scaling(1000, 2000);
-        hal.rcout->set_output_mode(mode_out.mask, AP_HAL::RCOutput::MODE_PWM_BRUSHED);
-        hal.rcout->set_freq(mode_out.mask, reg_setup.pwm_altrate);
+        hal.rcout->set_output_mode(io_output_mask(mode_out.mask), AP_HAL::RCOutput::MODE_PWM_BRUSHED);
+        hal.rcout->set_freq(io_output_mask(mode_out.mask), reg_setup.pwm_altrate);
         last_output_mode_mask |= mode_out.mask;
         break;
     default:
@@ -1447,6 +1480,11 @@ void AP_IOMCU_FW::fill_failsafe_pwm(void)
 void AP_IOMCU_FW::GPIO_write()
 {
     for (uint8_t i=0; i<8; i++) {
+#if AP_IOMCU_SMART_ESC_INHIBIT
+        if (!AP_IOMCU_SmartESCInhibit::output_allowed(i)) {
+            continue; // No MAIN3 GPIO output even if FMU requests it.
+        }
+#endif
         if ((GPIO.channel_mask & (1U << i)) != 0) {
             hal.gpio->write(101+i, (GPIO.output_mask & (1U << i)) != 0);
         }
