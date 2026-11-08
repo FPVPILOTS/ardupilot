@@ -99,14 +99,14 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
     // @Param: TURNACK
     // @DisplayName: One-shot forward motor-turn bench acknowledgement
-    // @Description: TurnLab only. Write 18 to confirm a restrained unloaded motor, stopped rotor, clear area and immediately accessible independent power cutoff. Consumed in RAM, ignored at boot. Does not qualify electrical behavior or Avian endpoints. Request TURNRUN=1 within ten seconds. Never for flight.
+    // @Description: TurnLab only. Write 18 to acknowledge an isolated restrained bench with independent power cutoff. Request TURNRUN=2 for a 3s CH1-minimum-only digital readiness trial with CH7 OMITTED and no nonzero throttle; TURNRUN=1 remains the separately qualified forward 0-6-0 motor trial. One request per reboot; never for flight.
     // @Values: 0:Idle,18:Bench operator ready
     // @User: Advanced
     AP_GROUPINFO("TURNACK", 13, AP_SpektrumSmartESC_Diagnostics, _turnack, 0),
     // @Param: TURNRUN
-    // @DisplayName: Single qualified forward motor-turn sequence
-    // @Description: Source-qualified TurnLab only, requires TURNACK and fresh actual IO inhibit receipt. Sends calibrated CH1 neutral then 6 percent then neutral with CH7 held at verified forward. One request per reboot, failed requests also consumed. Abort inhibits further TX; power cutoff remains necessary because no UART result proves a stopped motor.
-    // @Values: -1:Abort,0:Idle,1:Request forward trial
+    // @DisplayName: Single CH1-neutral or qualified 6 percent motor trial
+    // @Description: TURNRUN=2 sends ONLY the unverified but standard-derived minimum CH1 value in 16-byte 0xCD frames for 3s (no CH7 or nonzero throttle), to test whether Avian recognizes digital idle. TURNRUN=1 remains blocked until independently qualified forward/stop behavior. Both require fresh TURNACK, live linked peer and IO inhibit; any request consumes this boot's single trial.
+    // @Values: -1:Abort,0:Idle,1:Qualified 0-6-0 motor trial,2:CH1 minimum only readiness test
     // @User: Advanced
     AP_GROUPINFO("TURNRUN", 14, AP_SpektrumSmartESC_Diagnostics, _turnrun, 0),
 #endif
@@ -652,8 +652,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 #elif AP_SPEKTRUM_SMART_ESC_TURN_LAB
         // TurnLab can transmit real channel-bearing control frames after a
         // separately qualified profile. Never label this image RX-only.
-        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TURNLAB PROFILE %u; TEST TX GATED",
-                      unsigned(spektrum_turnlab_profile().valid()));
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 MOTOR PROFILE %u ZERO TRIAL %u",
+                      unsigned(spektrum_turnlab_profile().valid()),
+                      unsigned(spektrum_turnlab_profile().zero_only_candidate()));
 #if HAL_WITH_IO_MCU
         // Report the *observed* installed IOMCU image, not the firmware
         // embedded in the FMU APJ. CRC alone is not a pin-isolation proof.
