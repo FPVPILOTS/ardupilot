@@ -295,7 +295,7 @@ bool DiagnosticRX::diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bo
     evidence.uart_ok = receive_errors() == _turn_errors;
     chSysLock();
     _turn_evidence = evidence;
-    const bool safe = evidence.safe(AP_HAL::millis());
+    const bool safe = evidence.safe(AP_HAL::millis(), _turn_lease.zero_only());
     chSysUnlock();
     if (!safe) { return false; }
     return packet == nullptr || diagnostic_transaction(packet, length, false);
