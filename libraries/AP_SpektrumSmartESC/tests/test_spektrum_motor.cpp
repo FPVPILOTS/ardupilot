@@ -234,7 +234,14 @@ TEST(SpektrumMotor, SafetyFaultsLatchAndNeverReenablePWM)
         case 1: f.d.rc_ok=false; expected=Motor::Fault::RC_LOSS; break;
         case 2: f.d.control_ok=false; expected=Motor::Fault::CONTROL_LOSS; break;
         case 3: f.d.failsafe=true; expected=Motor::Fault::CONTROL_LOSS; break;
-        case 4: f.d.ground_authorized=false; expected=Motor::Fault::GROUND; break;
+        case 4:
+            // Ground evidence is needed for reverse, not normal forward
+            // throttle in flight. Preserve this latched safety fault test
+            // by actually requesting the ground-restricted operation.
+            f.d.ground_authorized=false;
+            f.d.reverse=true;
+            expected=Motor::Fault::GROUND;
+            break;
         case 5: f.d.magnitude=std::numeric_limits<float>::quiet_NaN(); expected=Motor::Fault::INVALID_DEMAND; break;
         case 6: f.d.magnitude=-0.1f; expected=Motor::Fault::INVALID_DEMAND; break;
         case 7: f.d.reverse=true; f.d.reverse_permitted=false; expected=Motor::Fault::REVERSE_DENIED; break;
