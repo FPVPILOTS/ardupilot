@@ -155,6 +155,28 @@ int main()
         ++tests;
     }
     {
+        // Independent reference calculation from WingFlight SRXL2-ESC:
+        // channel = (pulse_us - 988) * 64, with nominal 1000..2000 us.
+        // These are REFERENCE candidates, NOT verified Avian stop/endpoints.
+        // Synthetic fixture ONLY; the physical source profile stays blocked.
+        const uint16_t candidate_zero = uint16_t((1000U - 988U) * 64U);
+        const uint16_t candidate_full = uint16_t((2000U - 988U) * 64U);
+        assert(candidate_zero == 768U && candidate_full == 64768U);
+        auto p = fixture();
+        p.channels.zero = candidate_zero;
+        p.channels.full = candidate_full;
+        Turn t(p);
+        assert(t.six_percent() == 4608U);
+        assert(t.encode(Turn::State::NEUTRAL, packet, sizeof(packet)) == Turn::LENGTH);
+        assert((uint16_t(packet[12]) | (uint16_t(packet[13]) << 8)) == 768U);
+        assert(t.encode(Turn::State::FORWARD6, packet, sizeof(packet)) == Turn::LENGTH);
+        assert((uint16_t(packet[12]) | (uint16_t(packet[13]) << 8)) == 4608U);
+        assert(t.encode(Turn::State::FINAL_NEUTRAL, packet, sizeof(packet)) == Turn::LENGTH);
+        assert((uint16_t(packet[12]) | (uint16_t(packet[13]) << 8)) == 768U);
+        assert(!spektrum_turnlab_profile().valid()); // Never authorize hardware.
+        ++tests;
+    }
+    {
         // Dedicated IO companion: channel 3 / index 2 is always absent,
         // while the remaining PWM channels, especially SERVO7, remain intact.
         assert(AP_IOMCU_SmartESCInhibit::permitted_outputs(0xffU) == 0xfbU);
