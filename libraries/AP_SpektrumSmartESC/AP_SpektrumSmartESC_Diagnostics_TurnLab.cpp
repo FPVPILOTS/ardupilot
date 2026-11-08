@@ -55,7 +55,25 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         _turnrun.set(0);
         const bool authorized = !_turn_consumed && request == 1 && _turn_auth.consume(safe, now);
         _turn_consumed = true;
-        if (!authorized || !spektrum_turnlab_profile().valid()) {
+        const auto profile = spektrum_turnlab_profile();
+        if (!authorized || !profile.valid()) {
+            if (authorized) {
+                // Report which independent qualifications are still absent.
+                // These are source assertions, not automatically discovered
+                // ESC capabilities. No transmission occurs on this path.
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                              "SPK22 PROFILE TH%u FW%u IO%u EL%u LOSS%u",
+                              unsigned(profile.channels.throttle_verified),
+                              unsigned(profile.forward_verified),
+                              unsigned(profile.io_crc != 0),
+                              unsigned(profile.electrical),
+                              unsigned(profile.loss_behavior));
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                              "SPK22 VALUES ZERO%u FULL%u CH7%u",
+                              unsigned(profile.channels.zero),
+                              unsigned(profile.channels.full),
+                              unsigned(profile.channels.forward));
+            }
             finish_turn(authorized ? "BLOCKED_PROFILE" : "BLOCKED_AUTH/ABORT");
             return;
         }
