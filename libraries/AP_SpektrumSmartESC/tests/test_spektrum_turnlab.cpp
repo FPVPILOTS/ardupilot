@@ -177,6 +177,46 @@ int main()
         ++tests;
     }
     {
+        // Physical-profile candidate from Spektrum-compatible CH1=1000us;
+        // no claim that this specific Avian accepts it as low throttle.
+        const auto p = spektrum_turnlab_profile();
+        assert(p.zero_only_candidate());
+        assert(!p.valid()); // The 6% physical test MUST remain source-gated.
+        assert(p.channels.zero == 768U && p.channels.full == 64768U);
+        assert(p.io_crc == 0x6DBBAD71U);
+        Turn t(p);
+        assert(t.start(true, evidence(100), 100, true));
+        uint8_t frame[Turn::LENGTH] {};
+        for (uint32_t ms = 0; ms < Turn::ZERO_WINDOW_MS; ms += Turn::PERIOD_MS) {
+            const uint32_t now = 100 + ms;
+            assert(t.prepare(evidence(now), now, frame, sizeof(frame)) == Turn::ZERO_LENGTH);
+            assert(frame[0] == 0xA6 && frame[1] == 0xCD && frame[2] == Turn::ZERO_LENGTH);
+            assert(frame[8] == 1 && frame[9] == 0 && frame[10] == 0 && frame[11] == 0);
+            assert(frame[12] == 0 && frame[13] == 3); // CH1=768
+            assert(AP_SpektrumSmartESC::crc16(frame, Turn::ZERO_LENGTH) == 0);
+            assert(t.take(frame, Turn::ZERO_LENGTH, evidence(now), now));
+            assert(t.complete(now + 2, true));
+        }
+        assert(t.prepare(evidence(3100), 3100, frame, sizeof(frame)) == 0);
+        assert(t.state() == Turn::State::DONE);
+        assert(t.frames() == 150 && t.completed() == 150);
+        assert(!t.start(true, evidence(3110), 3110, false)); // no 6% follow-on
+        ++tests;
+    }
+    {
+        // Fail closed for a wrong CH1 code or wrong/unknown IO image.
+        auto p = spektrum_turnlab_profile();
+        p.channels.zero = 4000;
+        assert(!p.zero_only_candidate());
+        p = spektrum_turnlab_profile();
+        p.io_crc = 0;
+        assert(!p.zero_only_candidate());
+        Turn t(p);
+        assert(!t.start(true, evidence(100), 100, true));
+        assert(t.prepare(evidence(100), 100, packet, sizeof(packet)) == 0);
+        ++tests;
+    }
+    {
         // Dedicated IO companion: channel 3 / index 2 is always absent,
         // while the remaining PWM channels, especially SERVO7, remain intact.
         assert(AP_IOMCU_SmartESCInhibit::permitted_outputs(0xffU) == 0xfbU);
