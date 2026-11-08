@@ -130,7 +130,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         receipt.main3_inhibited && receipt.failsafe_inhibited && receipt.aux7_reserved &&
         uint32_t(now - receipt.acquired_ms) < 50;
     e.owner_ms = receipt.acquired_ms;
-    if (!e.safe(now)) {
+    if (!e.safe(now, _turn_zero_only)) {
         // Report the EXACT failed predicate from the first real bench trial.
         // A generic FAULT_SAFETY cannot distinguish peer silence, IO receipt
         // staleness, emergency-stop changes or UART faults.
