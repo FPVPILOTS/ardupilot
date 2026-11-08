@@ -111,8 +111,12 @@ struct Fixture {
             const uint8_t payload[] = {0x40,0x31,1,0,0,0x78,0x56,0x34,0x12};
             uint8_t heartbeat[80] {};
             const auto n = Engine::encode(0x21,payload,sizeof(payload),heartbeat,sizeof(heartbeat));
-            feed(heartbeat,n,us-1000U);
-            last_heartbeat_us = us-1000U;
+            // Keep the peer's half-duplex announcement at least 2ms before
+            // the next controller TX slot. A frame ending 1ms earlier makes
+            // the real UART correctly defer TX, but invalidates mock tests
+            // that demand exactly one control packet per simulated tick.
+            feed(heartbeat,n,us-3000U);
+            last_heartbeat_us = us-3000U;
         }
         tick(us); port.complete = true; tick(us + 2000); reply(us + 3000);
     }
