@@ -464,6 +464,37 @@ TEST(SpektrumMotor, HandshakeOnlyBenchDoesNotPretendToHaveTelemetry)
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
 }
 
+TEST(SpektrumMotor, DisarmedZeroBootstrapsWithoutFabricatedStoppedEvidence)
+{
+    Fixture f; f.discover();
+    f.d.armed = false;
+    f.d.stopped = false; // No motor sensor until first real 0xCD reply.
+    f.d.ground_authorized = false;
+    f.cycle(70000);
+    EXPECT_EQ(f.port.length,18);
+    EXPECT_EQ(f.motor.status().throttle,1000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_FALSE(f.motor.ready_to_arm(73,73000)); // No zero-RPM evidence gate yet.
+    f.d.stopped = true; // Independent mock of new real ESC RPM observer.
+    f.d.ground_authorized = true;
+    f.cycle(83000);
+    EXPECT_TRUE(f.motor.ready_to_arm(86,86000));
+}
+
+TEST(SpektrumMotor, ForwardThrustDoesNotRequireGroundButReverseDoes)
+{
+    Fixture f; f.discover(); f.cycle(70000);
+    f.d.ground_authorized = false; f.d.stopped = false;
+    f.d.magnitude = 0.5f;
+    f.cycle(83000); // Simulates forward flight; never gate it on GROUND.
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().throttle,31000);
+    Fixture rev; rev.discover(); rev.cycle(70000);
+    rev.d.ground_authorized = false; rev.d.reverse = true;
+    rev.tick(83000);
+    EXPECT_EQ(rev.motor.status().fault,Motor::Fault::GROUND);
+}
+
 TEST(SpektrumMotor, ProductionSourceCannotAccidentallyArm)
 {
     // These are synthetic values only, NOT physical Avian evidence.
@@ -542,9 +573,11 @@ int main()
     FinalSignedDemandMustAgreeWithExplicitDirection(); FinalPlaneQuartersBecomeIndependentChannelOneValues();
     RecurringUnsolicitedHandshakeIsNotAProtocolFault();
     HandshakeOnlyBenchDoesNotPretendToHaveTelemetry();
+    DisarmedZeroBootstrapsWithoutFabricatedStoppedEvidence();
+    ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("30 prepared master/command safety tests passed (mock transport only)");
+    std::puts("32 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
