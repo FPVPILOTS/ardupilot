@@ -4,6 +4,7 @@
 #include <AP_Logger/AP_Logger.h>
 #include <GCS_MAVLink/GCS.h>
 #include <SRV_Channel/SRV_Channel.h>
+#include <RC_Channel/RC_Channel.h>
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB && HAL_WITH_IO_MCU
 #include <AP_IOMCU/AP_IOMCU.h>
 #endif
@@ -1324,10 +1325,13 @@ void AP_SpektrumSmartESC_Diagnostics::plane_shadow(bool armed, bool rc_ok, bool 
     // Direct Mission Planner readout for the existing RP4TD -> Plane
     // -> final SERVO3 path. Never treats RC3 raw input as motor authority,
     // never writes to UART4 or a servo output. The bench remains UNARMABLE.
+    // Raw RC3 is shown separately from the processed SERVO3 output. It is
+    // evidence of RP4TD stick movement, never an actuator command.
+    const uint16_t rc3 = RC_Channels::get_radio_in(2);
     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                  "SPKRC S3 PWM%u MAP%u ARM%u RC%u FS%u",
-                  unsigned(pwm), unsigned(mapped), unsigned(armed),
-                  unsigned(rc_ok), unsigned(failsafe));
+                  "SPKRC IN3=%u S3=%u MAP%u ARM%u RC%u FS%u",
+                  unsigned(rc3), unsigned(pwm), unsigned(mapped),
+                  unsigned(armed), unsigned(rc_ok), unsigned(failsafe));
     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                   "SPKRC INT V%u MAG%u REV%u STOP%u",
                   unsigned(intent_valid),
