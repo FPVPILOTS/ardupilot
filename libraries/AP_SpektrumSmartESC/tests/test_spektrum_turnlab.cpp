@@ -13,6 +13,7 @@ static Turn::Profile fixture()
     p.channels.zero = 4000; p.channels.full = 64000;
     p.channels.forward = 8000; p.channels.reverse = 56000;
     p.io_crc = 0x12345678; p.electrical = p.loss_behavior = true;
+    p.forward_verified = true; // Synthetic FORWARD CH7 reference only.
     return p;
 }
 static Turn::Evidence evidence(uint32_t now)
@@ -119,6 +120,39 @@ int main()
         auto p = fixture(); p.channels.reverse_channel = 7;
         assert(!p.valid()); p = fixture(); p.channels.zero = p.channels.full;
         assert(!p.valid()); p = fixture(); p.io_crc = 0; assert(!p.valid()); ++tests;
+    }
+    {
+        // Forward-only TurnLab must NOT demand an independently qualified
+        // reverse endpoint: CH7 still carries the verified FORWARD value.
+        auto p = fixture();
+        p.channels.reverse_verified = false;
+        p.channels.reverse = 0; // Deliberately unknown and never transmitted.
+        assert(p.valid());
+        Turn t(p);
+        assert(t.start(true, evidence(100), 100));
+        assert(t.prepare(evidence(100), 100, packet, sizeof(packet)) == 18);
+        assert(packet[14] == 0x40 && packet[15] == 0x1F); // CH7 = 8000
+        assert(t.take(packet, 18, evidence(100), 100));
+        assert(t.complete(102, true));
+        ++tests;
+    }
+    {
+        auto p = fixture();
+        p.forward_verified = false; // No inferred CH7 direction polarity.
+        assert(!p.valid());
+        Turn t(p);
+        assert(!t.start(true, evidence(100), 100));
+        ++tests;
+    }
+    {
+        auto p = fixture();
+        p.channels.forward = 65535; // Wrong wire quantum, cannot qualify.
+        assert(!p.valid());
+        p = fixture();
+        p.channels.reverse = p.channels.forward; // Unknown reverse is allowed.
+        p.channels.reverse_verified = false;
+        assert(p.valid());
+        ++tests;
     }
     {
         AP_IOMCU_SmartESCInhibit ack;
