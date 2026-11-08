@@ -224,7 +224,11 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
     // Some physical ESCs continue sending valid 0x21 handshakes but do not
     // answer a 0xCD control frame with 0x80. Preserve the strict telemetry
     // contract by default; allow a separately qualified BENCH-only fallback.
-    const uint32_t peer_deadline_us = _profile.handshake_only_bench ? 100000U : 50000U;
+    // Physical bench logs showed a 101ms authentic 0x21 gap while the
+    // ESC returned 0x80 sensor data. Bound production peer age to 150ms,
+    // below the Avian's documented 250ms signal-loss cutoff; never let
+    // source-less sensor responses refresh this authenticated peer timer.
+    const uint32_t peer_deadline_us = _profile.handshake_only_bench ? 100000U : 150000U;
     if (uint32_t(now_us - _last_peer) >= peer_deadline_us) {
         fault(Fault::ESC_LOSS);
         return;
@@ -340,13 +344,21 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     }
     // Telemetry does not include a sender ID. Dedicated-bus ownership is required;
     // neither CRC nor a destination proves that the sender is an Avian 130A.
-    _waiting_reply = false;
-    _last_peer = acquisition_us;
-    if (AP_SpektrumSmartESC::decode_esc(packet + 4, 16, _telemetry)) {
-        _have_telemetry = true;
-        _telemetry_since = acquisition_us;
-        _status.telemetry++;
+    // A 0x80 sensor packet has no source device ID. It may be a telemetry
+    // candidate only while a separately authenticated 0x21 peer stays live.
+    // An invalid/wrong sensor must not clear the reply deadline, refresh
+    // the peer, or grant readiness to arm.
+    AP_SpektrumSmartESC::Telemetry decoded {};
+    if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, decoded) ||
+        decoded.valid == 0) {
+        fault(Fault::PROTOCOL);
+        return;
     }
+    _waiting_reply = false;
+    _telemetry = decoded;
+    _have_telemetry = true;
+    _telemetry_since = acquisition_us;
+    _status.telemetry++;
 }
 
 bool AP_SpektrumSmartESC_Motor::telemetry(AP_SpektrumSmartESC::Telemetry &data, uint32_t now_us) const
