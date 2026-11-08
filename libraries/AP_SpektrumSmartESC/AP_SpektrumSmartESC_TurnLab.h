@@ -10,8 +10,10 @@ public:
     static constexpr uint32_t PERIOD_MS = 20;
     static constexpr uint32_t PHASE_MS = 500;
     static constexpr uint32_t WINDOW_MS = 1500;
+    static constexpr uint32_t ZERO_WINDOW_MS = 3000; // 3 seconds of CH1 minimum, no motor demand
     static constexpr uint32_t STALE_MS = 60;
     static constexpr uint8_t LENGTH = 18;
+    static constexpr uint8_t ZERO_LENGTH = 16; // CH1 only; no CH7 direction change
     enum class State : uint8_t { IDLE, NEUTRAL, FORWARD6, FINAL_NEUTRAL, DONE, FAULT, BLOCKED };
     struct Profile {
         AP_SpektrumSmartESC_Commands::Profile channels;
@@ -30,6 +32,13 @@ public:
                 value(channels.zero) && value(channels.full) && channels.zero < channels.full &&
                 value(channels.forward);
         }
+        // Reference-only CH1 idle trial. NOT authorization for physical motion.
+        // Keep full TurnLab qualification independent of this protocol experiment.
+        bool zero_only_candidate() const
+        {
+            return io_crc != 0 && channels.throttle_channel == 0 &&
+                channels.zero == 768U && channels.full == 64768U;
+        }
         static bool value(uint16_t v) { return v <= 65532U && (v & 3U) == 0; }
     };
     struct Evidence {
@@ -47,11 +56,12 @@ public:
     explicit AP_SpektrumSmartESC_TurnLab(const Profile &p) : _profile(p) {}
     // Both the coordinator and native UART enforce this bounded contract.
     // A failed request consumes this object permanently, including bad profile.
-    bool start(bool authorized, const Evidence &e, uint32_t now)
+    bool start(bool authorized, const Evidence &e, uint32_t now, bool zero_only = false)
     {
         if (_used) { return false; }
         _used = true;
-        if (!authorized || !_profile.valid() || !e.safe(now)) {
+        _zero_only = zero_only;
+        if (!authorized || !(zero_only ? _profile.zero_only_candidate() : _profile.valid()) || !e.safe(now)) {
             _state = State::BLOCKED;
             return false;
         }
@@ -61,7 +71,7 @@ public:
     }
     bool active(uint32_t now) const
     {
-        return running() && uint32_t(now - _start) < WINDOW_MS;
+        return running() && uint32_t(now - _start) < (_zero_only ? ZERO_WINDOW_MS : WINDOW_MS);
     }
     bool running() const
     {
@@ -79,8 +89,17 @@ public:
         const uint32_t steps = (_profile.channels.full - _profile.channels.zero) / 4U;
         return _profile.channels.zero + ((steps * 6U + 50U) / 100U) * 4U;
     }
+    bool zero_only() const { return _zero_only; }
     uint8_t encode(State phase, uint8_t *packet, size_t capacity) const
     {
+        if (_zero_only) {
+            if (!_profile.zero_only_candidate() || phase != State::NEUTRAL) { return 0; }
+            // CH1 ONLY. No CH7, no movement command above candidate minimum.
+            uint16_t values[32] {};
+            values[0] = _profile.channels.zero;
+            return AP_SpektrumSmartESC_ChannelData::encode(AP_SpektrumSmartESC_ChannelData::Kind::Normal,
+                0x40, 0, 0, 0x01, values, packet, capacity);
+        }
         if (!_profile.valid() || (phase != State::NEUTRAL && phase != State::FORWARD6 && phase != State::FINAL_NEUTRAL)) {
             return 0;
         }
@@ -97,13 +116,13 @@ public:
         if (!running()) { return 0; }
         if (!e.safe(now) || uint32_t(now - _last) >= STALE_MS) { abort(); return 0; }
         const uint32_t elapsed = now - _start;
-        if (elapsed >= WINDOW_MS) {
-            _state = !_pending && _final_completed ? State::DONE : State::FAULT;
+        if (elapsed >= (_zero_only ? ZERO_WINDOW_MS : WINDOW_MS)) {
+            _state = !_pending && (_zero_only ? _neutral_completed : _final_completed) ? State::DONE : State::FAULT;
             return 0;
         }
         if (_pending) { return 0; }
         if (_frames != 0 && uint32_t(now - _last) < PERIOD_MS) { return 0; }
-        const State phase = elapsed < PHASE_MS ? State::NEUTRAL :
+        const State phase = _zero_only || elapsed < PHASE_MS ? State::NEUTRAL :
                             elapsed < 2U * PHASE_MS ? State::FORWARD6 : State::FINAL_NEUTRAL;
         if ((phase == State::FORWARD6 && !_neutral_completed) ||
             (phase == State::FINAL_NEUTRAL && !_pulse_completed)) { abort(); return 0; }
@@ -114,10 +133,11 @@ public:
     bool take(const uint8_t *packet, uint8_t length, const Evidence &e, uint32_t now)
     {
         uint8_t expected[LENGTH] {};
-        if (packet == nullptr || length != LENGTH || prepare(e, now, expected, sizeof(expected)) != LENGTH) { return false; }
-        for (uint8_t i = 0; i < LENGTH; i++) { if (packet[i] != expected[i]) { return false; } }
+        const uint8_t required = _zero_only ? ZERO_LENGTH : LENGTH;
+        if (packet == nullptr || length != required || prepare(e, now, expected, sizeof(expected)) != required) { return false; }
+        for (uint8_t i = 0; i < required; i++) { if (packet[i] != expected[i]) { return false; } }
         const uint32_t elapsed = now - _start;
-        _state = elapsed < PHASE_MS ? State::NEUTRAL :
+        _state = _zero_only || elapsed < PHASE_MS ? State::NEUTRAL :
                  elapsed < 2U * PHASE_MS ? State::FORWARD6 : State::FINAL_NEUTRAL;
         _throttle = uint16_t(packet[12]) | (uint16_t(packet[13]) << 8);
         _last = now;
@@ -140,6 +160,6 @@ private:
     State _state = State::IDLE;
     uint32_t _start = 0, _last = 0, _frames = 0, _completed = 0;
     uint16_t _throttle = 0;
-    bool _used = false, _pending = false;
+    bool _used = false, _pending = false, _zero_only = false;
     bool _neutral_completed = false, _pulse_completed = false, _final_completed = false;
 };
