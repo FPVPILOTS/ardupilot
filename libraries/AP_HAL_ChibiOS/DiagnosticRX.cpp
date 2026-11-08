@@ -108,6 +108,7 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
     status.handshake_queued = _handshake_queued;
     status.handshake_completed = _handshake_completed;
     status.handshake_restored = _handshake_restored;
+    status.last_uart_rx_ms = _last_uart_rx_ms; // Acquired in poll() from physical UART FIFO.
     status.handshake_flags = AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED ? 1 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? 8 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ? 16 : 0;
