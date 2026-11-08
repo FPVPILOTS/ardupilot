@@ -1,115 +1,85 @@
-# Avian 130A — TurnLab profile and native startup qualification
+# Avian 130A Smart Ver A — Pixhawk 6C SRXL2 completion status
 
-This document is the referenced source-of-truth checklist for
-`AP_SpektrumSmartESC_TurnLabProfile.h`. The **current source profile returns
-`{}`**. That is deliberate: building the TurnLab firmware does **not**
-qualify any actual ESC command.
+This page replaces the obsolete statement that the TurnLab profile returns
+an empty struct: it now contains an **unqualified CH1 minimum candidate**,
+which is usable only by one-shot `TURNRUN=2`. It is **not** a motor flight profile.
 
-## Confirmed by existing physical bench evidence
+## Goal / architecture
 
-- Pixhawk 6C UART4 / AUX7 PA0, half duplex, 115200 baud.
-- An ESC identified as device `0x40` participates in the real `0x21`
-  handshake with flight-controller device `0x30`.
-- `SPK17 SRXL2_LINK_ESTABLISHED` and regular `0x21` heartbeat frames have been
-  observed in Mission Planner.
-- A single empty-channel-mask `0xCD` trial was transmitted with true TC, but
-  it had **no observed `0x80` response**. This does not establish accepted
-  throttle control, STOP, or a particular telemetry reply policy.
-- The built-in command mapping is **SRXL2 CH1** gas (index 0) and **SRXL2
-  CH7** direction (index 6). This is **not** a requirement to reserve physical
-  Pixhawk `SERVO7`. MAIN3 PWM output requires its own inhibit proof.
+TX16S → RadioMaster RP4TD → ArduPlane final SERVO3 throttle →
+native UART4 on AUX7/PA0 → SRXL2 Channel Data CH1 → Spektrum Avian 130A.
+The reverse demand is derived separately from ArduPlane's configured
+reverse-throttle switch, then delivered in SRXL2 CH7. CH1/CH7 are **Spektrum
+wire indices**, not physical Pixhawk SERVO1 or SERVO7 outputs. No PWM
+controller or PWM fallback is part of this architecture.
 
-## Forward-only TurnLab profile
+## Physical evidence as of 2026-11-08
 
-`AP_SpektrumSmartESC_TurnLab::Profile` is distinct from the production motor
-profile, and contains:
+- `0x21` handshake established to ESC ID `0x40`, Pixhawk ID `0x30`,
+  priority 10, regular CRC-valid `0x21` peer announcements.
+- Installed IOMCU image CRC **`0x6DBBAD71`** read back from the device.
+  This is software identity; no independent physical MAIN3 pin isolation
+  measurement has been supplied. Do not equate CRC with pin-level proof.
+- `TURNRUN=2` sent true hardware-TC-completed `0xCD` frames with the
+  candidate `CH1=768` and **no CH7 update**. The ESC produced correlated
+  `0x80` telemetry candidates, including about 15.44V, eRPM=0, throttle=0.
+  This is useful protocol evidence, not proof that the ESC was armed or that
+  a motor will stop after an unexpected control/link loss.
+- The original zero-only trial aborted with `AGE P101` and `FAULT_SAFETY`.
+  The zero-only candidate path now tolerates up to 200ms between genuine
+  `0x21` announcements, while the forward-motor TurnLab remains at 100ms.
+- RP4TD raw RC3 input responded across 990..2011us, valid RC/failsafe
+  `RC1 FS0`. `SERVO3_FUNCTION=70` was mapped (`MAP1`), but while the
+  flight controller was disarmed, SERVO3 remained at 1100 and
+  `STOP1 ARM0`. This is intentional.
 
-| Field | Evidence that is required | Must be known for TurnLab? |
-|---|---|---|
-| `channels.throttle_channel == 0` | CH1 protocol position | yes |
-| `channels.throttle_verified` | independently confirmed CH1 mapping | yes |
-| `channels.zero` | measured digital value the actual Avian accepts as neutral/zero | yes |
-| `channels.full` | measured digital end of accepted CH1 forward range | yes |
-| `channels.reverse_channel == 6` | ESC configured to listen for direction on SRXL2 CH7 | yes |
-| `forward_verified` | independently confirmed CH7 **forward** polarity | yes |
-| `channels.forward` | digital CH7 value explicitly confirmed to mean forward | yes |
-| `channels.reverse_verified` | qualification for reverse operation | **no** |
-| `channels.reverse` | reverse endpoint | **no** |
-| `electrical` | documented electrical path qualification | yes |
-| `loss_behavior` | independently tested ESC behavior when commands/link are lost | yes |
-| `io_crc` | actual deliberately installed matching IO image CRC | yes |
+## Separation of firmware modes
 
-The first test sends CH1 neutral for 500 ms, CH1 **6% of the qualified
-neutral-to-full range** for 500 ms and CH1 neutral for 500 ms, with CH7 kept
-at the independently verified forward value. These limits are confined to
-TurnLab; **the normal motor controller has no 6% cap**.
+- **TurnLab**: permanently unarmable. `SPKT_TURNRUN=2` sends only a
+  3-second CH1 candidate idle frame sequence, then stops. Forward
+  `SPKT_TURNRUN=1` still requires the independent verified source profile.
+- **Native production motor**: full 0..100% motor controller, CH7 reverse,
+  signed ArduPlane SERVO3 adapter, direction dwell, link/RC/IO checks and
+  telemetry support already exist in source.
+- `SPKT_MOTOR=1` is an **explicit production selection** (reboot required,
+  default zero). If selected without a source-reviewed physical ESC profile
+  and hardware TX qualification, arming stays blocked. It does not enable
+  throttle, disable safety checks, or fall back to PWM.
+- The source-reviewed production settings are in
+  `AP_SpektrumSmartESC_ProductionProfile.h`, currently deliberately empty.
+  The board definitions retain
+  `AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED=0` and
+  `AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED=0`.
+  Do not change these based on simulation, link status or CRC alone.
 
-The SRXL2 specification uses 16-bit values with low two bits zero, and
-`0x8000` as generic center; typical reference endpoints include `0x2AA0`
-and `0xD554`. These are **NOT independently verified endpoint/polarity
-values for this particular Avian 130A**. Never turn them into `*_verified`
-flags by copying them from a sample packet. The Spektrum receiver port
-mapping guide confirms CH1 throttle and independently routable reverse
-channels, not the exact ESC CH7 forward threshold:
-https://wiki.spektrumrc.com/spektrum/receiver-port-mapping-guide
+## Gates remaining before physical 6% and normal arming
 
-## Additional blocker found in the actual IO firmware source
+1. Confirm correct Avian Ver A digital CH1 low and full endpoints from
+   real hardware evidence (reference 768/64768 values are *candidates*).
+2. Confirm **CH7 forward and reverse digital levels and polarity** on the
+   actual ESC with Reverse still enabled. Only a calibrated independent
+   reverse request may be acted on; raw RC7 itself never controls motor TX.
+3. Independently check physical electrical compatibility/output ownership,
+   actual stop on loss of UART/RC/FC signal, and independent power cutoff.
+4. Establish genuine stopped/ground evidence; the native motor arming API
+   requires it and will not synthesize such evidence from stick position.
+5. Verify ESC-applied zero throttle, stopped eRPM and full failure behavior
+   using a restrained, **rotorless** motor test. Do not test with a mounted
+   90mm EDF rotor or a flight-ready aircraft.
+6. Only then enable hardware production flags on a separately reviewed
+   target, set the physically measured production profile, run host/sanitizer
+   and firmware builds, and bench-validate live full-range command, switch
+   direction and all independent loss cases before flight.
 
-The FMU-side `AP_IOMCU::update_smart_esc_inhibit()` reads the IOMCU CRC
-and then requests register page `PAGE_SMART_ESC_INHIBIT` with a boot-scoped
-nonce. That page is implemented in
-`libraries/AP_IOMCU/iofirmware/iofirmware.cpp` **only** when
-`AP_IOMCU_SMART_ESC_INHIBIT` is compiled into a separately produced IO
-image. Its default in `iofirmware.h` is 0.
+## External references
 
-A passing `./waf plane` build for TurnLab does **not** build, install,
-identify or prove a compatible special IOMCU image. The generic IO
-`pwm_out_update()` loop still emits output for all servo indices. The
-existence of a readback page or its symbolic `MAIN3` mask alone is not
-evidence that the third PWM pin is electrically unavailable. The special
-IO image must **actually remove MAIN3 from physical output**, independently
-validated on the correct IO hardware target, while leaving unrelated
-channels such as SERVO7 untouched. Only then may its observed CRC be
-recorded in the profile.
+- Spektrum SRXL2 protocol: https://github.com/SpektrumRC/SRXL2
+- Spektrum SRXL2 receiver mapping (CH1 throttle, CH5-9 reverse):
+  https://wiki.spektrumrc.com/spektrum/receiver-port-mapping-guide
+- ArduPilot Plane reverse-thrust RCx_OPTION=64 setup:
+  https://ardupilot.org/plane/docs/reverse-thrust-setup.html
+- Avian safety and signal-loss guidance:
+  https://www.spektrumrc.com/ProdInfo/Files/Avian-Manual-EN.pdf
 
-**Do not set `io_crc` to the CRC of stock IOMCU firmware or enable the
-IO acknowledgment macro merely to satisfy software tests.** The hardware
-output inhibition and actual installed companion image are separate
-qualification tasks; without them the one-shot test remains blocked.
-
-## Pre-start checks enforced by firmware
-
-1. Explicit volatile operator test consent and one run per boot.
-2. Valid reviewed source profile and nonzero matching IOMCU CRC.
-3. Async IOMCU inhibit nonce/readback, specifically suppressing MAIN3
-   without touching SERVO7.
-4. Current peer `0x40` evidence, UART4 RX ownership, idle bus, no new
-   UART errors, disarmed emergency-stop state.
-5. Native packet whitelist, 20-ms cadence, true hardware transmit completion
-   and RX restoration.
-6. On completion **or interruption**, the test releases its lease and remains
-   consumed; a communication failure does **not** prove that a neutral
-   command reached the ESC. Use independent power cutoff when necessary.
-
-## Diagnostics / current limitations
-
-When a TurnLab request is blocked, the firmware emits:
-- `SPK22 PROFILE THx FWx IOx ELx LOSSx` — which source assertions are present.
-- `SPK22 VALUES ZEROx FULLx CH7x` — values compiled into the profile.
-- `SPK22 BLOCKED_PROFILE` if the profile fails qualification.
-
-`SPK22 TC` proves completion of local serial output **only**.
-`SPK22 RX/WIN/OUT` counts physical packets/candidates but is not proof of
-ESC-applied throttle. Exact Avian endpoints, CH7 forward polarity, ESC loss
-behavior, IO CRC and physical motor response remain unverified until
-independently measured/confirmed.
-
-## Building
-
-```bash
-python3 libraries/AP_SpektrumSmartESC/tests/run_host_tests.py
-bash libraries/AP_SpektrumSmartESC/tests/build_phase18_motor_turn_lab.sh
-```
-
-Tests use synthetic 4000/64000/8000/56000 values **only inside host test
-fixtures**. None of those values are asserted as physical Avian calibration.
+No source-profile boolean, compile-time TX gate or arming status is to be
+forced true merely to make the EDF spin.
