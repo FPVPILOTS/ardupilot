@@ -2,6 +2,7 @@
 #pragma once
 #include "AP_SpektrumSmartESC_ChannelData.h"
 #include "AP_SpektrumSmartESC_Commands.h"
+#include "AP_SpektrumSmartESC_PollLab.h"
 
 // Fixed forward-only experiment. These durations are TEST limits, not claimed
 // Avian neutral/direction/stop requirements. Never used by Motor's 0..1 path.
@@ -14,6 +15,16 @@ public:
     static constexpr uint32_t STALE_MS = 60;
     static constexpr uint8_t LENGTH = 18;
     static constexpr uint8_t ZERO_LENGTH = 16; // CH1 only; no CH7 direction change
+    // This is a scheduler hint matching the *existing* native half-duplex
+    // guard. It cannot authorize a packet, claim UART ownership, or bypass
+    // the native last-RX recheck. Expected ESC heartbeats can end in the
+    // same millisecond as the scheduled 20ms control slot.
+    static bool tx_window(uint32_t now, uint32_t last_uart_rx_ms,
+                          bool rx_restored, bool rx_quiet)
+    {
+        return rx_restored && rx_quiet &&
+            AP_SpektrumSmartESC_PollLab::rx_gap_safe(now, last_uart_rx_ms);
+    }
     enum class State : uint8_t { IDLE, NEUTRAL, FORWARD6, FINAL_NEUTRAL, DONE, FAULT, BLOCKED };
     struct Profile {
         AP_SpektrumSmartESC_Commands::Profile channels;
