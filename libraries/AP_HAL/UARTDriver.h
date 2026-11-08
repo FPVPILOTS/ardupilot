@@ -115,7 +115,7 @@ public:
     // All other UART drivers and ordinary HSLab deny it unconditionally.
     virtual bool diagnostic_handshake_startup_observed(const uint8_t *, uint8_t, uint32_t) { return false; }
     // TurnLab is a separate source-qualified, bounded motor bench lease.
-    virtual bool diagnostic_turn_lab_start(uint32_t, uint32_t &) { return false; }
+    virtual bool diagnostic_turn_lab_start(uint32_t, bool, uint32_t &) { return false; }
     virtual bool diagnostic_turn_lab(const uint8_t *, uint8_t, bool, uint32_t, uint32_t) { return false; }
     // PollLab ONLY: one tightly whitelisted 0xCD ReplyID transaction after
     // explicit, volatile operator authorization; unavailable on other boards.
