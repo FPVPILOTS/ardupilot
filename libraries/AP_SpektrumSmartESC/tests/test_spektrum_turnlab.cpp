@@ -204,6 +204,33 @@ int main()
         ++tests;
     }
     {
+        // Physical 2026-11-08 bench result: Q5 TC4, FAULT_TX_DENIED.
+        // Native UART accepts only a 2..100ms gap since the LAST hardware
+        // FIFO RX byte, regardless of parsed 0x21 or 0x80 type.
+        // Waiting for RX silence must not consume a TurnLab frame or
+        // weaken the native UART's independent TX-time verification.
+        assert(!Turn::tx_window(1001, 1000, true, true));  // 1ms: busy
+        assert(Turn::tx_window(1002, 1000, true, true));   // 2ms: ready
+        assert(Turn::tx_window(1100, 1000, true, true));   // 100ms: bounded
+        assert(!Turn::tx_window(1101, 1000, true, true));  // stale RX
+        assert(!Turn::tx_window(1002, 0, true, true));     // no physical RX
+        assert(!Turn::tx_window(1002, 1000, false, true)); // RX not restored
+        assert(!Turn::tx_window(1002, 1000, true, false)); // UART not idle
+        assert(Turn::tx_window(10, 0xFFFFFFFEU, true, true)); // millis wraps
+        Turn t(spektrum_turnlab_profile());
+        assert(t.start(true, evidence(1000), 1000, true));
+        uint8_t frame[Turn::LENGTH] {};
+        assert(t.prepare(evidence(1000), 1000, frame, sizeof(frame)) == Turn::ZERO_LENGTH);
+        // Preflight defers this offer. It does NOT call take().
+        assert(!Turn::tx_window(1001, 1000, true, true));
+        assert(t.frames() == 0 && t.completed() == 0);
+        assert(Turn::tx_window(1002, 1000, true, true));
+        assert(t.take(frame, Turn::ZERO_LENGTH, evidence(1002), 1002));
+        assert(t.complete(1004, true));
+        assert(t.frames() == 1 && t.completed() == 1);
+        ++tests;
+    }
+    {
         // Hardware observation at 20:17:51: P101 aborted all-zero trial.
         // Only CH1-minimum observation tolerates a longer *authenticated*
         // 0x21 gap during sensor 0x80 replies. Motor-turn retains 100ms.
