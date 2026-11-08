@@ -20,6 +20,9 @@
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_LabHandshake.h>
 #endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+#include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_TurnLabProfile.h>
+#endif
 class SpektrumUART4;
 
 // Dedicated H743 UART4 receiver on PA0. No SerialDriver startup: ChibiOS
@@ -34,6 +37,11 @@ public:
     bool diagnostic_handshake(const uint8_t *packet, uint8_t length, bool finish) override;
     bool diagnostic_handshake_start(uint8_t target, uint32_t uid, bool power_on = false) override;
     bool diagnostic_handshake_startup_observed(const uint8_t *packet, uint8_t length, uint32_t acquired_ms) override;
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    bool diagnostic_turn_lab_start(uint32_t nonce, uint32_t &started_ms) override;
+    bool diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bool finish,
+                             uint32_t control_ms, uint32_t peer_ms) override;
+#endif
     bool diagnostic_poll_lab_start() override;
     bool diagnostic_poll_lab(const uint8_t *packet, uint8_t length, bool finish) override;
     bool diagnostic_waveform(bool start, bool finish) override;
@@ -70,6 +78,11 @@ private:
     // AutoLab image; ordinary manual HSLab remains one-shot per reboot.
     uint32_t _auto_hs_last_ms = 0;
 #endif
+#endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    AP_SpektrumSmartESC_TurnLab _turn_lease {spektrum_turnlab_profile()};
+    AP_SpektrumSmartESC_TurnLab::Evidence _turn_evidence;
+    uint32_t _turn_nonce = 0, _turn_errors = 0;
 #endif
     void poll();
     void register_poll();

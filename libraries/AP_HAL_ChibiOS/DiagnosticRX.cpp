@@ -1,5 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "DiagnosticRX.h"
+#if defined(AP_SPEKTRUM_SMART_ESC_TURN_LAB) && AP_SPEKTRUM_SMART_ESC_TURN_LAB
+#include <AP_IOMCU/AP_IOMCU.h>
+#include <SRV_Channel/SRV_Channel.h>
+#endif
 #ifndef SPKTSMART_RX_REGISTER_TEST
 #include "SpektrumUART4.h"
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Reader.h>
@@ -234,6 +238,68 @@ bool DiagnosticRX::diagnostic_handshake(const uint8_t *packet, uint8_t length, b
     return false;
 #endif
 }
+
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+bool DiagnosticRX::diagnostic_turn_lab_start(uint32_t nonce, uint32_t &started_ms)
+{
+    if (!hal.scheduler->in_main_thread() || hal.util->get_soft_armed() ||
+        !spektrum_turnlab_profile().valid() || _turn_lease.used()) {
+        return false;
+    }
+    _turn_nonce = nonce;
+    _turn_errors = receive_errors();
+    // Populate real IO proof without taking an AP semaphore in an ISR or
+    // ChibiOS system lock. start only after the coordinator validated the peer.
+    if (!diagnostic_turn_lab(nullptr, 0, false, AP_HAL::millis(), _last_uart_rx_ms)) {
+        return false;
+    }
+    chSysLock();
+    started_ms = AP_HAL::millis();
+    const bool ready = _initialized && _experimental_owner == nullptr &&
+        !_lab_hs_lease.active(started_ms) && _head == _tail &&
+        AP_SpektrumSmartESC_PollLab::rx_gap_safe(started_ms, _last_uart_rx_ms) &&
+        palReadLine(PAL_LINE(GPIOA, 0)) &&
+        !(UART4->ISR & (USART_ISR_BUSY | USART_ISR_RXNE_RXFNE | USART_ISR_ORE |
+                       USART_ISR_FE | USART_ISR_NE | USART_ISR_PE));
+    const bool permitted = _turn_lease.start(ready, _turn_evidence, started_ms);
+    chSysUnlock();
+    return permitted;
+}
+
+bool DiagnosticRX::diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bool finish,
+                                      uint32_t control_ms, uint32_t peer_ms)
+{
+    if (!hal.scheduler->in_main_thread()) { return false; }
+    if (finish || hal.util->get_soft_armed()) {
+        chSysLock();
+        _turn_lease.abort();
+        chSysUnlock();
+        (void)diagnostic_transaction(nullptr, 0, true);
+        return false;
+    }
+    AP_SpektrumSmartESC_TurnLab::Evidence evidence;
+    evidence.disarmed = !hal.util->get_soft_armed();
+    // Actual inhibit receipt covers MAIN3 and its IO failsafe, never SERVO7.
+#if HAL_WITH_IO_MCU
+    AP_IOMCU_SmartESCInhibit proof;
+    uint32_t stamp = 0;
+    evidence.owner = AP::iomcu() != nullptr && AP::iomcu()->smart_esc_inhibit(proof, stamp) &&
+        proof.matches(_turn_nonce) && uint32_t(AP_HAL::millis() - stamp) < 50;
+    evidence.owner_ms = stamp;
+#endif
+    evidence.emergency_stop = SRV_Channels::get_emergency_stop();
+    evidence.control_ms = control_ms;
+    evidence.peer_ms = peer_ms;
+    evidence.peer = peer_ms != 0; // Source/CRC checked by the sole AutoSession RX consumer.
+    evidence.uart_ok = receive_errors() == _turn_errors;
+    chSysLock();
+    _turn_evidence = evidence;
+    const bool safe = evidence.safe(AP_HAL::millis());
+    chSysUnlock();
+    if (!safe) { return false; }
+    return packet == nullptr || diagnostic_transaction(packet, length, false);
+}
+#endif
 
 bool DiagnosticRX::diagnostic_poll_lab_start()
 {

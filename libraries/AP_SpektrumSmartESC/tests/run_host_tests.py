@@ -10,6 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cxx', default='g++')
     parser.add_argument('--arm-cxx', default=None)
+    parser.add_argument('--sanitize', action='store_true', help='Run all host suites under ASan/UBSan')
     parser.add_argument('--out', type=pathlib.Path, default=pathlib.Path('build/spektrum-smart-host'))
     args = parser.parse_args()
     library = pathlib.Path(__file__).resolve().parents[1]
@@ -25,11 +26,17 @@ def main():
     poll_lab_executable = args.out.resolve() / 'test_spektrum_poll_lab.exe'
     bench6_executable = args.out.resolve() / 'test_spektrum_bench6.exe'
     rx_witness_executable = args.out.resolve() / 'test_spektrum_post_poll_diag.exe'
+    turn_executable = args.out.resolve() / 'test_spektrum_turnlab.exe'
     motor_executable = args.out.resolve() / 'test_spektrum_motor.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
         commands = [
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_ChannelData.cpp'),
+             str(library / 'tests/test_spektrum_turnlab.cpp'), '-o', str(turn_executable)],
+            [str(turn_executable)],
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
              *sources, '-o', str(executable)],
             [str(executable)],
@@ -106,6 +113,9 @@ def main():
                 '-c', sources[0], '-o', str(args.out.resolve() / 'protocol.o'),
             ])
         for command in commands:
+            if args.sanitize and command[0] == args.cxx:
+                command[1:1] = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+                                '-fno-pie', '-no-pie', '-g']
             log.write(repr(command) + '\n')
             log.flush()
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

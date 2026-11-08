@@ -23,6 +23,13 @@
 #include <ch.h>
 #include <AP_SerialManager/AP_SerialManager.h>
 
+// Bench images may inspect installed IO identity without replacing firmware.
+// Default preserves conventional ArduPilot's automatic recovery/update policy.
+#ifndef AP_IOMCU_FIRMWARE_UPDATE_ENABLED
+#define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 1
+#endif
+
+
 extern const AP_HAL::HAL &hal;
 
 // pending IO events to send, used as an event mask
@@ -1242,6 +1249,14 @@ bool AP_IOMCU::check_crc(void)
         DEV_PRINTF("IOMCU: CRC mismatch expected: 0x%X got: 0x%X\n", (unsigned)crc, (unsigned)io_crc);
     }
 
+#if !AP_IOMCU_FIRMWARE_UPDATE_ENABLED
+    // Read-only mismatch: do not reboot IO into its loader, upload an image,
+    // or claim that its identity matched. TurnLab verifies the explicit reviewed
+    // CRC and fresh inhibit nonce independently before any channel packet.
+    AP_ROMFS::free(fw);
+    fw = nullptr;
+    return false;
+#else
     const uint16_t magic = REBOOT_BL_MAGIC;
     write_registers(PAGE_SETUP, PAGE_REG_SETUP_REBOOT_BL, 1, &magic);
 
@@ -1257,6 +1272,7 @@ bool AP_IOMCU::check_crc(void)
     AP_ROMFS::free(fw);
     fw = nullptr;
     return false;
+#endif
 }
 
 /*

@@ -1,0 +1,10 @@
+# Phase 18: bounded forward motor-turn laboratory, permanently unarmable.
+# Physical channel updates require reviewed source qualification AND live IO ACK.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-Spkt-TurnLab"
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_TURN_LAB 1
+
+# Never silently install or replace a manually qualified companion IO image.
+define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 0

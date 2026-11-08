@@ -21,6 +21,10 @@
 #include "AP_SpektrumSmartESC_LabHandshake.h"
 #endif
 #include <AP_Param/AP_Param.h>
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+#include "AP_SpektrumSmartESC_TurnLabProfile.h"
+#include "AP_SpektrumSmartESC_IOOwner.h"
+#endif
 class AP_SpektrumSmartESC_ChibiOS;
 
 class AP_SpektrumSmartESC_Diagnostics {
@@ -45,6 +49,20 @@ public:
                        bool reverse_permitted, bool reverse_configured, bool reverse_selected);
     bool arming_blocked() const { return bench_blocked() || (_motor_selected && !motor_arming_ready()); }
 private:
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    void update_turn(uint32_t now_ms, bool safe, const AP_HAL::UARTDriver::ReceiveDiagnostics &hw);
+    void finish_turn(const char *reason);
+    void observe_turn(const uint8_t *packet, uint8_t length, uint32_t acquired_ms);
+    AP_Int8 _turnack, _turnrun;
+    AP_SpektrumSmartESC_LabHandshake::Authorization _turn_auth;
+    AP_SpektrumSmartESC_TurnLab _turn {spektrum_turnlab_profile()};
+    AP_SpektrumSmartESC_IOOwner _turn_owner;
+    uint8_t _turn_packet[AP_SpektrumSmartESC_TurnLab::LENGTH] {};
+    bool _turn_consumed = false, _turn_pending = false, _turn_active = false, _turn_inflight = false;
+    uint32_t _turn_nonce = 0, _turn_requested_ms = 0, _turn_error_base = 0, _turn_fault_base = 0;
+    uint32_t _turn_tc_base = 0, _turn_last_tc_ms = 0, _turn_rx = 0, _turn_reply = 0, _turn_late = 0;
+    AP_SpektrumSmartESC_TurnLab::State _turn_logged = AP_SpektrumSmartESC_TurnLab::State::IDLE;
+#endif
     bool bench_blocked() const { return AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB || _bench.arming_blocked(_enable.get()) || _probe.get() != 0 || _handshake.get() != 0; }
     bool motor_arming_ready() const;
     AP_SpektrumSmartESC_ChibiOS *_native_motor = nullptr;

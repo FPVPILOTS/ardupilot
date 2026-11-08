@@ -42,7 +42,11 @@ bool SpektrumUART4::acquire()
     chSysLock();
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     if (!_rx._lab_hs_lease.active(AP_HAL::millis()) &&
-        !_rx._poll_lab_lease.active(AP_HAL::millis())) {
+        !_rx._poll_lab_lease.active(AP_HAL::millis())
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        && !_rx._turn_lease.active(AP_HAL::millis())
+#endif
+        ) {
         chSysUnlock();
         return false;
     }
@@ -112,7 +116,11 @@ void SpektrumUART4::service() const
     }
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     if (!_rx._lab_hs_lease.active(AP_HAL::millis()) &&
-        !_rx._poll_lab_lease.active(AP_HAL::millis())) {
+        !_rx._poll_lab_lease.active(AP_HAL::millis())
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        && !_rx._turn_lease.active(AP_HAL::millis())
+#endif
+        ) {
         _fault = true;
         return;
     }
@@ -161,6 +169,11 @@ void SpektrumUART4::irq_handler()
         port._done = sent && released;
         if (port._done) {
             port._rx._handshake_completed++;
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+            if (port._rx._turn_lease.running()) {
+                port._done = port._rx._turn_lease.complete(AP_HAL::millis(), true);
+            }
+#endif
         }
         port._done_ms = AP_HAL::millis();
         port._fault = port._fault || !port._done;
@@ -196,7 +209,12 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
     const bool allowed = AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ?
         (AP_SpektrumSmartESC_Reader::handshake_packet(data, length) ||
          (AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
-          AP_SpektrumSmartESC_PollLab::exact_packet(data, length))) :
+          AP_SpektrumSmartESC_PollLab::exact_packet(data, length))
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+         || (length == AP_SpektrumSmartESC_TurnLab::LENGTH && data != nullptr &&
+             data[1] == 0xCD && _rx._turn_lease.active(AP_HAL::millis()))
+#endif
+         ) :
         AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? AP_SpektrumSmartESC_Lab::packet(data, length) :
         ((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED && AP_SpektrumSmartESC_Reader::handshake_packet(data, length)) ||
          (AP_SpektrumSmartESC_Motor::physical_control_available() && AP_SpektrumSmartESC_Motor::control_packet(data, length)));
@@ -212,8 +230,12 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
     // Do not discard an unread peer packet to make transmission possible.
     // Independently re-check the last real RX byte before enabling TE:
     // a valid 0x21 ESC message arrives ~every 50ms after link.
-    if (AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
-        AP_SpektrumSmartESC_PollLab::exact_packet(data, length) &&
+    if (((AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
+          AP_SpektrumSmartESC_PollLab::exact_packet(data, length))
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+         || _rx._turn_lease.running()
+#endif
+         ) &&
         !AP_SpektrumSmartESC_PollLab::rx_gap_safe(
             AP_HAL::millis(), _rx._last_uart_rx_ms)) {
         chSysUnlock();
@@ -228,7 +250,12 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
     service();
     const uint32_t direction = USART_CR1_UE | USART_CR1_RE | USART_CR1_TE | USART_CR1_TCIE | USART_CR1_FIFOEN;
     if (_fault || (UART4->CR1 & direction) != (USART_CR1_UE | USART_CR1_RE | USART_CR1_FIFOEN) ||
-        !(AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
+        !(
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+          _rx._turn_lease.running() ?
+          _rx._turn_lease.take(data, length, _rx._turn_evidence, AP_HAL::millis()) :
+#endif
+          AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
           AP_SpektrumSmartESC_PollLab::exact_packet(data, length) ?
           _rx._poll_lab_lease.take(data, length, AP_HAL::millis()) :
           _rx._lab_hs_lease.take(data, length, AP_HAL::millis()))) {

@@ -13,8 +13,17 @@
 #ifndef AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 #define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 0
 #endif
+#ifndef AP_SPEKTRUM_SMART_ESC_TURN_LAB
+#define AP_SPEKTRUM_SMART_ESC_TURN_LAB 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB && (!AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB || AP_SPEKTRUM_SMART_ESC_LAB_ONLY)
+#error "TurnLab requires the existing AutoLab UART owner, never waveform LAB"
+#endif
 #ifndef AP_SPEKTRUM_SMART_ESC_POLL_LAB
 #define AP_SPEKTRUM_SMART_ESC_POLL_LAB 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB && AP_SPEKTRUM_SMART_ESC_POLL_LAB
+#error "TurnLab and PollLab are separate experiments"
 #endif
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB && !AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 #error "SRXL2 PollLab requires the bounded AutoLab handshake"

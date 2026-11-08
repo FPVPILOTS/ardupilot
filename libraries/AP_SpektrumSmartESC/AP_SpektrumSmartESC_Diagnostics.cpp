@@ -93,6 +93,20 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
     AP_GROUPINFO("POLLRUN", 12, AP_SpektrumSmartESC_Diagnostics, _pollrun, 0),
 #endif
 #endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    // @Param: TURNACK
+    // @DisplayName: One-shot forward motor-turn bench acknowledgement
+    // @Description: TurnLab only. Write 18 to confirm a restrained unloaded motor, stopped rotor, clear area and immediately accessible independent power cutoff. Consumed in RAM, ignored at boot. Does not qualify electrical behavior or Avian endpoints. Request TURNRUN=1 within ten seconds. Never for flight.
+    // @Values: 0:Idle,18:Bench operator ready
+    // @User: Advanced
+    AP_GROUPINFO("TURNACK", 13, AP_SpektrumSmartESC_Diagnostics, _turnack, 0),
+    // @Param: TURNRUN
+    // @DisplayName: Single qualified forward motor-turn sequence
+    // @Description: Source-qualified TurnLab only, requires TURNACK and fresh actual IO inhibit receipt. Sends calibrated CH1 neutral then 6 percent then neutral with CH7 held at verified forward. One request per reboot, failed requests also consumed. Abort inhibits further TX; power cutoff remains necessary because no UART result proves a stopped motor.
+    // @Values: -1:Abort,0:Idle,1:Request forward trial
+    // @User: Advanced
+    AP_GROUPINFO("TURNRUN", 14, AP_SpektrumSmartESC_Diagnostics, _turnrun, 0),
+#endif
     AP_GROUPEND
 };
 
@@ -107,7 +121,16 @@ void AP_SpektrumSmartESC_Diagnostics::init()
     _poll_auth.cancel();
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 POLLLAB: MOTOR PHASES MUST BE UNPLUGGED");
 #endif
+#if !AP_SPEKTRUM_SMART_ESC_TURN_LAB
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK15C: HSLAB; NO MOTOR; UART ERROR POLICY UPDATED");
+#endif
+#endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    _turnack.set(0);
+    _turnrun.set(0);
+    _turn_auth.cancel();
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TURNLAB; UNARMABLE; PROFILE %s",
+                  spektrum_turnlab_profile().valid() ? "QUALIFIED" : "BLOCKED");
 #endif
     _waveform.set(0);
     if (AP_SPEKTRUM_SMART_ESC_LAB_ONLY) {
@@ -141,7 +164,11 @@ void AP_SpektrumSmartESC_Diagnostics::init()
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK20 PollLab: explicit 0xCD only; MOTOR UNPLUGGED");
 #else
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TURNLAB; no automatic motor commands");
+#else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT: AUTO handshake TX only; no motor/control");
+#endif
 #endif
     } else
 #endif
@@ -168,7 +195,11 @@ void AP_SpektrumSmartESC_Diagnostics::init()
         _auto_rx = AP_SpektrumSmartESC(0x30, uint8_t(_hs_target.get()), 50, false);
         _auto_started = true;
         _receiver->suspend(); // Native AutoLab owns the sole RX consumer.
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 AUTO LINK; TURNRUN requires qualification");
+#else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 AUTOLAB ON; NO MOTOR, NO CONTROL");
+#endif
     }
 #endif
 }
@@ -279,7 +310,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     auto *port = hal.diagnostic_rx_uart();
     const bool safe = port != nullptr && !hal.util->get_soft_armed() &&
                       arming_blocked() && SRV_Channels::get_emergency_stop() &&
-                      _enable == 1 && _probe == 0 && _handshake == 0 &&
+                      _enable == 1 && _auto == 1 && _probe == 0 && _handshake == 0 &&
                       (!AP_SPEKTRUM_SMART_ESC_POLL_LAB || _telem == 0);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
     if (_pollack.get() != 0) {
@@ -301,6 +332,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     }
 #endif
     if (!safe) {
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        update_turn(now_ms, false, {});
+#endif
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
         if (_poll_active) {
             (void)port->diagnostic_poll_lab(nullptr, 0, true);
@@ -344,6 +378,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         _auto_inflight = false;
     }
 
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    if (_turn_inflight && hw.handshake_completed == _turn_tc_base + 1U) {
+        _turn_last_tc_ms = hw.handshake_tc_ms;
+    }
+#endif
     if (!_auto_inflight) {
         uint8_t byte = 0;
         uint32_t acquired_ms = 0;
@@ -366,6 +405,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                         // Phase 17E-A: CRC-valid packet inventory and optional
                         // untrusted 0x80 sensor candidate. No poll, motor control,
                         // AP_ESC_Telem publication or extra UART transmissions.
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+                        observe_turn(packet, length, acquired_ms);
+#endif
                         _auto_telem_observer.observe_crc_frame(
                             packet, length, acquired_ms, 0x30);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
@@ -436,6 +478,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     dry.competing_master = _auto_session.status().state ==
         AP_SpektrumSmartESC_AutoConnect::State::YIELDED;
     (void)_auto_poll_dryrun.update(dry);
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    update_turn(now_ms, safe, hw);
+#endif
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
     if (_poll_active) {
         // Close the physical TX lease at its ORIGINAL 15-ms deadline.
@@ -504,7 +549,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         _auto_last_verified_peer_ms = 0;
         _auto_telem_observer.invalidate(); // Never replay ESC data after loss.
     }
-    if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE) {
+    if (action == AP_SpektrumSmartESC_AutoConnect::Action::BEGIN_HANDSHAKE
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        && !_turn_consumed
+#endif
+        ) {
         _auto_uart_error_baseline = port->receive_errors();
         if (_auto_leased ||
             !port->diagnostic_handshake_start(uint8_t(_hs_target.get()), _auto_uid, true)) {
@@ -1017,7 +1066,11 @@ void AP_SpektrumSmartESC_Diagnostics::update()
         return; // The qualified backend exclusively owns RX; never close/consume it here.
     }
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
-    if (_auto == 1) {
+    if (_auto == 1
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        || _turn_active || _turn_pending
+#endif
+        ) {
         update_auto_reader(now);
         return;
     }

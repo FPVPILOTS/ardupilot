@@ -1,0 +1,141 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#pragma once
+#include "AP_SpektrumSmartESC_ChannelData.h"
+#include "AP_SpektrumSmartESC_Commands.h"
+
+// Fixed forward-only experiment. These durations are TEST limits, not claimed
+// Avian neutral/direction/stop requirements. Never used by Motor's 0..1 path.
+class AP_SpektrumSmartESC_TurnLab {
+public:
+    static constexpr uint32_t PERIOD_MS = 20;
+    static constexpr uint32_t PHASE_MS = 500;
+    static constexpr uint32_t WINDOW_MS = 1500;
+    static constexpr uint32_t STALE_MS = 60;
+    static constexpr uint8_t LENGTH = 18;
+    enum class State : uint8_t { IDLE, NEUTRAL, FORWARD6, FINAL_NEUTRAL, DONE, FAULT, BLOCKED };
+    struct Profile {
+        AP_SpektrumSmartESC_Commands::Profile channels;
+        uint32_t io_crc = 0;
+        bool electrical = false;
+        bool loss_behavior = false;
+        bool valid() const
+        {
+            return electrical && loss_behavior && io_crc != 0 &&
+                channels.throttle_verified && channels.reverse_verified &&
+                channels.throttle_channel == 0 && channels.reverse_channel == 6 &&
+                value(channels.zero) && value(channels.full) && channels.zero < channels.full &&
+                value(channels.forward) && value(channels.reverse) && channels.forward != channels.reverse;
+        }
+        static bool value(uint16_t v) { return v <= 65532U && (v & 3U) == 0; }
+    };
+    struct Evidence {
+        bool disarmed = false, emergency_stop = false, owner = false;
+        bool peer = false, uart_ok = false;
+        uint32_t peer_ms = 0, control_ms = 0, owner_ms = 0;
+        bool safe(uint32_t now) const
+        {
+            return disarmed && emergency_stop && owner && peer && uart_ok &&
+                uint32_t(now - peer_ms) < 100 && uint32_t(now - control_ms) < STALE_MS &&
+                uint32_t(now - owner_ms) < 50;
+        }
+    };
+
+    explicit AP_SpektrumSmartESC_TurnLab(const Profile &p) : _profile(p) {}
+    // Both the coordinator and native UART enforce this bounded contract.
+    // A failed request consumes this object permanently, including bad profile.
+    bool start(bool authorized, const Evidence &e, uint32_t now)
+    {
+        if (_used) { return false; }
+        _used = true;
+        if (!authorized || !_profile.valid() || !e.safe(now)) {
+            _state = State::BLOCKED;
+            return false;
+        }
+        _start = _last = now;
+        _state = State::NEUTRAL;
+        return true;
+    }
+    bool active(uint32_t now) const
+    {
+        return running() && uint32_t(now - _start) < WINDOW_MS;
+    }
+    bool running() const
+    {
+        return _state == State::NEUTRAL || _state == State::FORWARD6 || _state == State::FINAL_NEUTRAL;
+    }
+    void abort() { if (running()) { _state = State::FAULT; } }
+    State state() const { return _state; }
+    bool used() const { return _used; }
+    uint32_t frames() const { return _frames; }
+    uint32_t completed() const { return _completed; }
+    uint16_t throttle() const { return _throttle; }
+    uint16_t six_percent() const
+    {
+        // Round to the nearest wire quantum (bits 15:2), exactly 6/100.
+        const uint32_t steps = (_profile.channels.full - _profile.channels.zero) / 4U;
+        return _profile.channels.zero + ((steps * 6U + 50U) / 100U) * 4U;
+    }
+    uint8_t encode(State phase, uint8_t *packet, size_t capacity) const
+    {
+        if (!_profile.valid() || (phase != State::NEUTRAL && phase != State::FORWARD6 && phase != State::FINAL_NEUTRAL)) {
+            return 0;
+        }
+        uint16_t channels[32] {};
+        channels[0] = phase == State::FORWARD6 ? six_percent() : _profile.channels.zero;
+        channels[6] = _profile.channels.forward; // Never send reverse in TurnLab.
+        return AP_SpektrumSmartESC_ChannelData::encode(AP_SpektrumSmartESC_ChannelData::Kind::Normal,
+            0x40, 0, 0, 0x41, channels, packet, capacity);
+    }
+    // Called at the 50-Hz vehicle boundary. No fabricated sensor timestamps:
+    // control_ms is this script's current supervision tick, peer_ms physical RX.
+    uint8_t prepare(const Evidence &e, uint32_t now, uint8_t *packet, size_t capacity)
+    {
+        if (!running()) { return 0; }
+        if (!e.safe(now) || uint32_t(now - _last) >= STALE_MS) { abort(); return 0; }
+        const uint32_t elapsed = now - _start;
+        if (elapsed >= WINDOW_MS) {
+            _state = !_pending && _final_completed ? State::DONE : State::FAULT;
+            return 0;
+        }
+        if (_pending) { return 0; }
+        if (_frames != 0 && uint32_t(now - _last) < PERIOD_MS) { return 0; }
+        const State phase = elapsed < PHASE_MS ? State::NEUTRAL :
+                            elapsed < 2U * PHASE_MS ? State::FORWARD6 : State::FINAL_NEUTRAL;
+        if ((phase == State::FORWARD6 && !_neutral_completed) ||
+            (phase == State::FINAL_NEUTRAL && !_pulse_completed)) { abort(); return 0; }
+        return encode(phase, packet, capacity);
+    }
+    // Exact native whitelist: packet CRC, mask, target, channel order, forward
+    // polarity, phase timing, per-frame budget and previous true TC all checked.
+    bool take(const uint8_t *packet, uint8_t length, const Evidence &e, uint32_t now)
+    {
+        uint8_t expected[LENGTH] {};
+        if (packet == nullptr || length != LENGTH || prepare(e, now, expected, sizeof(expected)) != LENGTH) { return false; }
+        for (uint8_t i = 0; i < LENGTH; i++) { if (packet[i] != expected[i]) { return false; } }
+        const uint32_t elapsed = now - _start;
+        _state = elapsed < PHASE_MS ? State::NEUTRAL :
+                 elapsed < 2U * PHASE_MS ? State::FORWARD6 : State::FINAL_NEUTRAL;
+        _throttle = uint16_t(packet[12]) | (uint16_t(packet[13]) << 8);
+        _last = now;
+        _frames++;
+        _pending = true;
+        return true;
+    }
+    bool complete(uint32_t now, bool rx_restored)
+    {
+        if (!running() || !_pending || !rx_restored || uint32_t(now - _last) >= STALE_MS) { abort(); return false; }
+        _pending = false;
+        _completed++;
+        _neutral_completed |= _state == State::NEUTRAL;
+        _pulse_completed |= _state == State::FORWARD6;
+        _final_completed |= _state == State::FINAL_NEUTRAL;
+        return true; // TC proves local serialization, NOT an ESC-applied command.
+    }
+private:
+    Profile _profile;
+    State _state = State::IDLE;
+    uint32_t _start = 0, _last = 0, _frames = 0, _completed = 0;
+    uint16_t _throttle = 0;
+    bool _used = false, _pending = false;
+    bool _neutral_completed = false, _pulse_completed = false, _final_completed = false;
+};
