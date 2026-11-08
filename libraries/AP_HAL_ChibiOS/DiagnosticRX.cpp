@@ -240,10 +240,11 @@ bool DiagnosticRX::diagnostic_handshake(const uint8_t *packet, uint8_t length, b
 }
 
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
-bool DiagnosticRX::diagnostic_turn_lab_start(uint32_t nonce, uint32_t &started_ms)
+bool DiagnosticRX::diagnostic_turn_lab_start(uint32_t nonce, bool zero_only, uint32_t &started_ms)
 {
+    const auto profile = spektrum_turnlab_profile();
     if (!hal.scheduler->in_main_thread() || hal.util->get_soft_armed() ||
-        !spektrum_turnlab_profile().valid() || _turn_lease.used()) {
+        !(zero_only ? profile.zero_only_candidate() : profile.valid()) || _turn_lease.used()) {
         return false;
     }
     _turn_nonce = nonce;
@@ -261,7 +262,7 @@ bool DiagnosticRX::diagnostic_turn_lab_start(uint32_t nonce, uint32_t &started_m
         palReadLine(PAL_LINE(GPIOA, 0)) &&
         !(UART4->ISR & (USART_ISR_BUSY | USART_ISR_RXNE_RXFNE | USART_ISR_ORE |
                        USART_ISR_FE | USART_ISR_NE | USART_ISR_PE));
-    const bool permitted = _turn_lease.start(ready, _turn_evidence, started_ms);
+    const bool permitted = _turn_lease.start(ready, _turn_evidence, started_ms, zero_only);
     chSysUnlock();
     return permitted;
 }
