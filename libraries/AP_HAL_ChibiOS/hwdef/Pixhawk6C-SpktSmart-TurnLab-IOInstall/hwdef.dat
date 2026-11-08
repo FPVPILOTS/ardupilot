@@ -1,0 +1,15 @@
+# Phase 19: EXPLICITLY SELECTED one-time companion IOMCU installer target.
+# Flashing the resulting .apj via Mission Planner WILL attempt to replace the
+# on-board IOMCU firmware with the special MAIN3-inhibited STM32F103 image.
+# Never choose this target as the default TurnLab build or an unattended image.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-Spkt-IOInstall"
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_TURN_LAB 1
+
+# The base Pixhawk6C embeds STOCK io_firmware.bin. Replace that ROMFS entry
+# by a freshly built, source-controlled-special companion image.
+# This explicit target alone authorizes the normal ArduPilot IO updater.
+ROMFS io_firmware.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 1
