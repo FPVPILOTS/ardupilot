@@ -130,6 +130,7 @@ private:
     bool _probe_report_pending = false;
     uint32_t _last_probe_log_ms = 0, _last_probe_message_ms = 0;
     AP_Int8 _enable;
+    AP_Int8 _motor_enable; // Explicit source-qualified production opt-in; default 0.
     AP_Int8 _telem;
     AP_Int8 _shadow;
     AP_SpektrumSmartESC_Motor::Demand _plane_intent;
