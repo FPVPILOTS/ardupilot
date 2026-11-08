@@ -48,6 +48,9 @@ strings "$bin" | grep -F "SPK22 TURNLAB; UNARMABLE; PROFILE" >/dev/null
 strings "$bin" | grep -F "SPK22 TC S%u CH1=%u CH7=%u RX%u" >/dev/null
 strings "$bin" | grep -F "SPK22 IO INSTALLED CRC 0x%08lX" >/dev/null
 strings "$bin" | grep -F "SPK22 ZERO TRIAL CH1=%u CH7 OMITTED; NO MOTION TX" >/dev/null
+strings "$bin" | grep -F "SPK22 SAFE D%u STOP%u IO%u PEER%u UART%u" >/dev/null
+strings "$bin" | grep -F "SPK22 AGE P%lu IO%lu ERR%lu HF%lu" >/dev/null
+strings "$bin" | grep -F "SPK22 ESC CAND VcV%u eRPM%lu THd10%u M%04X" >/dev/null
 
 python3 - "$apj" <<'PY'
 import json
