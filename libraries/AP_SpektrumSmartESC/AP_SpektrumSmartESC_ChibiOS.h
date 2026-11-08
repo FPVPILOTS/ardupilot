@@ -21,6 +21,10 @@ public:
     void stop();
     AP_SpektrumSmartESC_Motor::Status status() const;
     bool ready_to_arm() const;
+    // Read-only, fresh ESC-reported zero throttle and zero electrical RPM.
+    // The sensor payload has no explicit SRXL2 source ID; the production
+    // profile additionally requires a qualified isolated one-ESC bus.
+    bool stopped_observed() const;
 private:
     void worker();
     void stop_locked();
