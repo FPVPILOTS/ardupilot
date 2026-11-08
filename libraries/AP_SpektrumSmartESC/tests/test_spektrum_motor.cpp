@@ -50,13 +50,14 @@ struct MockOwner : Motor::Owner {
     Motor::Receipt receipt() const override { return r; }
     void release() override { held = false; } // Does not enable PWM.
 };
-static AP_SpektrumSmartESC_Commands::Profile calibration()
+static AP_SpektrumSmartESC_Commands::Profile calibration(bool handshake_only = false)
 {
     AP_SpektrumSmartESC_Commands::Profile p;
     p.throttle_verified = p.reverse_verified = true;
     p.throttle_channel = 0; p.reverse_channel = 6;
     // Synthetic endpoints, NOT claimed Avian calibration/polarity/dwell.
     p.zero = 1000; p.full = 61000; p.forward = 2000; p.reverse = 60000; p.direction_dwell_ms = 44;
+    p.handshake_only_bench = handshake_only;
     return p;
 }
 static Motor::Qualification qualification()
@@ -72,7 +73,8 @@ struct Fixture {
     Motor::Demand d;
     uint32_t t = 0;
     uint32_t base_us = 0, base_ms = 0;
-    Fixture(uint32_t us = 0, uint32_t ms = 0) : motor(port, owner, calibration()), base_us(us), base_ms(ms) {}
+    Fixture(uint32_t us = 0, uint32_t ms = 0, bool handshake_only = false) :
+        motor(port, owner, calibration(handshake_only)), base_us(us), base_ms(ms) {}
     void tick(uint32_t us) {
         t = us;
         owner.r.acquired_ms = d.acquired_ms = d.ground_ms = d.stopped_ms = base_ms + t / 1000;
@@ -387,6 +389,38 @@ TEST(SpektrumMotor, FinalPlaneQuartersBecomeIndependentChannelOneValues)
     }
 }
 
+TEST(SpektrumMotor, RecurringUnsolicitedHandshakeIsNotAProtocolFault)
+{
+    Fixture f; f.discover(); f.cycle(70000);
+    const uint8_t payload[] = {0x40,0x31,1,0,0,0x78,0x56,0x34,0x12};
+    uint8_t p[80] {};
+    const auto n = Engine::encode(0x21,payload,sizeof(payload),p,sizeof(p));
+    EXPECT_EQ(n,14);
+    f.feed(p,n,74000); // Real ESC sends 0x21 even after establishing link.
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    f.tick(83000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+}
+
+TEST(SpektrumMotor, HandshakeOnlyBenchDoesNotPretendToHaveTelemetry)
+{
+    Fixture f(0,0,true); f.discover();
+    f.d.armed=false;
+    f.tick(70000); f.port.complete=true; f.tick(72000);
+    f.tick(79000); // No 0x80 reply, but last verified peer is fresh.
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().telemetry,0U);
+    EXPECT_FALSE(f.motor.ready_to_arm(79,79000));
+    const uint8_t payload[] = {0x40,0x31,1,0,0,0x78,0x56,0x34,0x12};
+    uint8_t p[80] {};
+    const auto n = Engine::encode(0x21,payload,sizeof(payload),p,sizeof(p));
+    f.feed(p,n,80000);
+    f.tick(83000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    f.tick(200000); // Stale handshake: no infinite run without a live peer.
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+}
+
 #ifdef SPKTSMART_STANDALONE_TEST
 int main()
 {
@@ -401,7 +435,9 @@ int main()
     ArmingNeedsCompletedNeutralReplyAndFreshOwnership();
     ControlCadenceIsMeasuredStartToStartNotAfterTC();
     FinalSignedDemandMustAgreeWithExplicitDirection(); FinalPlaneQuartersBecomeIndependentChannelOneValues();
-    std::puts("22 prepared master/command safety tests passed (mock transport only)");
+    RecurringUnsolicitedHandshakeIsNotAProtocolFault();
+    HandshakeOnlyBenchDoesNotPretendToHaveTelemetry();
+    std::puts("24 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
