@@ -11,7 +11,7 @@ public:
     struct Snapshot {
         uint32_t bytes = 0;
         uint32_t pre_tc = 0;
-        uint32_t bins[4] {}; // 0..2, 3..5, 6..12, 13..30 ms after true TC
+        uint32_t bins[4] {}; // 0..2, 3..5, 6..12, 13..80 ms after true TC
         uint32_t syncs = 0;
         uint32_t good_crc = 0;
         uint32_t bad_crc = 0;
@@ -52,7 +52,7 @@ public:
             return;
         }
         const uint32_t elapsed = acquired_ms - _tc_ms;
-        if (elapsed > 30U) {
+        if (elapsed > 80U) {
             return;
         }
         _snapshot.bytes++;
