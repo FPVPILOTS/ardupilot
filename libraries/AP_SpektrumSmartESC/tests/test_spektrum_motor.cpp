@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "../AP_SpektrumSmartESC_Motor.h"
 #include "../AP_SpektrumSmartESC_Plane.h"
+#include "../AP_SpektrumSmartESC_ProductionProfile.h"
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -72,7 +73,7 @@ struct Fixture {
     Motor motor;
     Motor::Demand d;
     uint32_t t = 0;
-    uint32_t base_us = 0, base_ms = 0;
+    uint32_t base_us = 0, base_ms = 0, last_heartbeat_us = 0;
     Fixture(uint32_t us = 0, uint32_t ms = 0, bool handshake_only = false) :
         motor(port, owner, calibration(handshake_only)), base_us(us), base_ms(ms) {}
     void tick(uint32_t us) {
@@ -94,6 +95,7 @@ struct Fixture {
         EXPECT_EQ(port.sent[4],0xFF);
         port.complete = true; tick(57000); tick(58000);
         EXPECT_EQ(motor.status().state,Motor::State::IDLE);
+        last_heartbeat_us = 58000;
         d.armed = d.rc_ok = d.control_ok = d.ground_authorized = d.stopped = d.reverse_permitted = true;
     }
     void reply(uint32_t us) {
@@ -102,6 +104,16 @@ struct Fixture {
         feed(p,n,us);
     }
     void cycle(uint32_t us) {
+        // A real connected Avian emits authenticated 0x21 heartbeat frames
+        // regularly; sensor 0x80 frames have no sender ID and must NOT renew
+        // that timer. Inject independent authentic peer evidence in the mock.
+        if (uint32_t(us - last_heartbeat_us) >= 40000U) {
+            const uint8_t payload[] = {0x40,0x31,1,0,0,0x78,0x56,0x34,0x12};
+            uint8_t heartbeat[80] {};
+            const auto n = Engine::encode(0x21,payload,sizeof(payload),heartbeat,sizeof(heartbeat));
+            feed(heartbeat,n,us-1000U);
+            last_heartbeat_us = us-1000U;
+        }
         tick(us); port.complete = true; tick(us + 2000); reply(us + 3000);
     }
 };
@@ -292,7 +304,7 @@ TEST(SpektrumMotor, IndependentMillisSurvivesMicrosWrap)
 TEST(SpektrumMotor, BusBusyNeverRetriesForever)
 {
     Fixture f; f.discover(); f.port.high=false;
-    f.tick(70000); f.tick(108000);
+    f.tick(70000); f.tick(210000);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
     EXPECT_EQ(f.port.starts,2U);
     Fixture noesc;
@@ -452,6 +464,68 @@ TEST(SpektrumMotor, HandshakeOnlyBenchDoesNotPretendToHaveTelemetry)
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
 }
 
+TEST(SpektrumMotor, ProductionSourceCannotAccidentallyArm)
+{
+    // These are synthetic values only, NOT physical Avian evidence.
+    auto p = spektrum_production_profile();
+    EXPECT_FALSE(p.valid());
+    p.operator_qualified = true;
+    p.qualification = qualification();
+    p.qualification.io_firmware_crc = 0x6DBBAD71U;
+    p.channels = calibration();
+    EXPECT_TRUE(p.valid()); // Structural check on synthetic fixture alone.
+    EXPECT_FALSE(Motor::physical_control_available()); // Real TX remains blocked.
+    p.channels.reverse_channel = 0;
+    EXPECT_FALSE(p.valid());
+    p.channels = calibration();
+    p.qualification.esc_loss_behavior = false;
+    EXPECT_FALSE(p.valid());
+    p.qualification.esc_loss_behavior = true;
+    p.qualification.io_firmware_crc = 0U;
+    EXPECT_FALSE(p.valid());
+    p.qualification.io_firmware_crc = 0x6DBBAD71U;
+    p.operator_qualified = false;
+    EXPECT_FALSE(p.valid());
+}
+
+TEST(SpektrumMotor, NativeArmRequiresActualReportedZeroAndStoppedRPM)
+{
+    Fixture f; f.discover();
+    f.d.armed = false;
+    f.tick(70000); f.port.complete=true; f.tick(72000);
+    // A TC-completed idle command without ESC telemetry cannot grant arming.
+    EXPECT_FALSE(f.motor.ready_to_arm(72,72000));
+    uint8_t payload[17] {};
+    payload[0] = 0x31; payload[1] = 0x20;
+    payload[15] = 20; // 10 percent throttle as reported by ESC
+    uint8_t frame[80] {};
+    const auto n = Engine::encode(0x80,payload,sizeof(payload),frame,sizeof(frame));
+    f.feed(frame,n,73000);
+    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+    EXPECT_EQ(f.motor.status().telemetry,1U);
+}
+
+TEST(SpektrumMotor, SensorCannotImpersonateAuthenticatedPeer)
+{
+    Fixture f; f.discover(); f.cycle(70000);
+    // Last genuine device 0x40 heartbeat remains at 58000us.
+    // The sensor reply at 73000us has NO source ID and cannot extend it.
+    f.tick(216000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+}
+
+TEST(SpektrumMotor, WrongSensorReplyIsNotSuccessfulControlAck)
+{
+    Fixture f; f.discover();
+    f.tick(70000); f.port.complete=true; f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0] = 0x31; payload[1] = 0x21; // NOT ESC sensor 0x20
+    uint8_t frame[80] {};
+    const auto n = Engine::encode(0x80,payload,sizeof(payload),frame,sizeof(frame));
+    f.feed(frame,n,73000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::PROTOCOL);
+}
+
 #ifdef SPKTSMART_STANDALONE_TEST
 int main()
 {
@@ -468,7 +542,9 @@ int main()
     FinalSignedDemandMustAgreeWithExplicitDirection(); FinalPlaneQuartersBecomeIndependentChannelOneValues();
     RecurringUnsolicitedHandshakeIsNotAProtocolFault();
     HandshakeOnlyBenchDoesNotPretendToHaveTelemetry();
-    std::puts("26 prepared master/command safety tests passed (mock transport only)");
+    ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
+    SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
+    std::puts("30 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
