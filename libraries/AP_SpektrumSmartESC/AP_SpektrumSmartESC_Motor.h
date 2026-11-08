@@ -75,7 +75,16 @@ public:
             // A handshake-only bench session never qualifies for flight arming.
             !_profile.handshake_only_bench &&
             _status.throttle == _profile.zero && !_status.reverse &&
-            uint32_t(now_us - _last_peer) < 50000;
+            // A local UART TC or bare 0x21 heartbeat is not proof the ESC has
+            // accepted an idle command. Require a fresh telemetry candidate
+            // reporting BOTH zero commanded throttle and stopped electrical RPM
+            // on the separately isolated verified single-ESC bus.
+            _have_telemetry && _status.telemetry != 0 &&
+            (_telemetry.valid & (AP_SpektrumSmartESC::ERPM | AP_SpektrumSmartESC::THROTTLE)) ==
+                (AP_SpektrumSmartESC::ERPM | AP_SpektrumSmartESC::THROTTLE) &&
+            _telemetry.electrical_rpm == 0 && _telemetry.throttle_pct <= 0.5f &&
+            uint32_t(now_us - _telemetry_since) < 50000U &&
+            uint32_t(now_us - _last_peer) < 150000U;
     }
     static constexpr bool physical_control_available()
     {
