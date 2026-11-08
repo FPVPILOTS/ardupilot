@@ -1065,6 +1065,16 @@ void Plane::servos_output(void)
     // Separate explicitly qualified writer; SHADOW remains read-only. Both
     // physical validation gates are zero in ordinary and laboratory firmware.
     if (AP_SpektrumSmartESC_Motor::physical_control_available()) {
+        // Evidence is obtained from the actual Plane flight-state estimator
+        // and fresh Avian electrical-RPM/throttle telemetry. Raw RP4TD sticks
+        // and SERVO3 PWM do not pretend that the motor is physically stopped.
+        AP_SpektrumSmartESC_Diagnostics::MotorEvidence witness;
+        const uint32_t witness_ms = AP_HAL::millis();
+        witness.ground = !is_flying();
+        witness.ground_ms = witness_ms;
+        witness.stopped = spektrum_smart_esc.esc_reports_stopped();
+        witness.stopped_ms = witness_ms;
+        (void)spektrum_smart_esc.motor_evidence(witness);
         spektrum_smart_esc.plane_control(arming.is_armed_and_safety_off(), !rc_failsafe_active(),
             any_failsafe_triggered(), have_reverse_thrust(), allow_reverse_thrust(),
             rc().find_channel_for_option(RC_Channel::AUX_FUNC::REVERSE_THROTTLE) != nullptr, reversed_throttle);
