@@ -160,6 +160,35 @@ TEST(SpektrumMotor, ThrottleQuartersAndChannelIsolation)
         EXPECT_EQ(f.port.sent[4],0x40); // Reply request, not SERVO4.
     }
 }
+TEST(SpektrumMotor, SixPercentMotorTurnIsOnlyATestDemand)
+{
+    // This is a TEST SCRIPT request (0 -> 6% -> 0), not a motor limit.
+    // The mock transport never drives a physical ESC.
+    Fixture f;
+    f.discover();
+    f.cycle(70000); // Initial neutral command with accepted mock reply.
+    EXPECT_EQ(f.motor.status().throttle,1000);
+
+    f.d.magnitude=0.06f; // Explicit test demand only.
+    f.cycle(83000);
+    EXPECT_EQ(f.motor.status().throttle,4600);
+
+    f.d.magnitude=0.0f;
+    f.cycle(96000);
+    EXPECT_EQ(f.motor.status().throttle,1000);
+}
+
+TEST(SpektrumMotor, NormalMotorPathRetainsFullConfiguredThrottleRange)
+{
+    // Separate instance from the 6% turn test: no permanent code cap.
+    Fixture f;
+    f.discover();
+    f.cycle(70000);
+    f.d.magnitude=1.0f;
+    f.cycle(83000);
+    EXPECT_EQ(f.motor.status().throttle,61000);
+}
+
 TEST(SpektrumMotor, ReverseDwellAndReturn)
 {
     Fixture f; f.discover(); f.cycle(70000);
@@ -427,7 +456,7 @@ TEST(SpektrumMotor, HandshakeOnlyBenchDoesNotPretendToHaveTelemetry)
 int main()
 {
     PublishedRevKChannelVector(); CodecBoundsOrderingAndFailsafe(); PhysicalPortAlwaysBlocked();
-    QualificationAndStartupNeutral(); ThrottleQuartersAndChannelIsolation(); ReverseDwellAndReturn();
+    QualificationAndStartupNeutral(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
     EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); StaleDemandAndReceipt();
     IndependentMillisSurvivesMicrosWrap();
@@ -439,7 +468,7 @@ int main()
     FinalSignedDemandMustAgreeWithExplicitDirection(); FinalPlaneQuartersBecomeIndependentChannelOneValues();
     RecurringUnsolicitedHandshakeIsNotAProtocolFault();
     HandshakeOnlyBenchDoesNotPretendToHaveTelemetry();
-    std::puts("24 prepared master/command safety tests passed (mock transport only)");
+    std::puts("26 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
