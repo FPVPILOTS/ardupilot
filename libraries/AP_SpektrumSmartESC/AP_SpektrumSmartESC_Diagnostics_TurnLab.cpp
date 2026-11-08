@@ -16,7 +16,7 @@ void AP_SpektrumSmartESC_Diagnostics::finish_turn(const char *reason)
     }
     _turn_owner.release(); // Never restore MAIN3 automatically.
     _turn_pending = _turn_active = _turn_inflight = false;
-    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 %s Q%lu TC%lu", reason,
+    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 %s %s Q%lu TC%lu", _turn_zero_only ? "ZERO" : "MOTOR", reason,
                   (unsigned long)_turn.frames(), (unsigned long)_turn.completed());
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 RX%lu WIN%lu OUT%lu; NO STOP PROOF",
                   (unsigned long)_turn_rx, (unsigned long)_turn_reply, (unsigned long)_turn_late);
@@ -53,10 +53,13 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
     if (_turnrun != 0) {
         const int8_t request = _turnrun.get();
         _turnrun.set(0);
-        const bool authorized = !_turn_consumed && request == 1 && _turn_auth.consume(safe, now);
+        _turn_zero_only = request == 2;
+        const bool authorized = !_turn_consumed && (request == 1 || request == 2) &&
+            _turn_auth.consume(safe, now);
         _turn_consumed = true;
         const auto profile = spektrum_turnlab_profile();
-        if (!authorized || !profile.valid()) {
+        const bool qualified = _turn_zero_only ? profile.zero_only_candidate() : profile.valid();
+        if (!authorized || !qualified) {
             if (authorized) {
                 // Report which independent qualifications are still absent.
                 // These are source assertions, not automatically discovered
@@ -76,6 +79,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
             }
             finish_turn(authorized ? "BLOCKED_PROFILE" : "BLOCKED_AUTH/ABORT");
             return;
+        }
+        if (_turn_zero_only) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                          "SPK22 ZERO TRIAL CH1=%u CH7 OMITTED; NO MOTION TX",
+                          unsigned(profile.channels.zero));
         }
         _turn_nonce = _auto_uid ^ now;
         if (_turn_nonce == 0) { _turn_nonce = 1; }
@@ -113,7 +121,8 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
     if (_turn_pending) {
         if (_auto_leased || (hw.handshake_flags & 32U) == 0 || (hw.flags & 9U) != 9U) { return; }
         uint32_t started = now;
-        if (!port->diagnostic_turn_lab_start(_turn_nonce, started) || !_turn.start(true, e, started)) {
+        if (!port->diagnostic_turn_lab_start(_turn_nonce, _turn_zero_only, started) ||
+            !_turn.start(true, e, started, _turn_zero_only)) {
             // May have acquired a native lease even if the coordinator refused.
             _turn_active = true;
             finish_turn("BLOCKED_NATIVE");
@@ -135,7 +144,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
             _turn_logged = _turn.state();
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TC S%u CH1=%u CH7=%u RX%u",
                 unsigned(_turn.state()), unsigned(_turn.throttle()),
-                unsigned(spektrum_turnlab_profile().channels.forward), unsigned(restored));
+                unsigned(_turn_zero_only ? 0 : spektrum_turnlab_profile().channels.forward), unsigned(restored));
         }
 #if HAL_LOGGING_ENABLED
         AP::logger().WriteStreaming("SPTN", "TimeUS,Phase,CH1,CH7,Q,TC,Peer,RX,Win,Out", "QBHHIIIIII",
