@@ -51,6 +51,8 @@ strings "$bin" | grep -F "SPK22 ZERO TRIAL CH1=%u CH7 OMITTED; NO MOTION TX" >/d
 strings "$bin" | grep -F "SPK22 SAFE D%u STOP%u IO%u PEER%u UART%u" >/dev/null
 strings "$bin" | grep -F "SPK22 AGE P%lu IO%lu ERR%lu HF%lu" >/dev/null
 strings "$bin" | grep -F "SPK22 ESC CAND VcV%u eRPM%lu THd10%u M%04X" >/dev/null
+strings "$bin" | grep -F "SPKRC S3 PWM%u MAP%u ARM%u RC%u FS%u" >/dev/null
+strings "$bin" | grep -F "SPKRC INT V%u MAG%u REV%u STOP%u" >/dev/null
 
 python3 - "$apj" <<'PY'
 import json
