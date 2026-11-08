@@ -155,6 +155,17 @@ int main()
         ++tests;
     }
     {
+        // Dedicated IO companion: channel 3 / index 2 is always absent,
+        // while the remaining PWM channels, especially SERVO7, remain intact.
+        assert(AP_IOMCU_SmartESCInhibit::permitted_outputs(0xffU) == 0xfbU);
+        assert(AP_IOMCU_SmartESCInhibit::permitted_outputs(0x04U) == 0U);
+        assert(AP_IOMCU_SmartESCInhibit::permitted_outputs(0x40U) == 0x40U);
+        for (uint8_t i = 0; i < 8; i++) {
+            assert(AP_IOMCU_SmartESCInhibit::output_allowed(i) == (i != 2));
+        }
+        ++tests;
+    }
+    {
         AP_IOMCU_SmartESCInhibit ack;
         ack.nonce = 123; ack.uptime_ms = 100;
         assert(ack.matches(123) && !ack.matches(0) && !ack.matches(124));
