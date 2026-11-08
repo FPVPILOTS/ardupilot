@@ -45,10 +45,16 @@ public:
         bool disarmed = false, emergency_stop = false, owner = false;
         bool peer = false, uart_ok = false;
         uint32_t peer_ms = 0, control_ms = 0, owner_ms = 0;
-        bool safe(uint32_t now) const
+        // The zero-only diagnostic uses a 200ms verified 0x21 age budget:
+        // after CH1=minimum frames the real Avian can send 0x80 telemetry
+        // in place of its ~50ms 0x21 heartbeat. Never count source-less 0x80
+        // as peer identity. Physical motor-turn mode RETAINS 100ms.
+        bool safe(uint32_t now, bool zero_only = false) const
         {
+            const uint32_t peer_deadline = zero_only ? 200U : 100U;
             return disarmed && emergency_stop && owner && peer && uart_ok &&
-                uint32_t(now - peer_ms) < 100 && uint32_t(now - control_ms) < STALE_MS &&
+                uint32_t(now - peer_ms) < peer_deadline &&
+                uint32_t(now - control_ms) < STALE_MS &&
                 uint32_t(now - owner_ms) < 50;
         }
     };
@@ -61,7 +67,7 @@ public:
         if (_used) { return false; }
         _used = true;
         _zero_only = zero_only;
-        if (!authorized || !(zero_only ? _profile.zero_only_candidate() : _profile.valid()) || !e.safe(now)) {
+        if (!authorized || !(zero_only ? _profile.zero_only_candidate() : _profile.valid()) || !e.safe(now, zero_only)) {
             _state = State::BLOCKED;
             return false;
         }
@@ -114,7 +120,7 @@ public:
     uint8_t prepare(const Evidence &e, uint32_t now, uint8_t *packet, size_t capacity)
     {
         if (!running()) { return 0; }
-        if (!e.safe(now) || uint32_t(now - _last) >= STALE_MS) { abort(); return 0; }
+        if (!e.safe(now, _zero_only) || uint32_t(now - _last) >= STALE_MS) { abort(); return 0; }
         const uint32_t elapsed = now - _start;
         if (elapsed >= (_zero_only ? ZERO_WINDOW_MS : WINDOW_MS)) {
             _state = !_pending && (_zero_only ? _neutral_completed : _final_completed) ? State::DONE : State::FAULT;
