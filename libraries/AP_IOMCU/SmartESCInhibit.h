@@ -8,6 +8,19 @@
 struct AP_IOMCU_SmartESCInhibit {
     static constexpr uint16_t VERSION = 1;
     static constexpr uint16_t MAIN3 = 1U << 2;
+    static constexpr uint8_t MAIN3_INDEX = 2;
+
+    // Dedicated companion IO image: remove MAIN3 from PWM, DShot and GPIO
+    // output requests, regardless of whether they originate from normal
+    // control, a failsafe mixer, or a later output reconfiguration.
+    static constexpr uint32_t permitted_outputs(uint32_t mask)
+    {
+        return mask & ~uint32_t(MAIN3);
+    }
+    static constexpr bool output_allowed(uint8_t index)
+    {
+        return index != MAIN3_INDEX;
+    }
     uint16_t version = VERSION;
     uint16_t mask = MAIN3;
     uint32_t nonce = 0;
