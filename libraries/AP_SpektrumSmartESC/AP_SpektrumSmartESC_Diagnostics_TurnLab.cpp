@@ -38,11 +38,22 @@ void AP_SpektrumSmartESC_Diagnostics::observe_turn(const uint8_t *packet, uint8_
         if (packet[4] == 0x20 &&
             AP_SpektrumSmartESC::decode_esc(packet + 4, 16, esc)) {
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "SPK22 ESC CAND VcV%u eRPM%lu THd10%u M%04X",
+                          "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X",
                           unsigned(esc.voltage * 100.0f),
                           (unsigned long)esc.electrical_rpm,
-                          unsigned(esc.throttle_pct * 10.0f),
+                          unsigned(esc.throttle_pct + 0.5f),
                           unsigned(esc.valid));
+            if (_turn_zero_only && !_turn_sensor_nonzero_warned &&
+                (esc.valid & AP_SpektrumSmartESC::THROTTLE) != 0 &&
+                esc.throttle_pct > 0.5f) {
+                // A source-less ESC-class telemetry candidate reported
+                // nonzero throttle after our CH1=768 frame. This is NOT
+                // an accepted idle indication, irrespective of eRPM=0.
+                _turn_sensor_nonzero_warned = true;
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                              "SPK22 CH1 IDLE UNVERIFIED; SENSOR TH%u%%",
+                              unsigned(esc.throttle_pct + 0.5f));
+            }
         }
         // A source-less telemetry candidate is not proof of peer identity or
         // applied throttle. Unsolicited 0x21 frames do not count as telemetry.
@@ -161,6 +172,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         _turn_pending = false;
         _turn_active = true;
         _turn_gap_wait = 0;
+        _turn_sensor_nonzero_warned = false;
         _turn_error_base = port->receive_errors();
         _turn_fault_base = hw.handshake_faults;
     }
