@@ -53,6 +53,7 @@ strings "$bin" | grep -F "SPK22 AGE P%lu IO%lu ERR%lu HF%lu" >/dev/null
 strings "$bin" | grep -F "SPK22 ESC CAND VcV%u eRPM%lu THd10%u M%04X" >/dev/null
 strings "$bin" | grep -F "SPKRC IN3=%u S3=%u MAP%u ARM%u RC%u FS%u" >/dev/null
 strings "$bin" | grep -F "SPKRC INT V%u MAG%u REV%u STOP%u" >/dev/null
+strings "$bin" | grep -F "SPKT MOTOR BLOCKED: SOURCE/IO/ESC UNQUALIFIED" >/dev/null
 
 python3 - "$apj" <<'PY'
 import json
