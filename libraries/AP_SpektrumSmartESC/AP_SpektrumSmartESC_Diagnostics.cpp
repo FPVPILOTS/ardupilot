@@ -1321,6 +1321,19 @@ void AP_SpektrumSmartESC_Diagnostics::plane_shadow(bool armed, bool rc_ok, bool 
     const uint8_t flags = uint8_t(valid) | (uint8_t(armed) << 1) | (uint8_t(rc_ok) << 2) |
         (uint8_t(failsafe) << 3) | (uint8_t(reverse_permitted) << 4) |
         (uint8_t(SRV_Channels::get_emergency_stop()) << 5);
+    // Direct Mission Planner readout for the existing RP4TD -> Plane
+    // -> final SERVO3 path. Never treats RC3 raw input as motor authority,
+    // never writes to UART4 or a servo output. The bench remains UNARMABLE.
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                  "SPKRC S3 PWM%u MAP%u ARM%u RC%u FS%u",
+                  unsigned(pwm), unsigned(mapped), unsigned(armed),
+                  unsigned(rc_ok), unsigned(failsafe));
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                  "SPKRC INT V%u MAG%u REV%u STOP%u",
+                  unsigned(intent_valid),
+                  unsigned(_plane_intent.magnitude * 100.0f),
+                  unsigned(_plane_intent.reverse),
+                  unsigned(SRV_Channels::get_emergency_stop()));
 #if HAL_LOGGING_ENABLED
     // Demand preview only. No raw channel values without verified ESC calibration.
     AP::logger().WriteStreaming("SPKS", "TimeUS,PWM,Pct,Rev,Flags", "QHfBB",
