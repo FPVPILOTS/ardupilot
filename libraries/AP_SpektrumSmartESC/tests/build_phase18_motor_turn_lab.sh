@@ -9,7 +9,7 @@ test -s "$bin"
 test -s "${bin}.apj"
 strings "$bin" | grep -F "SPK22 TURNLAB; UNARMABLE; PROFILE" >/dev/null
 strings "$bin" | grep -F "SPK22 TC S%u CH1=%u CH7=%u RX%u" >/dev/null
-strings "$bin" | grep -F "SPK22 TURNLAB PROFILE %u; TEST TX GATED" >/dev/null
+strings "$bin" | grep -F "SPK22 MOTOR PROFILE %u ZERO TRIAL %u" >/dev/null
 strings "$bin" | grep -F "SPK17 FAST OK" >/dev/null
 sha256sum "${bin}.apj"
 printf '\nPHASE18 BUILD PASS: TurnLab only; actual motor operation still requires qualified source profile, IO ownership and physical verification.\n'
