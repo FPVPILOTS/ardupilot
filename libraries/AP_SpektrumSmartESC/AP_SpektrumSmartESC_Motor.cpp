@@ -145,7 +145,10 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
         if (!d.control_ok || d.failsafe || uint32_t(now_ms - d.acquired_ms) >= 50) {
             fault(Fault::CONTROL_LOSS); return;
         }
-        if (!d.ground_authorized || uint32_t(now_ms - d.ground_ms) >= 100) {
+        if ((d.reverse || _status.reverse || _transition) &&
+            (!d.ground_authorized || uint32_t(now_ms - d.ground_ms) >= 100)) {
+            // Only a reverse/transition request demands ground evidence.
+            // Requiring it for every FORWARD tick would kill thrust in flight.
             fault(Fault::GROUND); return;
         }
         if (!isfinite(d.magnitude) || d.magnitude < 0 || d.magnitude > 1) {
@@ -254,10 +257,17 @@ void AP_SpektrumSmartESC_Motor::control(const Demand &d, uint32_t now_us, uint32
 {
     const bool stopped = d.stopped && uint32_t(now_ms - d.stopped_ms) < 50;
     if (!_initial_idle) {
-        if (d.magnitude > 0 || d.reverse || !stopped) {
-            return; // Reconnect never resumes an existing nonzero demand.
+        if (d.magnitude > 0 || d.reverse) {
+            return; // Reconnect or arming never resumes nonzero demand.
         }
-        _initial_idle = true;
+        // Bootstrap ONLY with an explicit CH1=zero forward demand.
+        // The ESC cannot report motor RPM until it has been asked for
+        // telemetry by a 0xCD frame. Zero TX itself authorizes NO
+        // nonzero throttle; initial_idle becomes true only after fresh
+        // stopped evidence has been independently observed.
+        if (stopped) {
+            _initial_idle = true;
+        }
     }
     float magnitude = d.magnitude;
     bool reverse = _status.reverse;
