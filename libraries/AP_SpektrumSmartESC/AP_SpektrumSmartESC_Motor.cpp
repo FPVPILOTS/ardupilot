@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "AP_SpektrumSmartESC_Motor.h"
-#include "AP_SpektrumSmartESC_Bench6Wire.h"
 #include <math.h>
 
 bool AP_SpektrumSmartESC_Motor::control_packet(const uint8_t *p, uint8_t n)
@@ -289,12 +288,9 @@ void AP_SpektrumSmartESC_Motor::control(const Demand &d, uint32_t now_us, uint32
         _status.state = reverse ? State::REVERSE_ACTIVE : State::FORWARD;
     }
     uint16_t values[32] {};
-    // Keep existing simulated research vectors unchanged, but enforce a
-    // second, independent 6% maximum when the REAL physical path is ever
-    // separately qualified. No compile-time TX permission is changed here.
-    values[0] = _port.simulated() ?
-        uint16_t(_profile.zero + uint32_t(lroundf(magnitude * ((_profile.full - _profile.zero) / 4U))) * 4U) :
-        AP_SpektrumSmartESC_Bench6Wire::throttle(magnitude, _profile.zero, _profile.full);
+    // Full verified ESC throttle range for the ordinary motor controller.
+    // The optional 6% motor-turn test limits only its own requested demand.
+    values[0] = uint16_t(_profile.zero + uint32_t(lroundf(magnitude * ((_profile.full - _profile.zero) / 4U))) * 4U);
     values[6] = reverse ? _profile.reverse : _profile.forward;
     const uint32_t mask = _profile.reverse_verified ? 0x41 : 1;
     const uint8_t n = AP_SpektrumSmartESC_ChannelData::encode(AP_SpektrumSmartESC_ChannelData::Kind::Normal,
