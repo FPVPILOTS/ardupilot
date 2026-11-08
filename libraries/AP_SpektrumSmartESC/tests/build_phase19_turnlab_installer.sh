@@ -52,7 +52,8 @@ strings "$bin" | grep -F "SPK22 SAFE D%u STOP%u IO%u PEER%u UART%u" >/dev/null
 strings "$bin" | grep -F "SPK22 AGE P%lu IO%lu ERR%lu HF%lu" >/dev/null
 strings "$bin" | grep -F "SPK22 GAP DEFER%lu" >/dev/null
 strings "$bin" | grep -F "SPK22 TX NATIVE age%lu flags%02X HF%lu ERR%lu" >/dev/null
-strings "$bin" | grep -F "SPK22 ESC CAND VcV%u eRPM%lu THd10%u M%04X" >/dev/null
+strings "$bin" | grep -F "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X" >/dev/null
+strings "$bin" | grep -F "SPK22 CH1 IDLE UNVERIFIED; SENSOR TH%u%%" >/dev/null
 strings "$bin" | grep -F "SPKRC IN3=%u S3=%u MAP%u ARM%u RC%u FS%u" >/dev/null
 strings "$bin" | grep -F "SPKRC INT V%u MAG%u REV%u STOP%u" >/dev/null
 strings "$bin" | grep -F "SPKT MOTOR BLOCKED: SOURCE/IO/ESC UNQUALIFIED" >/dev/null
