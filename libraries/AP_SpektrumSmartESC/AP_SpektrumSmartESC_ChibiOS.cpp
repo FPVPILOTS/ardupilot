@@ -88,6 +88,18 @@ bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
         _motor.ready_to_arm(now_ms,AP_HAL::micros());
 }
 
+bool AP_SpektrumSmartESC_ChibiOS::stopped_observed() const
+{
+    WITH_SEMAPHORE(_lock);
+    if (!_active || _pending) { return false; }
+    AP_SpektrumSmartESC::Telemetry t {};
+    if (!_motor.telemetry(t, AP_HAL::micros())) { return false; }
+    constexpr uint16_t required =
+        AP_SpektrumSmartESC::ERPM | AP_SpektrumSmartESC::THROTTLE;
+    return (t.valid & required) == required &&
+           t.electrical_rpm == 0 && t.throttle_pct <= 0.5f;
+}
+
 void AP_SpektrumSmartESC_ChibiOS::worker()
 {
     // Plane's default main loop is 50 Hz. Do not derive an 11-ms bus cadence
