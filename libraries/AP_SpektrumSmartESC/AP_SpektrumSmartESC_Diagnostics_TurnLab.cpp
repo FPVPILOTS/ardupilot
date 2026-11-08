@@ -18,6 +18,7 @@ void AP_SpektrumSmartESC_Diagnostics::finish_turn(const char *reason)
     _turn_pending = _turn_active = _turn_inflight = false;
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 %s %s Q%lu TC%lu", _turn_zero_only ? "ZERO" : "MOTOR", reason,
                   (unsigned long)_turn.frames(), (unsigned long)_turn.completed());
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK22 GAP DEFER%lu", (unsigned long)_turn_gap_wait);
     GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 RX%lu WIN%lu OUT%lu; NO STOP PROOF",
                   (unsigned long)_turn_rx, (unsigned long)_turn_reply, (unsigned long)_turn_late);
     if (!completed) {
@@ -159,6 +160,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         }
         _turn_pending = false;
         _turn_active = true;
+        _turn_gap_wait = 0;
         _turn_error_base = port->receive_errors();
         _turn_fault_base = hw.handshake_faults;
     }
@@ -189,11 +191,36 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
     if (_turn.state() == Turn::State::FAULT || _turn.state() == Turn::State::DONE) {
         finish_turn(_turn.state() == Turn::State::DONE ? "DONE_LATCHED" : "FAULT_DEADLINE"); return;
     }
-    if (n != 0 && restored && (hw.handshake_flags & 32U) != 0) {
+    if (n != 0) {
+        // The native half-duplex UART REQUIRES at least 2ms of true
+        // physical RX silence (and no stale >100ms RX) before starting
+        // transmit. The previous coordinator offered a frame immediately
+        // after a heartbeat. The lower layer correctly denied it, but the
+        // lease was already consumed (Q5/TC4 -> FAULT_TX_DENIED).
+        // Treat an *expected busy bus* as a scheduling deferral, not an
+        // attempted packet. The native begin_tx() rechecks independently.
+        if (!Turn::tx_window(now, hw.last_uart_rx_ms, restored,
+                             (hw.handshake_flags & 32U) != 0)) {
+            _turn_gap_wait++;
+            return;
+        }
         for (uint8_t i = 0; i < n; i++) { _turn_packet[i] = preview[i]; }
-        if (!_turn.take(_turn_packet, n, e, now) ||
-            !port->diagnostic_turn_lab(_turn_packet, n, false, now, e.peer_ms)) {
-            finish_turn("FAULT_TX_DENIED"); return;
+        if (!_turn.take(_turn_packet, n, e, now)) {
+            finish_turn("FAULT_LOCAL_TX");
+            return;
+        }
+        if (!port->diagnostic_turn_lab(_turn_packet, n, false, now, e.peer_ms)) {
+            AP_HAL::UARTDriver::ReceiveDiagnostics after {};
+            (void)port->receive_diagnostics(after);
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                          "SPK22 TX NATIVE age%lu flags%02X HF%lu ERR%lu",
+                          (unsigned long)(after.last_uart_rx_ms ?
+                              uint32_t(AP_HAL::millis() - after.last_uart_rx_ms) : 0xFFFFFFFFUL),
+                          unsigned(after.handshake_flags),
+                          (unsigned long)(after.handshake_faults - _turn_fault_base),
+                          (unsigned long)(port->receive_errors() - _turn_error_base));
+            finish_turn("FAULT_NATIVE_TX");
+            return;
         }
         _turn_tc_base = hw.handshake_completed;
         _turn_inflight = true;
