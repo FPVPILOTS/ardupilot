@@ -12,4 +12,8 @@ define AP_SPEKTRUM_SMART_ESC_TURN_LAB 1
 # by a freshly built, source-controlled-special companion image.
 # This explicit target alone authorizes the normal ArduPilot IO updater.
 ROMFS io_firmware.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+# If BRD_IO_DSHOT is accidentally selected, never auto-install the STOCK
+# DShot IOMCU image and thereby restore MAIN3. Use the same inhibited
+# companion image; DShot behavior on that image remains unqualified.
+ROMFS io_firmware_dshot.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
 define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 1
