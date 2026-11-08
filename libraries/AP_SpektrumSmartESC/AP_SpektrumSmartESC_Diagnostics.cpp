@@ -10,6 +10,7 @@
 #endif
 #include "AP_SpektrumSmartESC_Shadow.h"
 #include "AP_SpektrumSmartESC_ChibiOS.h"
+#include "AP_SpektrumSmartESC_ProductionProfile.h"
 
 extern const AP_HAL::HAL &hal;
 
@@ -111,6 +112,13 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("TURNRUN", 14, AP_SpektrumSmartESC_Diagnostics, _turnrun, 0),
 #endif
+    // @Param: MOTOR
+    // @DisplayName: Source-qualified SRXL2 aircraft motor selection
+    // @Description: Explicit opt-in to the native Plane motor controller. Never bypasses bench arming prohibition, hardware TX gates, or reviewed physical ESC/IO qualification. If selected but unqualified, arming remains blocked; there is no PWM fallback. Not a motor-test button.
+    // @Values: 0:Disabled,1:Select only when source qualified
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("MOTOR", 15, AP_SpektrumSmartESC_Diagnostics, _motor_enable, 0),
     AP_GROUPEND
 };
 
@@ -141,6 +149,40 @@ void AP_SpektrumSmartESC_Diagnostics::init()
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKL: LAB ONLY; disconnect ESC and actuators");
     }
     _handshake.set(0); // Volatile command: never honor a saved/startup TX request.
+    if (_motor_enable.get() == 1) {
+        // Production mode is an explicit, boot-scoped selection, never a
+        // fallback from a failed TurnLab or missing receiver. Fail CLOSED:
+        // the arming check stays blocked even when the profile is absent.
+        _motor_selected = true;
+        const auto p = spektrum_production_profile();
+        const bool eligible = !AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB &&
+            !AP_SPEKTRUM_SMART_ESC_TURN_LAB &&
+            AP_SpektrumSmartESC_Motor::physical_control_available() &&
+            p.valid() && _enable == 0 && _probe == 0;
+        if (!eligible) {
+            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL,
+                          "SPKT MOTOR BLOCKED: SOURCE/IO/ESC UNQUALIFIED");
+            return;
+        }
+        uint8_t board_id[16] {};
+        uint8_t board_len = sizeof(board_id);
+        if (!hal.util->get_system_id_unformatted(board_id, board_len) ||
+            board_len == 0 || board_len > sizeof(board_id)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "SPKT MOTOR BLOCKED: NO BOARD UID");
+            return;
+        }
+        uint32_t uid = 2166136261U;
+        for (uint8_t i = 0; i < board_len; i++) {
+            uid = (uid ^ board_id[i]) * 16777619U;
+        }
+        const uint32_t nonce = (uid ^ AP_HAL::millis()) | 1U;
+        if (!prepare_motor(p.channels, p.qualification, p.esc_id, uid, nonce)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "SPKT MOTOR BLOCKED: IO/START");
+        } else {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPKT MOTOR PREPARED; ARM GATES ACTIVE");
+        }
+        return; // Never start the LAB RX master in native production mode.
+    }
     _bench.observe_enable(_enable.get() != 0 || _probe.get() != 0 || _handshake.get() != 0);
     if (bench_blocked() && !hal.util->get_soft_armed()) {
         SRV_Channels::set_emergency_stop(true);
@@ -1221,8 +1263,10 @@ bool AP_SpektrumSmartESC_Diagnostics::prepare_motor(const AP_SpektrumSmartESC_Co
     }
     auto *uart = static_cast<DiagnosticRX *>(hal.diagnostic_rx_uart());
     if (uart == nullptr) { return false; }
-    if (_receiver == nullptr) { _receiver = NEW_NOTHROW AP_SpektrumSmartESC_Receive(*uart); }
-    if (_receiver == nullptr) { return false; }
+    if (_receiver == nullptr) {
+        _receiver = NEW_NOTHROW AP_SpektrumSmartESC_Receive(*uart);
+        if (_receiver == nullptr || !_receiver->start()) { return false; }
+    }
 #if HAL_WITH_ESC_TELEM
     if (_telem == 1 && (AP_ESC_Telem::get_singleton() == nullptr ||
         !_receiver->set_frontend(*AP_ESC_Telem::get_singleton(),14))) { return false; }
