@@ -124,10 +124,24 @@ static void timeout_and_truncated_frame()
     assert(w.snapshot().sensors == 1);
 }
 
+static void capture_next_unsolicited_50ms_heartbeat()
+{
+    // First handshake after a poll may arrive beyond the former 30ms window.
+    Witness w; uint8_t p[80] {};
+    const uint8_t n = packet(0x21, p);
+    w.begin(); w.on_true_tc(100);
+    feed_packet(w, p, n, 150);
+    w.finish();
+    assert(w.snapshot().bytes == 14);
+    assert(w.snapshot().handshake == 1);
+    assert(w.snapshot().sensors == 0);
+    assert(w.snapshot().bins[3] == 14);
+}
+
 static void ignore_late_bytes_after_capture_window()
 {
     Witness w; w.begin(); w.on_true_tc(100);
-    w.feed(0xA6, 131);
+    w.feed(0xA6, 181);
     w.finish();
     assert(w.snapshot().bytes == 0);
 }
@@ -152,7 +166,8 @@ int main()
     crc_failure_and_bad_length();
     handshake_and_control_are_not_telemetry();
     timeout_and_truncated_frame();
+    capture_next_unsolicited_50ms_heartbeat();
     ignore_late_bytes_after_capture_window();
     timestamps_wrap();
-    std::puts("10 PostPoll RX read-only forensic tests passed");
+    std::puts("11 PostPoll RX read-only forensic tests passed");
 }
