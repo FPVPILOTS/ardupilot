@@ -646,6 +646,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       (unsigned long)dry_status.blocked);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 DRY; SPK20 1x0xCD EXPLICIT");
+#elif AP_SPEKTRUM_SMART_ESC_TURN_LAB
+        // TurnLab can transmit real channel-bearing control frames after a
+        // separately qualified profile. Never label this image RX-only.
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TURNLAB PROFILE %u; TEST TX GATED",
+                      unsigned(spektrum_turnlab_profile().valid()));
 #else
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK19 NO TX; 0xCD PREVIEW ONLY");
 #endif
@@ -698,6 +703,9 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         if (st.state == AP_SpektrumSmartESC_AutoConnect::State::LINKED) {
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 POLLLAB: MOTOR UNPLUGGED; NO THROTTLE");
+#elif AP_SPEKTRUM_SMART_ESC_TURN_LAB
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 TURNLAB; CH1/CH7 TEST ONLY; Q%lu TC%lu",
+                          (unsigned long)_turn.frames(), (unsigned long)_turn.completed());
 #else
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK17 NO TLM POLL/THROTTLE; RX OBS ONLY");
 #endif
