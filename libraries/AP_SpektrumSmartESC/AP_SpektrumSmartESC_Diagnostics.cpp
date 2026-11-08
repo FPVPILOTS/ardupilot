@@ -439,7 +439,8 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
     if (_poll_active) {
         // Close the physical TX lease at its ORIGINAL 15-ms deadline.
-        // A separate bounded read-only witness may observe RX until 30 ms.
+        // A separate read-only witness observes one 50-ms peer heartbeat
+        // cycle, stopping at TC+80ms without extending any TX lease.
         const bool bad_link_or_hardware =
             !dry.linked || !dry.disarmed || !dry.emergency_stop ||
             port->receive_errors() != _poll_uart_error_baseline ||
@@ -462,7 +463,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         }
     }
     if (_post_poll_diag.active() && _poll_tc &&
-        uint32_t(now_ms - _poll_tc_ms) >= 31U) {
+        uint32_t(now_ms - _poll_tc_ms) >= 81U) {
         _post_poll_diag.finish();
     }
     if (_poll_pending) {
