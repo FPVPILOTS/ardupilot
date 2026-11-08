@@ -18,13 +18,17 @@ public:
         uint32_t io_crc = 0;
         bool electrical = false;
         bool loss_behavior = false;
+        // TurnLab commands CH7 = forward only. Validated forward polarity is
+        // required, but a reverse endpoint belongs to the separate full motor
+        // qualification and must not block this forward-only experiment.
+        bool forward_verified = false;
         bool valid() const
         {
             return electrical && loss_behavior && io_crc != 0 &&
-                channels.throttle_verified && channels.reverse_verified &&
+                channels.throttle_verified && forward_verified &&
                 channels.throttle_channel == 0 && channels.reverse_channel == 6 &&
                 value(channels.zero) && value(channels.full) && channels.zero < channels.full &&
-                value(channels.forward) && value(channels.reverse) && channels.forward != channels.reverse;
+                value(channels.forward);
         }
         static bool value(uint16_t v) { return v <= 65532U && (v & 3U) == 0; }
     };
