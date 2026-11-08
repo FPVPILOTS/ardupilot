@@ -47,7 +47,7 @@ public:
     bool motor_evidence(const MotorEvidence &evidence);
     void plane_control(bool armed, bool rc_ok, bool failsafe, bool reverse_available,
                        bool reverse_permitted, bool reverse_configured, bool reverse_selected);
-    bool arming_blocked() const { return bench_blocked() || (_motor_selected && !motor_arming_ready()); }
+    bool arming_blocked() const { return bench_blocked() || (_motor_enable.get() == 1 && !motor_arming_ready()) || (_motor_selected && !motor_arming_ready()); }
 private:
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
     void update_turn(uint32_t now_ms, bool safe, const AP_HAL::UARTDriver::ReceiveDiagnostics &hw);
