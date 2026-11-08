@@ -53,6 +53,30 @@ mapping guide confirms CH1 throttle and independently routable reverse
 channels, not the exact ESC CH7 forward threshold:
 https://wiki.spektrumrc.com/spektrum/receiver-port-mapping-guide
 
+## Additional blocker found in the actual IO firmware source
+
+The FMU-side `AP_IOMCU::update_smart_esc_inhibit()` reads the IOMCU CRC
+and then requests register page `PAGE_SMART_ESC_INHIBIT` with a boot-scoped
+nonce. That page is implemented in
+`libraries/AP_IOMCU/iofirmware/iofirmware.cpp` **only** when
+`AP_IOMCU_SMART_ESC_INHIBIT` is compiled into a separately produced IO
+image. Its default in `iofirmware.h` is 0.
+
+A passing `./waf plane` build for TurnLab does **not** build, install,
+identify or prove a compatible special IOMCU image. The generic IO
+`pwm_out_update()` loop still emits output for all servo indices. The
+existence of a readback page or its symbolic `MAIN3` mask alone is not
+evidence that the third PWM pin is electrically unavailable. The special
+IO image must **actually remove MAIN3 from physical output**, independently
+validated on the correct IO hardware target, while leaving unrelated
+channels such as SERVO7 untouched. Only then may its observed CRC be
+recorded in the profile.
+
+**Do not set `io_crc` to the CRC of stock IOMCU firmware or enable the
+IO acknowledgment macro merely to satisfy software tests.** The hardware
+output inhibition and actual installed companion image are separate
+qualification tasks; without them the one-shot test remains blocked.
+
 ## Pre-start checks enforced by firmware
 
 1. Explicit volatile operator test consent and one run per boot.
