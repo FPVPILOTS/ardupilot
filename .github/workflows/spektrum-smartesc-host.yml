@@ -1,0 +1,30 @@
+# Run the actual C++ SRXL2 motor/parser unit tests for every feature branch update.
+# No firmware is flashed and no motor/hardware testing is performed.
+name: Spektrum Smart ESC host tests
+on:
+  push:
+    branches:
+      - feature/spktsmart-bench6-contract
+    paths:
+      - 'libraries/AP_SpektrumSmartESC/**'
+      - '.github/workflows/spektrum-smartesc-host.yml'
+      - 'libraries/AP_HAL/UARTDriver.h'
+      - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.*'
+  pull_request:
+    paths:
+      - 'libraries/AP_SpektrumSmartESC/**'
+      - '.github/workflows/spektrum-smartesc-host.yml'
+jobs:
+  srxl2-host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check host compiler
+        run: |
+          python3 --version
+          g++ --version
+      - name: Compile and run all Spektrum Smart ESC C++ host suites
+        run: python3 libraries/AP_SpektrumSmartESC/tests/run_host_tests.py
