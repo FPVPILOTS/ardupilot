@@ -61,7 +61,13 @@ public:
         _consecutive_failures = 0;
     }
 
-    Action update(uint32_t now_ms, bool disarmed_bench_safe, bool bus_idle_high)
+    // bench_zero_reply_hold is permitted ONLY by the compile-gated, UNARMABLE
+    // TurnLab supervisor while a physical-TC-qualified zero-only 0x80 reply
+    // is fresh inside its immutable three-second experiment. It DOES NOT
+    // update last_peer_ms or establish a new identity. Ordinary sessions,
+    // motor operation and reconnection pass false.
+    Action update(uint32_t now_ms, bool disarmed_bench_safe, bool bus_idle_high,
+                  bool bench_zero_reply_hold = false)
     {
         if (_status.state == State::OFF || _status.state == State::YIELDED ||
             _status.state == State::FAULT) {
@@ -79,7 +85,7 @@ public:
             age(now_ms, _state_since_ms) >= HANDSHAKE_DEADLINE_MS) {
             fail(now_ms, Reason::HANDSHAKE_TIMEOUT);
         }
-        if (_status.state == State::LINKED &&
+        if (_status.state == State::LINKED && !bench_zero_reply_hold &&
             age(now_ms, _status.last_peer_ms) >= PEER_TIMEOUT_MS) {
             _status.lost++;
             fail(now_ms, Reason::PEER_TIMEOUT);
