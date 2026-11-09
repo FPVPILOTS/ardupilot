@@ -117,6 +117,22 @@ Regression tests verify pre-deadline healthy state, post-deadline
 fault, and no new TX after fault. Source commit was made but
 user WSL host tests have NOT been rerun yet. No firmware flash.
 
+### 2026-11-09 — AutoLink-IOInstall next milestone
+
+Created an EXPLICIT **unarmable 0x21-only** Pixhawk6C installer
+`Pixhawk6C-SpktSmart-AutoLink-IOInstall`; it embeds the same
+MAIN3-inhibited IO image CRC=0x6DBBAD71. The reproducible build script
+is `libraries/AP_SpektrumSmartESC/tests/build_autolink_6c_installer.sh`
+and its physical boot-order protocol is in `AUTOLINK_6C_MILESTONE.md`.
+The new SPK23 state-change messages capture even sub-second LINKED/
+BACKOFF transitions missed by 5-second periodic SPK17 snapshots.
+Added and validated host simulations for FC-first late ESC power and
+ESC-first no-announcement startup. The GitHub Actions job on
+e137e0a3f9 succeeded, including 9 auto-session tests and all 33 motor
+mock tests. No AutoLink-IOMCU firmware board build/flash has yet been
+reported from the user's WSL machine. The AUTO test cannot transmit
+0xCD or arm the motor; stable RUNNING 0xCD/0x80 remains a later gate.
+
 ### Build status: IMPORTANT
 
 The user supplied WSL `./waf plane` build exitcode 0 for
