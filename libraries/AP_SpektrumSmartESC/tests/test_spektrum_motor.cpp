@@ -166,7 +166,7 @@ TEST(SpektrumMotor, DedicatedFCMasterAndDisarmedRCBoot)
     f.d.control_ok = false; f.d.failsafe = true;
     f.tick(70000);
     EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
-    EXPECT_EQ(f.port.starts, 2U); // No gas control while RC absent.
+    EXPECT_EQ(f.port.starts, 3U); // CH1=zero only; keeps ESC running without RC.
     f.d.failsafe = false; f.d.control_ok = true;
     f.d.armed = true; f.d.rc_ok = true;
     f.cycle(81000);
