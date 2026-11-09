@@ -91,7 +91,12 @@ public:
         if (_used) { return false; }
         _used = true;
         _zero_only = zero_only;
-        if (!authorized || !(zero_only ? _profile.zero_only_candidate() : _profile.valid()) || !e.safe(now, zero_only)) {
+        // Initial start ALWAYS requires a recent authenticated 0x21 peer.
+        // A source-less 0x80 reply lease can only continue an existing,
+        // already-authorized zero trial; it can never start/restart one.
+        if (!authorized || !(zero_only ? _profile.zero_only_candidate() : _profile.valid()) ||
+            e.peer_ms == 0 || uint32_t(now - e.peer_ms) >= 100U ||
+            !e.safe(now, zero_only)) {
             _state = State::BLOCKED;
             return false;
         }
