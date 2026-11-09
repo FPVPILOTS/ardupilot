@@ -1,10 +1,12 @@
 # EXPLICIT, NON-FLIGHT Avian SRXL2 armed bench commissioning image.
 # NOT the ordinary Pixhawk6C, production or TurnLab target.
-# Enables NORMAL ArduPlane arming only after SPKT_MOTOR=1, a genuine
-# 0x30<->0x40 handshake, RX-verified CH1 digital idle and other prearm gates.
-# Throttle is limited by source profile to 0..6% of SRXL2 reference range.
-# CH7/reverse is unqualified and NOT transmitted.
-# No automatic arming; no MAIN3 PWM fallback; RC/ESC/UART faults disarm.
+# COMPILE-ONLY candidate for future NORMAL ArduPlane arming.
+# Does NOT currently enable motor TX: the production profile stays unqualified.
+# No automatic arming; no MAIN3 PWM fallback; RC/ESC/UART faults latch.
+# Proposed 0..6% control vector is source-level ONLY: actual ESC motor
+# power/RPM at those wire values has NOT been physically qualified.
+# CH7/reverse is unqualified and is deliberately NOT transmitted.
+# Never flash this target expecting a ready-to-arm motor controller.
 include ../Pixhawk6C-SpktSmart/hwdef.dat
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-ArmedBench"
 define AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL 1
