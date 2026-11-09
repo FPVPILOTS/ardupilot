@@ -1,0 +1,15 @@
+# Explicit Pixhawk6C installation image for SRXL2 AUTO 0x21 link commissioning.
+# Motor phases disconnected; DISARMED only; never a flight or motor image.
+# The independent UART4 whitelist permits ONLY valid 14-byte 0x21 handshake,
+# NEVER 0xCD control / throttle / reverse / firmware programming.
+# Reuses the previously tested MAIN3-inhibited companion IOMCU image.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-AutoLink"
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
+
+# The default Pixhawk6C ROMFS IO image is stock; EXPLICITLY replace both
+# normal and DShot IO variants with our MAIN3-inhibited companion image.
+ROMFS io_firmware.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+ROMFS io_firmware_dshot.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 1
