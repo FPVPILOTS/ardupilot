@@ -83,8 +83,16 @@ public:
             (_telemetry.valid & (AP_SpektrumSmartESC::ERPM | AP_SpektrumSmartESC::THROTTLE)) ==
                 (AP_SpektrumSmartESC::ERPM | AP_SpektrumSmartESC::THROTTLE) &&
             _telemetry.electrical_rpm == 0 && _telemetry.throttle_pct <= 0.5f &&
-            uint32_t(now_us - _telemetry_since) < 50000U &&
-            uint32_t(now_us - _last_peer) < 150000U;
+            uint32_t(now_us - _telemetry_since) < 50000U;
+            // After the initial 0x21 discovery, SRXL2 normal operation is
+            // 0xCD / solicited 0x80. No periodic 0x21 heartbeat is required.
+    }
+    static constexpr uint8_t native_fc_id(bool simulated)
+    {
+        // Dedicated FC/master bus: 0x30, already observed physically on
+        // Pixhawk6C <-> ESC 0x40. Keep legacy 0x31 simulator vectors.
+        return simulated ? AP_SpektrumSmartESC_Reader::SOURCE :
+            AP_SpektrumSmartESC_Reader::POWERON_SOURCE;
     }
     static constexpr bool physical_control_available()
     {
@@ -105,7 +113,7 @@ private:
     AP_SpektrumSmartESC _parser;
     Status _status;
     uint8_t _packet[80] {};
-    uint8_t _length = 0, _target = 0;
+    uint8_t _length = 0, _target = 0, _source = 0;
     bool _leased = false, _tx = false, _handshake_tx = false, _waiting_reply = false;
     bool _initial_idle = false, _transition = false, _neutral = false, _have_telemetry = false;
     bool _direction_changed = false;
