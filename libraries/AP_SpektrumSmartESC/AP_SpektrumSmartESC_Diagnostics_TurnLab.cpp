@@ -29,41 +29,52 @@ void AP_SpektrumSmartESC_Diagnostics::finish_turn(const char *reason)
 void AP_SpektrumSmartESC_Diagnostics::observe_turn(const uint8_t *packet, uint8_t length, uint32_t ms)
 {
     if (!_turn_active) { return; }
-    _turn_rx++; // Physical CRC-valid inventory, never simulated or generated TX.
-    if (packet[1] == 0x80 && length == 22 && packet[3] == 0x30) {
-        // Decode what the ESC-class sensor actually reports; unlike an
-        // addressed 0x21 handshake, a 0x80 packet carries no source ID.
-        // This is a candidate only, never an ESC-arm/motor-stop confirmation.
-        AP_SpektrumSmartESC::Telemetry esc {};
-        if (packet[4] == 0x20 &&
-            AP_SpektrumSmartESC::decode_esc(packet + 4, 16, esc)) {
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X",
-                          unsigned(esc.voltage * 100.0f),
-                          (unsigned long)esc.electrical_rpm,
-                          unsigned(esc.throttle_pct + 0.5f),
-                          unsigned(esc.valid));
-            if (_turn_zero_only && !_turn_sensor_nonzero_warned &&
-                (esc.valid & AP_SpektrumSmartESC::THROTTLE) != 0 &&
-                esc.throttle_pct > 0.5f) {
-                // A source-less ESC-class telemetry candidate reported
-                // nonzero throttle after our CH1=768 frame. This is NOT
-                // an accepted idle indication, irrespective of eRPM=0.
-                _turn_sensor_nonzero_warned = true;
-                GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
-                              "SPK22 CH1 IDLE UNVERIFIED; SENSOR TH%u%%",
-                              unsigned(esc.throttle_pct + 0.5f));
-            }
-        }
-        // A source-less telemetry candidate is not proof of peer identity or
-        // applied throttle. Unsolicited 0x21 frames do not count as telemetry.
-        if (_turn_last_tc_ms != 0 && int32_t(ms - _turn_last_tc_ms) >= 0 &&
-            uint32_t(ms - _turn_last_tc_ms) <= 12U) {
-            _turn_reply++;
-        } else {
-            _turn_late++;
-        }
+    _turn_rx++; // CRC-validated by the sole AutoSession RX consumer.
+    if (packet[1] != 0x80 || length != 22 || packet[3] != 0x30 ||
+        packet[4] != 0x20) {
+        return;
     }
+    // A 0x80 ESC-class sensor has NO source ID. It is NEVER a replacement
+    // for the original addressed 0x21 handshake or motor-stop qualification.
+    AP_SpektrumSmartESC::Telemetry esc {};
+    if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, esc)) {
+        return;
+    }
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                  "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X",
+                  unsigned(esc.voltage * 100.0f),
+                  (unsigned long)esc.electrical_rpm,
+                  unsigned(esc.throttle_pct + 0.5f),
+                  unsigned(esc.valid));
+
+    // The UART TC timestamp comes from hardware, recorded before feeding RX.
+    // Demand exactly one valid 0x80 within 12ms of THIS transaction's TC.
+    const bool in_reply_window = _turn_inflight && _turn_last_tc_ms != 0 &&
+        int32_t(ms - _turn_last_tc_ms) >= 0 &&
+        uint32_t(ms - _turn_last_tc_ms) <=
+            AP_SpektrumSmartESC_TurnLab::ZERO_REPLY_WINDOW_MS;
+    if (!in_reply_window || _turn_reply_for_tc) {
+        _turn_late++;
+        return;
+    }
+    const uint16_t required = AP_SpektrumSmartESC::ERPM | AP_SpektrumSmartESC::THROTTLE;
+    if (_turn_zero_only &&
+        ((esc.valid & required) != required ||
+         esc.electrical_rpm != 0 || esc.throttle_pct > 0.5f)) {
+        // Never grant the 0x80 timing exception on incomplete, nonzero or
+        // ambiguous sensor data, regardless of how many packets arrived.
+        _turn_bad_zero_sensor = true;
+        if (!_turn_sensor_nonzero_warned) {
+            _turn_sensor_nonzero_warned = true;
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                          "SPK22 CH1 IDLE UNVERIFIED; SENSOR TH%u%%",
+                          unsigned(esc.throttle_pct + 0.5f));
+        }
+        return;
+    }
+    _turn_reply_for_tc = true;
+    _turn_last_reply_ms = ms;
+    _turn_reply++;
 }
 
 void AP_SpektrumSmartESC_Diagnostics::update_turn(
