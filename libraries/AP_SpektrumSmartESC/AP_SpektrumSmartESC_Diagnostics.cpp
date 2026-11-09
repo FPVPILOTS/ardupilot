@@ -1362,7 +1362,14 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
     }
     s.bipolar = reverse_available; s.armed = armed; s.rc_ok = rc_ok;
     s.control_ok = !failsafe;
-    s.failsafe = failsafe || SRV_Channels::get_emergency_stop() || _enable != 0 || _probe != 0 || _handshake != 0;
+    // ArduPilot's emergency stop/safety switch blocks ARMING and any
+    // ARMED motor demand. During DISARMED boot the dedicated ESC needs
+    // CH1=minimum control for its own idle/zero telemetry; treating the
+    // engaged switch as a permanent motor *communication* fault made
+    // ready_to_arm unreachable. Never permit nonzero with the switch set.
+    s.failsafe = failsafe ||
+        (armed && SRV_Channels::get_emergency_stop()) ||
+        _enable != 0 || _probe != 0 || _handshake != 0;
     s.reverse_configured = reverse_configured;
     s.reverse_selected = reverse_selected;
     s.reverse_permitted = reverse_permitted;
