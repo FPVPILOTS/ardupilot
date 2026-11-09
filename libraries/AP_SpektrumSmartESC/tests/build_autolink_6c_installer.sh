@@ -45,6 +45,11 @@ test -s "$apj"
 # does NOT include the TurnLab 0xCD control execution path.
 strings "$bin" | grep -F "SPK17 AUTOLAB ON; NO MOTOR, NO CONTROL" > /dev/null
 strings "$bin" | grep -F "SPK17 %s" > /dev/null
+# This variant must include sub-second evidence from the vendor D00 / FC
+# D40 collision investigation, not just the old 5-second SPK17 snapshots.
+strings "$bin" | grep -F "SPK24 A%lu F%lu L%lu Q%lu R%lu" > /dev/null
+strings "$bin" | grep -F "SPK24 ERR FE%lu NE%lu O%lu REL%lu" > /dev/null
+strings "$bin" | grep -F "SPK24 TIMES RX%lu TC%lu" > /dev/null
 strings "$bin" | grep -F "SPKT MOTOR BLOCKED: SOURCE/IO/ESC UNQUALIFIED" > /dev/null
 if strings "$bin" | grep -F "SPK22 ZERO TRIAL CH1=" > /dev/null; then
     echo "Refusing image with TurnLab 0xCD trial enabled." >&2
