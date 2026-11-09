@@ -1,0 +1,16 @@
+# EXPLICIT, NON-FLIGHT Avian SRXL2 armed bench commissioning image.
+# NOT the ordinary Pixhawk6C, production or TurnLab target.
+# Enables NORMAL ArduPlane arming only after SPKT_MOTOR=1, a genuine
+# 0x30<->0x40 handshake, RX-verified CH1 digital idle and other prearm gates.
+# Throttle is limited by source profile to 0..6% of SRXL2 reference range.
+# CH7/reverse is unqualified and NOT transmitted.
+# No automatic arming; no MAIN3 PWM fallback; RC/ESC/UART faults disarm.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-ArmedBench"
+define AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL 1
+
+# This opt-in image retains the special MAIN3-inhibited IOMCU companion.
+# Flashing the .apj may update the IOMCU. NEVER use stock IO firmware here.
+ROMFS io_firmware.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+ROMFS io_firmware_dshot.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 1
