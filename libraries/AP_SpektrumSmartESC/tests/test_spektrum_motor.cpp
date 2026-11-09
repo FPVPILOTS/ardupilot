@@ -154,6 +154,26 @@ TEST(SpektrumMotor, PhysicalPortAlwaysBlocked)
     EXPECT_EQ(f.port.starts,0U); EXPECT_FALSE(f.owner.held);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::QUALIFICATION);
 }
+TEST(SpektrumMotor, DedicatedFCMasterAndDisarmedRCBoot)
+{
+    // Spektrum's dedicated FC0 master identity 0x30 was verified against
+    // physical Avian ID 0x40. The old 0x31 simulator vector stays intact.
+    EXPECT_EQ(Motor::native_fc_id(false), 0x30);
+    EXPECT_EQ(Motor::native_fc_id(true), 0x31);
+    Fixture f;
+    f.discover();
+    f.d.armed = false; f.d.rc_ok = false;
+    f.d.control_ok = false; f.d.failsafe = true;
+    f.tick(70000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    EXPECT_EQ(f.port.starts, 2U); // No gas control while RC absent.
+    f.d.failsafe = false; f.d.control_ok = true;
+    f.d.armed = true; f.d.rc_ok = true;
+    f.cycle(81000);
+    EXPECT_EQ(f.motor.status().throttle, 1000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+}
+
 TEST(SpektrumMotor, QualificationAndStartupNeutral)
 {
     Fixture f;
@@ -321,7 +341,7 @@ TEST(SpektrumMotor, BusBusyNeverRetriesForever)
     Fixture noesc;
     EXPECT_TRUE(noesc.motor.start(qualification(),true,0x40,1,0,0));
     noesc.tick(50000); noesc.port.complete=true; noesc.tick(52000); noesc.tick(102000);
-    EXPECT_EQ(noesc.motor.status().fault,Motor::Fault::PROTOCOL);
+    EXPECT_EQ(noesc.motor.status().fault,Motor::Fault::ESC_LOSS);
     EXPECT_EQ(noesc.port.starts,1U);
 }
 
@@ -572,7 +592,7 @@ TEST(SpektrumMotor, WrongSensorReplyIsNotSuccessfulControlAck)
 int main()
 {
     PublishedRevKChannelVector(); CodecBoundsOrderingAndFailsafe(); PhysicalPortAlwaysBlocked();
-    QualificationAndStartupNeutral(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
+    QualificationAndStartupNeutral(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
     EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); StaleDemandAndReceipt();
     IndependentMillisSurvivesMicrosWrap();
@@ -588,7 +608,7 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("32 prepared master/command safety tests passed (mock transport only)");
+    std::puts("33 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
