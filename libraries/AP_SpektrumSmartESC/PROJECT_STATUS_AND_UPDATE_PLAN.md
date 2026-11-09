@@ -133,6 +133,32 @@ mock tests. No AutoLink-IOMCU firmware board build/flash has yet been
 reported from the user's WSL machine. The AUTO test cannot transmit
 0xCD or arm the motor; stable RUNNING 0xCD/0x80 remains a later gate.
 
+### 2026-11-09 20:15 — AutoLink real hardware result
+
+User supplied Mission Planner log from the real Pixhawk6C
+`Pix6C-SPKT-AutoLink` / ArduPlane 4.7.1 at commit `b24dc3a1`.
+The observed startup sequence was `WAITING_FOR_ESC` at 20:14:59,
+`SPK23 HANDSHAKING` then `SPK23 SRXL2_LINK_ESTABLISHED` at
+20:15:00. Verified `SPK17 PEER S40 D30 T21 A1`, `HS TX2 RXB28
+CRC2 RP1`, `UART Q2 C2 R2 F0`, and `ID40 TRY1 OK1 LOST0`.
+The link stayed established in the visible log through 20:15:24;
+read-only observer counted `FRM H481 C0 T0 O0` and `POST RX481`.
+Hardware UART showed one existing FE (`E1 FE1`) with no visible
+increase and line state L0 at 20:15:04, L1 thereafter. Dry-run
+`RPREVIEWED` meant **no real 0xCD TX**. `SPK19 NO TX` applies
+to 0xCD motor/poll TX, not the two real 0x21 hardware-TC handshakes.
+Expected PreArm `SPKT bench active` continued to block arming.
+
+**Grounded result:** one automatic, source-verified and hardware-
+completed dedicated SRXL2 link succeeded and stayed LINKED for at
+least 24 seconds. Although WAITING preceded LINKED, the log does
+not directly timestamp the ESC supply connection, so do not claim
+that all three boot orders or any later power-loss reconnect passed.
+**Not yet proven:** ESC-first, simultaneous power-up and unplug/
+replug reconnect; sustained normal SRXL2 `0xCD` and solicited
+`0x80` traffic, stopped evidence, reverse, or motor arming.
+Retain special IOMCU and non-armable profile while evaluating.
+
 ### Build status: IMPORTANT
 
 The user supplied WSL `./waf plane` build exitcode 0 for
