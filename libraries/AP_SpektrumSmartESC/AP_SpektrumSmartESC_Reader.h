@@ -17,6 +17,12 @@ public:
         uint32_t rx_bytes = 0, rx_frames = 0, crc_errors = 0;
         uint32_t tx_frames = 0, tx_bytes = 0, echoes = 0, timeouts = 0, unexpected = 0;
         uint32_t stale_bytes = 0;
+        // Timings relative to this single reader attempt in milliseconds.
+        // Diagnostic ONLY: none of these fields establishes a link or
+        // permits a TX. A destination-zero announcement is not a reply.
+        uint32_t first_announcement_ms = 0, last_announcement_ms = 0;
+        uint32_t first_targeted_tc_ms = 0, last_targeted_tc_ms = 0;
+        uint32_t last_targeted_reply_ms = 0;
         // CRC-valid startup announcements are observed, never accepted as a
         // solicited response or proof of LINKED state.
         uint32_t startup_announcements = 0;
