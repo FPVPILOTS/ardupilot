@@ -137,6 +137,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
     e.peer = _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::LINKED &&
              _auto_session.status().peer_id == 0x40;
     e.peer_ms = _auto_last_verified_peer_ms;
+    e.reply_ms = _turn_last_reply_ms; // Separate, CRC-checked 0x80 witness, NOT a peer ID.
     e.control_ms = now; // Script supervision, not a stopped/ground sensor claim.
     e.uart_ok = safe && port != nullptr && (_turn_pending ||
         (port->receive_errors() == _turn_error_base && hw.handshake_faults == _turn_fault_base));
@@ -182,6 +183,12 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         }
         _turn_pending = false;
         _turn_active = true;
+        _turn_started_ms = started;
+        _turn_last_tc_ms = 0;
+        _turn_last_reply_ms = 0;
+        _turn_reply_for_tc = false;
+        _turn_bad_zero_sensor = false;
+        _turn_rx = _turn_reply = _turn_late = 0;
         _turn_gap_wait = 0;
         _turn_sensor_nonzero_warned = false;
         _turn_error_base = port->receive_errors();
@@ -206,6 +213,16 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
             spektrum_turnlab_profile().channels.forward, _turn.frames(), _turn.completed(),
             e.peer_ms, _turn_rx, _turn_reply, _turn_late);
 #endif
+    }
+    // Sensor packets are not authenticated peer identity; the exception
+    // is strictly for the already-authenticated, isolated, unarmable zero
+    // experiment. Missing/bad feedback must NEVER keep it alive.
+    if (_turn_zero_only && _turn_bad_zero_sensor) {
+        finish_turn("FAULT_ZERO_SENSOR"); return;
+    }
+    if (_turn_zero_only && _turn_last_tc_ms != 0 && !_turn_reply_for_tc &&
+        uint32_t(now - _turn_last_tc_ms) > Turn::ZERO_REPLY_WINDOW_MS + 3U) {
+        finish_turn("FAULT_ZERO_REPLY_TIMEOUT"); return;
     }
     // Inspect deadlines even with an outstanding TX; never reuse or overwrite
     // the buffer until hardware TC restored RX.
@@ -232,7 +249,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
             finish_turn("FAULT_LOCAL_TX");
             return;
         }
-        if (!port->diagnostic_turn_lab(_turn_packet, n, false, now, e.peer_ms)) {
+        if (!port->diagnostic_turn_lab(_turn_packet, n, false, now, e.peer_ms, e.reply_ms)) {
             AP_HAL::UARTDriver::ReceiveDiagnostics after {};
             (void)port->receive_diagnostics(after);
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
