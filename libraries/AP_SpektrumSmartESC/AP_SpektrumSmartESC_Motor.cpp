@@ -56,7 +56,12 @@ bool AP_SpektrumSmartESC_Motor::start(const Qualification &q, bool disarmed, uin
     _status = {};
     _status.simulated = _port.simulated();
     _qualification = q;
-    if ((!_port.simulated() && (!physical_control_available() || !_profile.reverse_verified || !q.reverse_settings)) ||
+    const bool forward_only_bench = AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL &&
+        !_profile.reverse_verified && !q.reverse_settings &&
+        _profile.zero == 768U && _profile.full == 4608U;
+    if ((!_port.simulated() && (!physical_control_available() ||
+         (!_profile.reverse_verified && !forward_only_bench) ||
+         (!q.reverse_settings && !forward_only_bench))) ||
         !q.electrical || !q.protocol || !q.endpoints || !q.esc_loss_behavior ||
         !_profile.throttle_verified || _profile.throttle_channel != 0 ||
         _profile.zero >= _profile.full || _profile.full > 65532U ||
