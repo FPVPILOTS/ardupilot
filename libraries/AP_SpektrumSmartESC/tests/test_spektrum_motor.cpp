@@ -352,7 +352,15 @@ TEST(SpektrumMotor, IndependentMillisSurvivesMicrosWrap)
 TEST(SpektrumMotor, BusBusyNeverRetriesForever)
 {
     Fixture f; f.discover(); f.port.high=false;
-    f.tick(70000); f.tick(210000);
+    f.tick(70000);
+    // BUSY/LOW since last handshake TC: zero control frames completed.
+    // Sensor watchdog MUST NOT be the sole guard, since controls==0.
+    EXPECT_EQ(f.motor.status().controls,0U);
+    f.tick(140000); // <100ms since actual final handshake TC
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    f.tick(159000); // >100ms since 57ms final handshake TC
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+    f.tick(210000); // A fault cannot revive an output or reacquire TX.
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
     EXPECT_EQ(f.port.starts,2U);
     Fixture noesc;
