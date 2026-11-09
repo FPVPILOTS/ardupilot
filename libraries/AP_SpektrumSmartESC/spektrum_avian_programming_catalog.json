@@ -1,7 +1,7 @@
 {
-  "$schema_note": "Human-curated vendor UI catalog; NOT a wire-protocol command map or firmware-detected values.",
-  "version": "2026-11-09-v1",
-  "model": "Spektrum Avian 130A Smart ESC, exact HW/FW to be confirmed",
+  "$schema_note": "Human-curated vendor UI catalog; NOT a wire-protocol command map or firmware-detected values. Actual values below are previously user-shared settings; do not confuse with 'default_documented' or live readback.",
+  "version": "2026-11-09-v2",
+  "model": "Spektrum Avian 130A Smart ESC Ver. A",
   "vendor_document": "https://www.spektrumrc.com/on/demandware.static/-/Sites-horizon-master/default/dw8b38e716/Manuals/Spektrum-Avian-SmartLink-Update-Instructions.pdf",
   "read_from_ESC_implemented": false,
   "write_to_ESC_implemented": false,
@@ -16,7 +16,9 @@
         "Fixed Wing",
         "Helicopter"
       ],
-      "default_documented": "Fixed Wing"
+      "default_documented": "Fixed Wing",
+      "user_observed_value": "Fixed-Wing",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "GENERAL SETTINGS",
@@ -28,7 +30,9 @@
         "Proportional",
         "Reverse"
       ],
-      "default_documented": "Disabled"
+      "default_documented": "Disabled",
+      "user_observed_value": "Reverse",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "GENERAL SETTINGS",
@@ -37,7 +41,9 @@
       "min": 0,
       "max": 7,
       "step": 1,
-      "default_documented": 0
+      "default_documented": 0,
+      "user_observed_value": 0,
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "GENERAL SETTINGS",
@@ -47,7 +53,9 @@
         "Soft Cutoff",
         "Hard Cutoff"
       ],
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "Soft Cutoff",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "GENERAL SETTINGS",
@@ -57,7 +65,9 @@
         "Auto Calc"
       ],
       "choices_incomplete": true,
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "Auto Calc",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "GENERAL SETTINGS",
@@ -67,7 +77,9 @@
       "max": 3.8,
       "unit": "V/cell",
       "allows_disabled": true,
-      "default_documented": 3
+      "default_documented": 3,
+      "user_observed_value": "Disabled",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -76,7 +88,9 @@
       "choices": [],
       "choices_incomplete": true,
       "default_documented": null,
-      "note": "Options depend on exact ESC firmware/hardware"
+      "note": "Options depend on exact ESC firmware/hardware",
+      "user_observed_value": "6.0 V",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -86,7 +100,9 @@
         "Normal Start-up",
         "Soft Start-up"
       ],
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "Soft",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -97,7 +113,9 @@
         "Medium",
         "High"
       ],
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "15°",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -105,7 +123,9 @@
       "proposed_param": "SPKT_ROTATION",
       "choices": [],
       "choices_incomplete": true,
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "CW",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -115,7 +135,9 @@
         "Enabled",
         "Disabled"
       ],
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "Disabled",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -124,7 +146,9 @@
       "choices": [],
       "choices_incomplete": true,
       "default_documented": null,
-      "note": "Channel assignment, only active with Reverse brake type"
+      "note": "Channel assignment, only active with Reverse brake type",
+      "user_observed_value": "CH7",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -135,7 +159,9 @@
         "Level 2",
         "Level 3"
       ],
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": 1,
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -143,7 +169,9 @@
       "proposed_param": "SPKT_GOVREST",
       "choices": [],
       "choices_incomplete": true,
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "45 s",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     },
     {
       "vendor_group": "THROTTLE – CONTROL",
@@ -151,7 +179,9 @@
       "proposed_param": "SPKT_GOVACC",
       "choices": [],
       "choices_incomplete": true,
-      "default_documented": null
+      "default_documented": null,
+      "user_observed_value": "1.5 s",
+      "user_observed_source": "Spektrum SmartLink screenshots previously supplied by user, reviewed 2026-11-07"
     }
   ],
   "validation_plan": [
@@ -160,5 +190,11 @@
     "Capture or obtain documented query/response for parameter IDs and values on a motor-disconnected interface",
     "Implement read-only discovery and compare against tool",
     "Only then implement write with ack/readback, grounded arming prohibition and firmware-version compatibility"
-  ]
+  ],
+  "esc_firmware_observed": "04.0.27",
+  "as_found_source": {
+    "source": "Prior user-provided Spektrum SmartLink screenshots reviewed in the conversation on 2026-11-07",
+    "scope": "Reported settings of this user's Avian 130A Ver A; not verified through SRXL2 readback",
+    "normal_supply": "6S in aircraft, 4S used for bench testing"
+  }
 }
