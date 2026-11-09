@@ -231,6 +231,47 @@ int main()
         ++tests;
     }
     {
+        // Phase 22B: only an existing, disarmed, single-ESC, zero-only
+        // session may use a verified 0x80 reply as a *timing witness*.
+        // Identity remains the original source-checked 0x21 peer timestamp.
+        auto e = evidence(1420);
+        e.peer_ms = 1100;   // 320ms since last genuine 0x21
+        e.reply_ms = 1400;  // Verified, matching 0x80 at TC+3ms
+        assert(!e.safe(1420, false)); // The MOTOR mode still fails closed.
+        assert(e.safe(1420, true));
+        e.reply_ms = 1360; // 60ms since reply: stale, cannot renew.
+        assert(!e.safe(1420, true));
+        e.reply_ms = 1400;
+        e.peer = false; // identity lost: source-less reply does not recreate it.
+        assert(!e.safe(1420, true));
+        e.peer = true; e.emergency_stop = false;
+        assert(!e.safe(1420, true)); // Stop switch still gates.
+        e.emergency_stop = true; e.owner = false;
+        assert(!e.safe(1420, true)); // IO ownership still gates.
+        e.owner = true; e.uart_ok = false;
+        assert(!e.safe(1420, true)); // UART error still gates.
+        e.uart_ok = true;
+        e.peer_ms = 1000; e.reply_ms = 4090;
+        assert(!e.safe(4100, true)); // 3.1s bound even with fresh reply
+        e.peer_ms = 1100; e.reply_ms = 1090;
+        assert(!e.safe(1420, true)); // reply preceding peer is invalid
+        e = evidence(1420);
+        e.peer_ms = 1100; e.reply_ms = 1410;
+        Turn rejected(spektrum_turnlab_profile());
+        assert(!rejected.start(true, e, 1420, true)); // NO stale-peer start
+        assert(rejected.state() == Turn::State::BLOCKED);
+        Turn accepted(spektrum_turnlab_profile());
+        auto initial = evidence(1000);
+        assert(accepted.start(true, initial, 1000, true));
+        auto during = evidence(1420);
+        during.peer_ms = 1000;
+        during.reply_ms = 1410;
+        uint8_t frame[Turn::LENGTH] {};
+        assert(accepted.prepare(during, 1420, frame, sizeof(frame)) ==
+               Turn::ZERO_LENGTH);
+        ++tests;
+    }
+    {
         // Hardware observation at 20:17:51: P101 aborted all-zero trial.
         // Only CH1-minimum observation tolerates a longer *authenticated*
         // 0x21 gap during sensor 0x80 replies. Motor-turn retains 100ms.
