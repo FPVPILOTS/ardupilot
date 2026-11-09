@@ -152,9 +152,12 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
             // otherwise healthy, DISARMED ESC session just because RC input
             // is not yet available. No 0xCD is transmitted here, and any
             // unexpected nonzero demand/reverse/failsafe still fails closed.
-            if (d.magnitude != 0 || d.reverse || d.failsafe) {
+            if (d.magnitude != 0 || d.reverse) {
                 fault(Fault::INVALID_DEMAND);
             }
+            // A radio-related Plane failsafe may already be true while
+            // RP4TD is still booting; with disarmed zero demand it only
+            // inhibits control and must not latch a permanent motor fault.
             return;
         }
         if (!d.rc_ok) { fault(Fault::RC_LOSS); return; }
