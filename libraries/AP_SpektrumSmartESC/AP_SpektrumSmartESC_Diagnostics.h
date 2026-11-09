@@ -103,6 +103,11 @@ private:
     uint32_t _auto_uid = 0;
     uint32_t _auto_uart_error_baseline = 0;
     uint32_t _auto_log_ms = 0;
+    // Event-based reports capture LINKED even when it lasts <5 seconds.
+    AP_SpektrumSmartESC_AutoConnect::State _auto_logged_state =
+        AP_SpektrumSmartESC_AutoConnect::State::OFF;
+    AP_SpektrumSmartESC_AutoConnect::Reason _auto_logged_reason =
+        AP_SpektrumSmartESC_AutoConnect::Reason::DISABLED;
     uint32_t _auto_fast_grants = 0, _auto_fast_denied = 0;
     bool _auto_started = false;
     bool _auto_leased = false, _auto_inflight = false;
