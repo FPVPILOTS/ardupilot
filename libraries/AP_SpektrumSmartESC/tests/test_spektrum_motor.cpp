@@ -289,7 +289,9 @@ TEST(SpektrumMotor, TimeoutInvalidReplyAndNoRetry)
     Fixture f; f.discover(); f.tick(70000);
     EXPECT_EQ(f.motor.status().controls,0U); // FIFO queued is NOT TC-completed.
     f.port.complete=true; f.tick(72000); f.tick(77000);
-    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE); // One missing initial reply is tolerated.
+    f.tick(175000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS); // No reply after 100ms.
     const auto count=f.port.starts; f.tick(200000); EXPECT_EQ(f.port.starts,count);
     Fixture tx; tx.discover(); tx.tick(70000); tx.tick(73000);
     EXPECT_EQ(tx.motor.status().fault,Motor::Fault::TX_TIMEOUT);
@@ -313,7 +315,9 @@ TEST(SpektrumMotor, TelemetryFreshnessAndCorruptResponse)
     f.tick(83000); f.port.complete=true; f.tick(85000);
     uint8_t p[22] {}; p[0]=0xA6; p[1]=0x80; p[2]=22;
     f.feed(p,22,86000); f.tick(90000);
-    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    f.tick(170000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS); // CRC-bad reply cannot renew telemetry freshness.
 }
 TEST(SpektrumMotor, StaleDemandAndReceipt)
 {
