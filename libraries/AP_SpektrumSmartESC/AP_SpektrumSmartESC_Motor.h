@@ -8,6 +8,9 @@
 #ifndef AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED
 #define AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED 0
 #endif
+#ifndef AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+#define AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL 0
+#endif
 
 // Dedicated-ESC coordinator with a separately gated native backend. Ordinary
 // builds cannot transmit. IO readback validates software ownership; physical
@@ -96,8 +99,12 @@ public:
     }
     static constexpr bool physical_control_available()
     {
-        return AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED &&
-            AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED && !AP_SPEKTRUM_SMART_ESC_LAB_ONLY;
+        return !AP_SPEKTRUM_SMART_ESC_LAB_ONLY &&
+            ((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED &&
+              AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED) ||
+             // Separate opt-in board: normal arming, 0..6% digital CH1
+             // only, reverse physically disabled. NOT production-certified.
+             AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL);
     }
     static bool control_packet(const uint8_t *packet, uint8_t length);
 private:
