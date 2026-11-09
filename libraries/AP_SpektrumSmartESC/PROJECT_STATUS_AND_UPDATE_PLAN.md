@@ -215,6 +215,44 @@ simply reduce the 2s RX-first gate on a motor-connected shared
 PWM/SRXL2 signal without validating false-mode motor behavior.
 Do not promise simultaneous boot is fixed by the present code.
 
+### 2026-11-09 20:21–20:22 — FC-only reboot, ESC powered, D00 observed but no D30
+
+Physical Mission Planner log after FC reboot while Avian remained powered
+showed:
+- 20:21:55: `SPK17 HS TX1 RXB14 CRC1 RP0`,
+  `SPK17 PEER S40 D00 T21 A1`. One CRC-valid spontaneous Avian 0x21
+  addressed to D00, not a directed 0x40->0x30 response.
+- 20:22:00: `SPK17 HS TX30 RXB28 CRC2 RP0`,
+  `SPK17 PEER S40 D00 T21 A2`, `UART Q31 C31 R31 F0`,
+  `HW E1 FE1`, and `SPK23 WHY UART_TRANSPORT_ERROR`.
+  Two valid D00 announcements, no authentic directed response.
+- This disproves the stronger claim that the Avian was fully silent or
+  irreversibly latched in PWM during FC-only reboot. It still failed
+  to accept/return a directed handshake. A single new framing error was
+  detected; its precise onset relative to query/announcement is not
+  yet known. Both phase-locked half-duplex traffic and ESC startup
+  mode behavior are hypotheses, NOT established causes.
+
+Code changes are **diagnostic only**: Reader::Status records elapsed
+milliseconds of first/last D00, first/last targeted UART TC and last
+actual addressed response. On AutoLink status transitions, SPK24 now
+prints those times alongside independent native UART Q/C/R/fault
+counters and FE/NE/overrun/release errors. Regression test
+`fc_reboot_receives_two_d00_but_no_d30` asserts no false LINKED state
+and bounded timeout on these two valid D00 frames. GitHub Actions
+`42683626913` succeeded with ten auto-session host tests and
+33 motor mock tests. The AutoLink installer now verifies SPK24 forensic
+strings in the compiled Pixhawk6C firmware. No change to physical
+0x21 timing, motor output, UART interlocks or arming.
+
+**Next:** recompile via existing `build_autolink_6c_installer.sh`,
+review/flash custom board with all motor phases disconnected and
+special IOMCU preserved, repeat FC-only reboot with ESC powered and
+capture complete SPK23/SPK24/SPK17 event sequence. Do not call this a
+boot fix yet. If possible, measure AUX7 with a logic analyzer to
+distinguish the physical wire-level D00/D40 response interleaving.
+Do NOT weaken UART error failsafe to turn a fault into a LINKED status.
+
 ### Build status: IMPORTANT
 
 The user supplied WSL `./waf plane` build exitcode 0 for
