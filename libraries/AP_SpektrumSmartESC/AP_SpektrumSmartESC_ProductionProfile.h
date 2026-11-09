@@ -51,26 +51,27 @@ struct AP_SpektrumSmartESC_ProductionProfile {
 inline AP_SpektrumSmartESC_ProductionProfile spektrum_production_profile()
 {
 #if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
-    // Operator-requested, strictly NON-FLIGHT, forward-only 6% bench
-    // commissioning build. These are explicit *trial assumptions*, not
-    // assertions of flight qualification, verified loss behavior or
-    // independently proven full endpoints. Do not ship as production.
+    // NON-FLIGHT commissioning target exists to COMPILE and TEST the
+    // eventual normal-arming integration. A board define, operator intent,
+    // or source-derived estimate is NOT hardware qualification.
+    // Keep the proposed CH1 wire values for simulation/trace comparison
+    // but leave ALL physical capabilities unqualified until reviewed
+    // evidence and dedicated hardware tests prove them. A build must not
+    // silently grant motor TX/arming simply by selecting this hwdef.
     AP_SpektrumSmartESC_ProductionProfile p;
-    p.operator_qualified = true; // This build is deliberate opt-in only.
+    p.operator_qualified = false;
     p.esc_id = 0x40;
-    p.channels.throttle_verified = true; // CH1=768 reported THpct0 in bench.
+    p.channels.throttle_verified = false;
     p.channels.throttle_channel = 0;
-    p.channels.zero = 768;
-    p.channels.full = 4608; // Even full stick is only a 6% digital trial.
-    p.channels.reverse_verified = false; // CH7 NOT sent; reverse blocked.
+    p.channels.zero = 768;      // Observed idle candidate, NOT certified.
+    p.channels.full = 4608;     // Experimental test maximum, NOT 6% proven RPM.
+    p.channels.reverse_verified = false; // CH7 not qualified.
     p.channels.reverse_channel = 6;
     p.qualification.io_firmware_crc = 0x6DBBAD71U;
-    // Below are BENCH-CANDIDATE assumptions controlled by an independent
-    // IOMCU inhibit, limited output profile and watchdogs, not flight proof.
-    p.qualification.electrical = true;
-    p.qualification.protocol = true;
-    p.qualification.endpoints = true;
-    p.qualification.esc_loss_behavior = true;
+    p.qualification.electrical = false;
+    p.qualification.protocol = false;
+    p.qualification.endpoints = false;
+    p.qualification.esc_loss_behavior = false;
     p.qualification.reverse_settings = false;
     return p;
 #else
