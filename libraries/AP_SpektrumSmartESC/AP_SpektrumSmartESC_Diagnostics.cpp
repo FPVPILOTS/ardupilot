@@ -675,6 +675,22 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         _auto_leased = _auto_inflight = false;
         _auto_rx.reset_observation();
     }
+    // State transitions must not be lost between the 5s snapshots.
+    // A source-checked handshake may finish and time out within 300ms.
+    // Status text is observation ONLY; no UART, arming or motor action.
+    const auto &link = _auto_session.status();
+    if (link.state != _auto_logged_state ||
+        link.reason != _auto_logged_reason) {
+        _auto_logged_state = link.state;
+        _auto_logged_reason = link.reason;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK23 LINK %s",
+                      AP_SpektrumSmartESC_AutoConnect::state_name(link.state));
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK23 WHY %s TRY%lu OK%lu LOST%lu",
+                      AP_SpektrumSmartESC_AutoConnect::reason_name(link.reason),
+                      (unsigned long)link.attempts,
+                      (unsigned long)link.successful,
+                      (unsigned long)link.lost);
+    }
     if (now_ms - _auto_log_ms >= 5000U) {
         _auto_log_ms = now_ms;
         const auto &st = _auto_session.status();
