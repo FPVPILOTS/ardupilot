@@ -40,12 +40,19 @@ void AP_SpektrumSmartESC_Diagnostics::observe_turn(const uint8_t *packet, uint8_
     if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, esc)) {
         return;
     }
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                  "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X",
-                  unsigned(esc.voltage * 100.0f),
-                  (unsigned long)esc.electrical_rpm,
-                  unsigned(esc.throttle_pct + 0.5f),
-                  unsigned(esc.valid));
+    // At 50Hz, MAVLink status-text flooding itself can delay the 20ms
+    // servo/zero supervisor. Sample at most four informational lines/sec;
+    // every physical frame is still decoded and evaluated for safety.
+    if (_turn_last_sensor_log_ms == 0 ||
+        uint32_t(ms - _turn_last_sensor_log_ms) >= 250U) {
+        _turn_last_sensor_log_ms = ms;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X",
+                      unsigned(esc.voltage * 100.0f),
+                      (unsigned long)esc.electrical_rpm,
+                      unsigned(esc.throttle_pct + 0.5f),
+                      unsigned(esc.valid));
+    }
 
     // The UART TC timestamp comes from hardware, recorded before feeding RX.
     // Demand exactly one valid 0x80 within 12ms of THIS transaction's TC.
@@ -186,6 +193,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
         _turn_started_ms = started;
         _turn_last_tc_ms = 0;
         _turn_last_reply_ms = 0;
+        _turn_last_sensor_log_ms = 0;
         _turn_reply_for_tc = false;
         _turn_bad_zero_sensor = false;
         _turn_rx = _turn_reply = _turn_late = 0;
