@@ -13,6 +13,11 @@ public:
     static constexpr uint32_t WINDOW_MS = 1500;
     static constexpr uint32_t ZERO_WINDOW_MS = 3000; // 3 seconds of CH1 minimum, no motor demand
     static constexpr uint32_t STALE_MS = 60;
+    // Only for the one-shot, unarmable CH1=minimum experiment. A source-less
+    // 0x80 is NOT peer identity and cannot authorize armed/motor mode.
+    static constexpr uint32_t ZERO_REPLY_WINDOW_MS = 12;
+    static constexpr uint32_t ZERO_REPLY_FRESH_MS = 50;
+    static constexpr uint32_t ZERO_AUTHENTIC_PEER_MAX_MS = ZERO_WINDOW_MS + 100;
     static constexpr uint8_t LENGTH = 18;
     static constexpr uint8_t ZERO_LENGTH = 16; // CH1 only; no CH7 direction change
     // This is a scheduler hint matching the *existing* native half-duplex
@@ -55,16 +60,24 @@ public:
     struct Evidence {
         bool disarmed = false, emergency_stop = false, owner = false;
         bool peer = false, uart_ok = false;
-        uint32_t peer_ms = 0, control_ms = 0, owner_ms = 0;
-        // The zero-only diagnostic uses a 200ms verified 0x21 age budget:
-        // after CH1=minimum frames the real Avian can send 0x80 telemetry
-        // in place of its ~50ms 0x21 heartbeat. Never count source-less 0x80
-        // as peer identity. Physical motor-turn mode RETAINS 100ms.
+        uint32_t peer_ms = 0, control_ms = 0, owner_ms = 0, reply_ms = 0;
+        // Peer_ms is ONLY a verified 0x21 from the addressed ESC. Never
+        // overwrite it with the source-less 0x80 receipt. During the
+        // unarmable 3-second CH1-minimum lease, allow the specifically
+        // qualified recent reply witness to replace *periodic 0x21 timing*,
+        // not initial handshake/identity. Motor-turn still requires 100ms
+        // 0x21 and ignores the new reply_ms field.
         bool safe(uint32_t now, bool zero_only = false) const
         {
-            const uint32_t peer_deadline = zero_only ? 200U : 100U;
+            const uint32_t peer_age = uint32_t(now - peer_ms);
+            const bool authentic_peer_fresh = peer_ms != 0 &&
+                peer_age < (zero_only ? 200U : 100U);
+            const bool bounded_zero_reply = zero_only && peer_ms != 0 &&
+                reply_ms != 0 && int32_t(reply_ms - peer_ms) >= 0 &&
+                uint32_t(now - reply_ms) < ZERO_REPLY_FRESH_MS &&
+                peer_age < ZERO_AUTHENTIC_PEER_MAX_MS;
             return disarmed && emergency_stop && owner && peer && uart_ok &&
-                uint32_t(now - peer_ms) < peer_deadline &&
+                (authentic_peer_fresh || bounded_zero_reply) &&
                 uint32_t(now - control_ms) < STALE_MS &&
                 uint32_t(now - owner_ms) < 50;
         }
