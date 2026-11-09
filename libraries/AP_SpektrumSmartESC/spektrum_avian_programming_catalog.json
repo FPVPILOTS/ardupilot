@@ -1,0 +1,164 @@
+{
+  "$schema_note": "Human-curated vendor UI catalog; NOT a wire-protocol command map or firmware-detected values.",
+  "version": "2026-11-09-v1",
+  "model": "Spektrum Avian 130A Smart ESC, exact HW/FW to be confirmed",
+  "vendor_document": "https://www.spektrumrc.com/on/demandware.static/-/Sites-horizon-master/default/dw8b38e716/Manuals/Spektrum-Avian-SmartLink-Update-Instructions.pdf",
+  "read_from_ESC_implemented": false,
+  "write_to_ESC_implemented": false,
+  "parameters_visible_in_Mission_Planner_implemented": false,
+  "transport_note": "SRXL2 0xCD subcommand 0x03 exists; no verified mapping to Avian Prog UI IDs/read/write/ack; do not transmit guessed programming packets.",
+  "settings": [
+    {
+      "vendor_group": "GENERAL SETTINGS",
+      "vendor_label": "Flight Mode",
+      "proposed_param": "SPKT_MODE",
+      "choices": [
+        "Fixed Wing",
+        "Helicopter"
+      ],
+      "default_documented": "Fixed Wing"
+    },
+    {
+      "vendor_group": "GENERAL SETTINGS",
+      "vendor_label": "Brake Type",
+      "proposed_param": "SPKT_BRKTYPE",
+      "choices": [
+        "Disabled",
+        "Normal",
+        "Proportional",
+        "Reverse"
+      ],
+      "default_documented": "Disabled"
+    },
+    {
+      "vendor_group": "GENERAL SETTINGS",
+      "vendor_label": "Brake Force",
+      "proposed_param": "SPKT_BRKFORCE",
+      "min": 0,
+      "max": 7,
+      "step": 1,
+      "default_documented": 0
+    },
+    {
+      "vendor_group": "GENERAL SETTINGS",
+      "vendor_label": "Voltage Cutoff Type",
+      "proposed_param": "SPKT_LVCTYPE",
+      "choices": [
+        "Soft Cutoff",
+        "Hard Cutoff"
+      ],
+      "default_documented": null
+    },
+    {
+      "vendor_group": "GENERAL SETTINGS",
+      "vendor_label": "LiPo Cells",
+      "proposed_param": "SPKT_CELLS",
+      "choices": [
+        "Auto Calc"
+      ],
+      "choices_incomplete": true,
+      "default_documented": null
+    },
+    {
+      "vendor_group": "GENERAL SETTINGS",
+      "vendor_label": "Cutoff Voltage",
+      "proposed_param": "SPKT_LVCVOLT",
+      "min": 2.8,
+      "max": 3.8,
+      "unit": "V/cell",
+      "allows_disabled": true,
+      "default_documented": 3
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "BEC Voltage",
+      "proposed_param": "SPKT_BECVOLT",
+      "choices": [],
+      "choices_incomplete": true,
+      "default_documented": null,
+      "note": "Options depend on exact ESC firmware/hardware"
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Start-up Mode",
+      "proposed_param": "SPKT_START",
+      "choices": [
+        "Normal Start-up",
+        "Soft Start-up"
+      ],
+      "default_documented": null
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Timing",
+      "proposed_param": "SPKT_TIMING",
+      "choices": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "default_documented": null
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Motor Rotation",
+      "proposed_param": "SPKT_ROTATION",
+      "choices": [],
+      "choices_incomplete": true,
+      "default_documented": null
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Active Freewheeling",
+      "proposed_param": "SPKT_FREEWHEEL",
+      "choices": [
+        "Enabled",
+        "Disabled"
+      ],
+      "default_documented": null
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Thrust Rev",
+      "proposed_param": "SPKT_THRREVCH",
+      "choices": [],
+      "choices_incomplete": true,
+      "default_documented": null,
+      "note": "Channel assignment, only active with Reverse brake type"
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Governor Gain (Heli Mode only)",
+      "proposed_param": "SPKT_GOVGAIN",
+      "choices": [
+        "Level 1",
+        "Level 2",
+        "Level 3"
+      ],
+      "default_documented": null
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Auto Restart Time (Heli Mode only)",
+      "proposed_param": "SPKT_GOVREST",
+      "choices": [],
+      "choices_incomplete": true,
+      "default_documented": null
+    },
+    {
+      "vendor_group": "THROTTLE – CONTROL",
+      "vendor_label": "Restart Accel (Heli Mode only)",
+      "proposed_param": "SPKT_GOVACC",
+      "choices": [],
+      "choices_incomplete": true,
+      "default_documented": null
+    }
+  ],
+  "validation_plan": [
+    "Read and record ESC hardware+firmware ID and the actual SmartLink BASIC/ADVANCED/Avian Prog screens",
+    "Match available menu options to this catalog without extrapolation",
+    "Capture or obtain documented query/response for parameter IDs and values on a motor-disconnected interface",
+    "Implement read-only discovery and compare against tool",
+    "Only then implement write with ack/readback, grounded arming prohibition and firmware-version compatibility"
+  ]
+}
