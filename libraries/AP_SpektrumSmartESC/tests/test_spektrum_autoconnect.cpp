@@ -87,6 +87,37 @@ static void peer_timeout_and_recovery_clears_link()
     assert(p.status().successful == 2);
 }
 
+static void unarmable_zero_reply_lease_does_not_authenticate_peer()
+{
+    Auto p; p.enable(0);
+    assert(p.update(1000, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(p.handshake_complete(1010, 0x40, true, true));
+    assert(p.peer_seen(1020, 0x40, true));
+    assert(p.update(1500, true, true, true) == Action::NONE);
+    assert(p.status().state == State::LINKED);
+    // The sensor reply only defers a *policy timeout*. It never changes
+    // the recorded CRC-validated 0x21 peer timestamp or establishes identity.
+    assert(p.status().last_peer_ms == 1020);
+    assert(p.status().device_id_matched);
+    assert(p.update(1501, true, true, false) == Action::NONE);
+    assert(p.status().state == State::BACKOFF);
+    assert(p.status().reason == Reason::PEER_TIMEOUT);
+    assert(p.status().last_peer_ms == 1020);
+    assert(p.status().lost == 1);
+    // Safety, faults and competing masters still latch even when hold=true.
+    Auto unsafe; unsafe.enable(0);
+    assert(unsafe.update(1000, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(unsafe.handshake_complete(1010, 0x40, true, true));
+    assert(unsafe.update(1500, false, true, true) == Action::NONE);
+    assert(unsafe.status().state == State::FAULT);
+    Auto conflict; conflict.enable(0);
+    assert(conflict.update(1000, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(conflict.handshake_complete(1010, 0x40, true, true));
+    conflict.competing_master();
+    assert(conflict.update(1500, true, true, true) == Action::NONE);
+    assert(conflict.status().state == State::YIELDED);
+}
+
 static void backoff_is_bounded()
 {
     Auto p; p.enable(0);
@@ -160,10 +191,11 @@ int main()
     startup_fc_first_esc_first_simultaneous();
     requires_exact_peer_and_uart_restoration();
     peer_timeout_and_recovery_clears_link();
+    unarmable_zero_reply_lease_does_not_authenticate_peer();
     backoff_is_bounded();
     late_heartbeat_cannot_revive_stale_link();
     never_compete_with_master();
     safety_loss_and_uart_fault_are_latched();
     timeout_and_uint32_clock_wrap();
-    std::puts("10 Phase 17 automatic startup/reconnect policy tests passed (simulation only)");
+    std::puts("11 Phase 17 automatic startup/reconnect policy tests passed (simulation only)");
 }
