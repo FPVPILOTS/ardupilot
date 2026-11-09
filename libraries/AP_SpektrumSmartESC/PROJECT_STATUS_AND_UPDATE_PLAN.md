@@ -14,10 +14,13 @@ The official ArduPilot branch in this project is our own fork
   reported THpct0 and eRPM0, then age P219 safety abort.
 - A later tighter reply-timeout build stopped at Q1/TC1 RX0, so we
   cannot claim a stable three-second trial, armed run, or motor cutoff.
-- The last user-confirmed build pass was TurnLab; no subsequent
-  native ArmedBench build/flash/test has been verified in this chat.
+- User-confirmed native ArmedBench-IOMCU firmware **compile** passed
+  on 2026-11-09, commit 166e64ae2f, exitcode 0, ArduPlane output
+  build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj.
+  Waf reported 373672 free flash bytes. No native ArmedBench
+  firmware **flash** or physical runtime has been verified.
 
-### Software currently in branch but NOT yet user-built
+### Software in branch; native ArmedBench now built, not flashed
 
 - Native SRXL2 controller uses FC0 source 0x30 rather than simulation
   0x31; finished 0x21 followed by 0xCD and source-less but solicited
@@ -116,7 +119,11 @@ user WSL host tests have NOT been rerun yet. No firmware flash.
 
 ### Build status: IMPORTANT
 
-No connected local WSL executor exists in this chat. GitHub writes
-are not the same as a local compile or measured ESC behavior.
-Do NOT claim the new ArmedBench image passed the host tests or
-the physical trial without user-provided build output and logs.
+The user supplied WSL `./waf plane` build exitcode 0 for
+`Pixhawk6C-SpktSmart-ArmedBench-IOInstall` at commit `166e64ae2f`.
+GitHub Actions SRXL2 host suite also succeeded at that commit.
+These results establish **build and host tests only**, not
+physical SRXL2 cold-start, ESC control, arming, reverse, or failsafe.
+The experimental board profile still returns unqualified
+(`operator_qualified=false`), and `SPKT_MOTOR` defaults to zero.
+No firmware flash was reported.
