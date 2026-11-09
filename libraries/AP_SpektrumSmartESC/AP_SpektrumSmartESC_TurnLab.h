@@ -16,7 +16,18 @@ public:
     // Only for the one-shot, unarmable CH1=minimum experiment. A source-less
     // 0x80 is NOT peer identity and cannot authorize armed/motor mode.
     static constexpr uint32_t ZERO_REPLY_WINDOW_MS = 12;
+    // At 50Hz the Avian may not answer the first 0xCD after handshake.
+    // Allow at most five zero-only attempts to discover its first valid
+    // 0x80 reply. This is an UNARMABLE diagnostic, never a motor command.
+    static constexpr uint32_t ZERO_FIRST_REPLY_MS = 100;
     static constexpr uint32_t ZERO_REPLY_FRESH_MS = 50;
+    static bool zero_reply_overdue(uint32_t now, uint32_t started_ms,
+                                   uint32_t last_qualified_reply_ms)
+    {
+        return last_qualified_reply_ms == 0 ?
+            uint32_t(now - started_ms) >= ZERO_FIRST_REPLY_MS :
+            uint32_t(now - last_qualified_reply_ms) >= ZERO_REPLY_FRESH_MS;
+    }
     static constexpr uint32_t ZERO_AUTHENTIC_PEER_MAX_MS = ZERO_WINDOW_MS + 100;
     static constexpr uint8_t LENGTH = 18;
     static constexpr uint8_t ZERO_LENGTH = 16; // CH1 only; no CH7 direction change
