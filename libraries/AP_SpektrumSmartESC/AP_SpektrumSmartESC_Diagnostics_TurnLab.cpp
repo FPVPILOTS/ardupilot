@@ -228,8 +228,19 @@ void AP_SpektrumSmartESC_Diagnostics::update_turn(
     if (_turn_zero_only && _turn_bad_zero_sensor) {
         finish_turn("FAULT_ZERO_SENSOR"); return;
     }
-    if (_turn_zero_only && _turn_last_tc_ms != 0 && !_turn_reply_for_tc &&
-        uint32_t(now - _turn_last_tc_ms) > Turn::ZERO_REPLY_WINDOW_MS + 3U) {
+    // Not every 0xCD is answered, especially the first one after a fresh
+    // handshake. Prior test stopped at Q1/TC1 despite the previous Q9/TC8
+    // run receiving eight valid sensor candidates. Permit a fixed 100ms
+    // *first-reply* bootstrap, then require at least one CRC-valid, TC-
+    // correlated, zero-eRPM/zero-throttle reply every 50ms. Neither stage
+    // changes the authenticated 0x21 peer timestamp or permits armed mode.
+    if (_turn_zero_only && _turn_last_tc_ms != 0 &&
+        Turn::zero_reply_overdue(now, _turn_started_ms, _turn_last_reply_ms)) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "SPK22 ZERO RX TIMEOUT first%u age%lu good%lu",
+                      unsigned(_turn_last_reply_ms == 0),
+                      (unsigned long)uint32_t(now -
+                          (_turn_last_reply_ms == 0 ? _turn_started_ms : _turn_last_reply_ms)),
+                      (unsigned long)_turn_reply);
         finish_turn("FAULT_ZERO_REPLY_TIMEOUT"); return;
     }
     // Inspect deadlines even with an outstanding TX; never reuse or overwrite
