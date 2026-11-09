@@ -256,6 +256,13 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
     // response to our own actual completed 0xCD request, not as identity.
     constexpr uint32_t FIRST_SENSOR_GRACE_US = 100000U;
     constexpr uint32_t SENSOR_STALE_US = 75000U;
+    if (_profile.handshake_only_bench &&
+        uint32_t(now_us - _last_peer) >= 100000U) {
+        // Preserve the OLD finite, never-armable, no-sensor mock fallback.
+        // This path is prohibited by the production profile.
+        fault(Fault::ESC_LOSS);
+        return;
+    }
     if (!_profile.handshake_only_bench && _status.controls != 0 &&
         ((_have_telemetry && uint32_t(now_us - _telemetry_since) >= SENSOR_STALE_US) ||
          (!_have_telemetry && uint32_t(now_us - _last_peer) >= FIRST_SENSOR_GRACE_US))) {
