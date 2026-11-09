@@ -42,15 +42,16 @@ the public Spektrum library, but the Avian-specific parameter IDs,
 queries, encoding, ACK and write/save protocol are NOT documented by
 the consulted public protocol implementation. Do not guess writes.
 
-Collect one read-only SmartLink programmer session:
-- screenshot or export of About / hardware and firmware versions;
-- screenshot of General Settings and Throttle Control / Advanced;
-- as-found Brake Type, Thrust Rev channel, Start-up Mode, Timing,
-  Active Freewheeling, BEC Voltage, LVC and number of LiPo cells;
-- if supplied, the actual Avian Prog (on-screen) tree / item IDs.
-No need to energize the EDF motor for these screenshots if the ESC
-can be configured with motor phases disconnected. Check programmer
-instructions for the exact model/version.
+**As-found ESC programmer screenshots were ALREADY supplied by the user
+and discussed 2026-11-07. Do not ask for them again.** Actual settings:
+Avian 130A Ver A, firmware 04.0.27; Fixed-Wing; Brake Reverse,
+Brake Force 0; Soft Cutoff; Auto Calc cells; Cutoff Voltage Disabled;
+BEC 6.0V; Start-up Soft; Timing 15deg; motor CW; Active Freewheeling
+Disabled; Governor Gain 1; Auto Restart Time 45s; Restart Accel 1.5s;
+Thrust Reverse CH7. Normal aircraft pack 6S, 4S is bench test.
+These are copied into spektrum_avian_programming_catalog.json as
+user_observed_value (distinct from vendor defaults and SRXL2 readback).
+Only ask for NEW wire/prog data or a later changed programmer configuration.
 
 ### Suggested milestone acceptance
 
@@ -85,6 +86,17 @@ upstream ArduPilot firmware upgrade will not contain this private
 driver until merged upstream. Long term, propose a generic driver
 as reviewable PRs to the ArduPilot project. See:
 https://ardupilot.org/dev/docs/git-rebase.html
+
+### 2026-11-09 18:54 host regression checkpoint
+
+The user's WSL hosttest after pulling commit 7d3c3604fc reported
+exitcode 250: DedicatedFCMasterAndDisarmedRCBoot failed at the assertion
+that throttle had already reached 1000. Root cause is a test ordering
+mistake: it crossed an arming edge before the initial disarmed zero
+packet was TC-completed and answered. The fixture has been corrected
+to TC-complete and accept a zero reply before evaluating ready_to_arm.
+This repair has been committed but has NOT yet been rerun on local WSL.
+No native ArduPlane ArmedBench image has been built or flashed.
 
 ### Build status: IMPORTANT
 
