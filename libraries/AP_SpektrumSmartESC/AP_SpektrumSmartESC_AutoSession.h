@@ -101,7 +101,8 @@ public:
     // Called with a fully captured incoming packet from the already-owned
     // isolated bus. A CRC-valid 0x21 *peer advertisement* maintains link
     // freshness, never authorizes motor readiness or a telemetry sample.
-    bool observe_peer(const uint8_t *packet, uint8_t length, uint32_t now_ms)
+    bool observe_peer(const uint8_t *packet, uint8_t length, uint32_t now_ms,
+                      bool unarmable_zero_reply_witness = false)
     {
         if (_policy.status().state != State::LINKED || packet == nullptr ||
             length != 14 || packet[0] != 0xA6 || packet[1] != 0x21 ||
@@ -111,7 +112,7 @@ public:
             packet[6] > 1 || AP_SpektrumSmartESC::crc16(packet, length) != 0) {
             return false;
         }
-        return _policy.peer_seen(now_ms, _target, true);
+        return _policy.peer_seen(now_ms, _target, true, unarmable_zero_reply_witness);
     }
 
     void competing_master()
