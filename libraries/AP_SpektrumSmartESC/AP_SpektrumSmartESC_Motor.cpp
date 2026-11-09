@@ -220,7 +220,11 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
             return;
         }
         if (!_reader.active()) {
-            fault(Fault::PROTOCOL);
+            // No response from a not-yet-powered ESC is recoverable while
+            // DISARMED. Unexpected/wrong-identity SRXL2 frames are NOT:
+            // they remain protocol faults and must not auto-reconnect.
+            fault(_reader.status().state == AP_SpektrumSmartESC_Reader::State::TIMEOUT ?
+                Fault::ESC_LOSS : Fault::PROTOCOL);
             return;
         }
         if (!_port.idle_high() || uint32_t(now_us - _last_rx) < 2000) {
