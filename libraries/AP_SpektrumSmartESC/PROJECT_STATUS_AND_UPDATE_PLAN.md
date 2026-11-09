@@ -98,6 +98,22 @@ to TC-complete and accept a zero reply before evaluating ready_to_arm.
 This repair has been committed but has NOT yet been rerun on local WSL.
 No native ArduPlane ArmedBench image has been built or flashed.
 
+### 2026-11-09 18:54 WSL retest: no first-control TX progress
+
+User retested after test-ordering fix; host tests still exited 250:
+`test_spektrum_motor.cpp:356 BusBusyNeverRetriesForever(): fault == ESC_LOSS`
+failed. Cause: link supervision checked missing sensor responses only
+when `_status.controls != 0`, so a continuously low/busy UART with
+**zero completed 0xCD frames** never triggered the new sensor watchdog.
+
+The production motor controller now ALSO enforces a separate
+100ms deadline since the last hardware-TC-completed TX after
+discovery, independently of whether any control or telemetry packet
+has completed. It does not reset on queued TX or bus-idle indication.
+Regression tests verify pre-deadline healthy state, post-deadline
+fault, and no new TX after fault. Source commit was made but
+user WSL host tests have NOT been rerun yet. No firmware flash.
+
 ### Build status: IMPORTANT
 
 No connected local WSL executor exists in this chat. GitHub writes
