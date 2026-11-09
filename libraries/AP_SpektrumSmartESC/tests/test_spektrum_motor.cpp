@@ -514,10 +514,23 @@ TEST(SpektrumMotor, HandshakeOnlyBenchDoesNotPretendToHaveTelemetry)
     f.feed(p,n,80000);
     f.tick(83000);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
-    f.port.complete=true; f.tick(85000); // Complete the second control TX.
-    f.tick(90000); // Optional 0x80 reply timed out; still not armed.
-    f.tick(200000); // Stale handshake: no infinite run without a live peer.
+    f.port.complete=true; f.tick(85000); // Still waiting (13ms): no new TC.
+    f.tick(90000); // Reply expires (18ms); a second zero 0xCD TX is STARTED.
+    // The mock UART marks begin_tx() as incomplete until explicitly TC'd.
+    // Without this, jumping straight to 200ms correctly faults TX_TIMEOUT
+    // for a stalled second TX, not ESC_LOSS for an old 0x21 peer.
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().controls, 1U);
+    f.port.complete = true;
+    f.tick(92000); // Realistic completion of the second zero control.
+    EXPECT_EQ(f.motor.status().controls, 2U);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    // 98ms after last hardware TC (<100ms TX-progress bound), but 110ms
+    // since the last authenticated 0x21. The handshake-only bench must
+    // still end by its OWN peer deadline. A missing 0x80 grants no arming.
+    f.tick(190000);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+    EXPECT_FALSE(f.motor.ready_to_arm(190, 190000));
 }
 
 TEST(SpektrumMotor, DisarmedZeroBootstrapsWithoutFabricatedStoppedEvidence)
