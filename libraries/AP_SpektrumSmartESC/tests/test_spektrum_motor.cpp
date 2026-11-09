@@ -167,11 +167,24 @@ TEST(SpektrumMotor, DedicatedFCMasterAndDisarmedRCBoot)
     f.tick(70000);
     EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
     EXPECT_EQ(f.port.starts, 3U); // CH1=zero only; keeps ESC running without RC.
-    f.d.failsafe = false; f.d.control_ok = true;
-    f.d.armed = true; f.d.rc_ok = true;
-    f.cycle(81000);
+    // Let the first DISARMED CH1=zero packet reach physical TC and
+    // accept its simulated ESC zero-throttle reply before any arming edge.
+    // The previous test armed while that TX was still pending and then
+    // asserted TC completion as if arming had already been qualified.
+    f.port.complete = true;
+    f.tick(72000);
+    EXPECT_EQ(f.motor.status().throttle, 1000);
+    f.reply(73000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    // RP4TD becomes available only AFTER FC/ESC established the link.
+    // No auto-arm: maintain zero in the next disarmed control slot.
+    f.d.failsafe = false;
+    f.d.control_ok = true;
+    f.d.rc_ok = true;
+    f.cycle(86000);
     EXPECT_EQ(f.motor.status().throttle, 1000);
     EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    EXPECT_TRUE(f.motor.ready_to_arm(89, 89000));
 }
 
 TEST(SpektrumMotor, QualificationAndStartupNeutral)
