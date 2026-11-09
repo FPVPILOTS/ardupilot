@@ -131,14 +131,16 @@ public:
 
     // For an observed CRC-valid bus frame from the known peer; do not call
     // for just raw bytes, other IDs, an echo, or a CRC-invalid packet.
-    bool peer_seen(uint32_t now_ms, uint8_t peer_id, bool crc_valid)
+    bool peer_seen(uint32_t now_ms, uint8_t peer_id, bool crc_valid,
+                   bool unarmable_zero_reply_witness = false)
     {
         if (_status.state != State::LINKED || !crc_valid || peer_id != _expected_id) {
             return false;
         }
         // A late callback must not resurrect a stale link after a scheduler
         // stall. Force a fresh handshake rather than reusing old controls.
-        if (age(now_ms, _status.last_peer_ms) >= PEER_TIMEOUT_MS) {
+        if (age(now_ms, _status.last_peer_ms) >= PEER_TIMEOUT_MS &&
+            !unarmable_zero_reply_witness) {
             _status.lost++;
             fail(now_ms, Reason::PEER_TIMEOUT);
             return false;
