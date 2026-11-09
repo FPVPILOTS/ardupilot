@@ -434,6 +434,32 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         _turn_last_tc_ms = hw.handshake_tc_ms;
     }
 #endif
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+    // Calculate the same bounded witness before and after draining RX.
+    // A genuine CRC/source-checked 0x21 received after 300ms may refresh
+    // identity ONLY when the zero-only reply lease was independently valid.
+    const auto zero_reply_hold = [&](const AP_HAL::UARTDriver::ReceiveDiagnostics &snapshot) -> bool {
+        if (!_turn_active || !_turn_zero_only || _turn_started_ms == 0 ||
+            _turn_last_reply_ms == 0 || _auto_last_verified_peer_ms == 0 ||
+            uint32_t(now_ms - _turn_started_ms) >= AP_SpektrumSmartESC_TurnLab::ZERO_WINDOW_MS ||
+            uint32_t(now_ms - _turn_last_reply_ms) >= AP_SpektrumSmartESC_TurnLab::ZERO_REPLY_FRESH_MS ||
+            uint32_t(now_ms - _auto_last_verified_peer_ms) >=
+                AP_SpektrumSmartESC_TurnLab::ZERO_AUTHENTIC_PEER_MAX_MS ||
+            _turn_bad_zero_sensor || !safe ||
+            (snapshot.flags & 9U) != 9U ||
+            (snapshot.cr1 & 0x4DU) != 5U ||
+            (snapshot.cr3 & 8U) == 0 ||
+            port->receive_errors() != _turn_error_base ||
+            snapshot.handshake_faults != _turn_fault_base) {
+            return false;
+        }
+        const auto io = _turn_owner.receipt();
+        return io.epoch == _turn_nonce && io.io_boot == _turn_nonce &&
+            io.main3_inhibited && io.failsafe_inhibited && io.aux7_reserved &&
+            uint32_t(now_ms - io.acquired_ms) < 50;
+    };
+    const bool zero_hold_before_rx = zero_reply_hold(hw);
+#endif
     if (!_auto_inflight) {
         uint8_t byte = 0;
         uint32_t acquired_ms = 0;
@@ -477,7 +503,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                             // Some other controller/master owns this bus.
                             _auto_session.competing_master();
                         } else {
+#if AP_SPEKTRUM_SMART_ESC_TURN_LAB
+                            if (_auto_session.observe_peer(packet, length, acquired_ms, zero_hold_before_rx)) {
+#else
                             if (_auto_session.observe_peer(packet, length, acquired_ms)) {
+#endif
                                 // Never treat a CRC-valid but source-less 0x80
                                 // sensor packet as proof that ESC 0x40 is alive.
                                 _auto_last_verified_peer_ms = acquired_ms;
@@ -513,28 +543,10 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                              (hw.cr3 & 8U) != 0;
     const bool bus_idle = (hw.handshake_flags & 32U) != 0;
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
-    // Do not advance the normal 300ms *peer* timeout into a new handshake
-    // while an already-verified, single ESC is replying to native-TC
-    // completed CH1-minimum commands during its one-shot, 3-second bench
-    // lease. 0x80 has NO source ID: last_peer_ms is NEVER advanced, and this
-    // exception cannot authorize armed motor mode or survive the test window.
-    const auto turn_io = _turn_owner.receipt();
-    const bool zero_reply_lease = _turn_active && _turn_zero_only &&
-        _turn_started_ms != 0 &&
-        uint32_t(now_ms - _turn_started_ms) < AP_SpektrumSmartESC_TurnLab::ZERO_WINDOW_MS &&
-        _turn_last_reply_ms != 0 && _auto_last_verified_peer_ms != 0 &&
-        uint32_t(now_ms - _turn_last_reply_ms) <
-            AP_SpektrumSmartESC_TurnLab::ZERO_REPLY_FRESH_MS &&
-        uint32_t(now_ms - _auto_last_verified_peer_ms) <
-            AP_SpektrumSmartESC_TurnLab::ZERO_AUTHENTIC_PEER_MAX_MS &&
-        !_turn_bad_zero_sensor && safe && rx_restored &&
-        port->receive_errors() == _turn_error_base &&
-        hw.handshake_faults == _turn_fault_base &&
-        turn_io.epoch == _turn_nonce && turn_io.io_boot == _turn_nonce &&
-        turn_io.main3_inhibited && turn_io.failsafe_inhibited &&
-        turn_io.aux7_reserved && uint32_t(now_ms - turn_io.acquired_ms) < 50;
+    // The 0x21 timestamp is unchanged by 0x80: only the bounded, isolated
+    // zero-only reply witness can defer the standard 300ms policy deadline.
     const auto action = _auto_session.tick(now_ms * 1000U, safe, bus_idle, rx_restored,
-                                          zero_reply_lease);
+                                          zero_reply_hold(hw));
 #else
     const auto action = _auto_session.tick(now_ms * 1000U, safe, bus_idle, rx_restored);
 #endif
