@@ -86,11 +86,17 @@ bool AP_SpektrumSmartESC_Motor::start(const Qualification &q, bool disarmed, uin
         fault(Fault::TURNAROUND);
         return false;
     }
-    if (!_reader.start(true, true, target, uid, now_us)) {
+    // Real isolated ESC bus uses the Spektrum FC-master/power-on profile:
+    // 0x30 priority 10, startup announcement capture, then directed query.
+    // Unlike the old 0x31 remote-receiver profile, this matches the
+    // actual Pixhawk6C/Avian handshake already observed on the bench.
+    const bool native_fc_master = !_port.simulated();
+    if (!_reader.start(true, true, target, uid, now_us, native_fc_master)) {
         fault(Fault::PROTOCOL);
         return false;
     }
-    _parser = AP_SpektrumSmartESC(AP_SpektrumSmartESC_Reader::SOURCE, target, 50, false);
+    _source = native_fc_id(_port.simulated());
+    _parser = AP_SpektrumSmartESC(_source, target, 50, false);
     _target = target;
     _initial_idle = _transition = _neutral = _direction_changed = false;
     _armed_seen = false;
@@ -224,28 +230,30 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
         transmit(n, now_us, true);
         return;
     }
-    // Some physical ESCs continue sending valid 0x21 handshakes but do not
-    // answer a 0xCD control frame with 0x80. Preserve the strict telemetry
-    // contract by default; allow a separately qualified BENCH-only fallback.
-    // Physical bench logs showed a 101ms authentic 0x21 gap while the
-    // ESC returned 0x80 sensor data. Bound production peer age to 150ms,
-    // below the Avian's documented 250ms signal-loss cutoff; never let
-    // source-less sensor responses refresh this authenticated peer timer.
-    const uint32_t peer_deadline_us = _profile.handshake_only_bench ? 100000U : 150000U;
-    if (uint32_t(now_us - _last_peer) >= peer_deadline_us) {
+    // Spektrum official protocol: after a VALID addressed 0x21 handshake,
+    // normal running is CH1/CH7 in 0xCD and replyID-directed 0x80 sensor
+    // data. 0x21 is NOT an every-50ms heartbeat. Our former 150ms
+    // handshake watchdog shut down a healthy, replying ESC (P219 bench).
+    // A source-less 0x80 never advances the authenticated handshake record.
+    // For a dedicated, IO-owned SINGLE-ESC link it is valid as a *bounded*
+    // response to our own actual completed 0xCD request, not as identity.
+    constexpr uint32_t FIRST_SENSOR_GRACE_US = 100000U;
+    constexpr uint32_t SENSOR_STALE_US = 75000U;
+    if (!_profile.handshake_only_bench && _status.controls != 0 &&
+        ((_have_telemetry && uint32_t(now_us - _telemetry_since) >= SENSOR_STALE_US) ||
+         (!_have_telemetry && uint32_t(now_us - _last_peer) >= FIRST_SENSOR_GRACE_US))) {
         fault(Fault::ESC_LOSS);
         return;
     }
     if (_waiting_reply) {
-        if (uint32_t(now_us - _reply_since) >= 5000U) {
-            if (_profile.handshake_only_bench) {
-                // This does NOT claim an accepted command or any telemetry.
-                _waiting_reply = false;
-            } else {
-                fault(Fault::ESC_LOSS);
-            }
+        // Not every control frame gets an immediate 0x80. Allow an isolated
+        // missing response, but never keep a stale link alive: the separate
+        // freshness watchdog above is independent of this pending slot.
+        if (uint32_t(now_us - _reply_since) >= 15000U) {
+            _waiting_reply = false;
+        } else {
+            return;
         }
-        return;
     }
     // Bench cadence, not a claim about Avian scheduling. Never catch up in bursts.
     if (uint32_t(now_us - _last_control_start) >= 11000) {
@@ -342,13 +350,13 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     // Do not classify its correctly addressed handshake as a protocol
     // failure, whether or not a 0x80 control reply is currently pending.
     if (n == 14 && packet[1] == 0x21 && packet[3] == _target &&
-        packet[4] == AP_SpektrumSmartESC_Reader::SOURCE) {
+        packet[4] == _source) {
         _last_peer = acquisition_us;
         return;
     }
     if (!_waiting_reply ||
-        uint32_t(acquisition_us - _reply_since) >= 5000U || n != 22 || packet[1] != 0x80 ||
-        packet[3] != AP_SpektrumSmartESC_Reader::SOURCE) {
+        uint32_t(acquisition_us - _reply_since) >= 15000U || n != 22 || packet[1] != 0x80 ||
+        packet[3] != _source) {
         fault(Fault::PROTOCOL);
         return;
     }
