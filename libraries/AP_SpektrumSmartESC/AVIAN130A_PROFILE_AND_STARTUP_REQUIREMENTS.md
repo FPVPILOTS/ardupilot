@@ -13,7 +13,7 @@ reverse-throttle switch, then delivered in SRXL2 CH7. CH1/CH7 are **Spektrum
 wire indices**, not physical Pixhawk SERVO1 or SERVO7 outputs. No PWM
 controller or PWM fallback is part of this architecture.
 
-## Physical evidence as of 2026-11-08
+## Physical evidence through 2026-11-09
 
 - `0x21` handshake established to ESC ID `0x40`, Pixhawk ID `0x30`,
   priority 10, regular CRC-valid `0x21` peer announcements.
@@ -37,7 +37,22 @@ controller or PWM fallback is part of this architecture.
   The 22:15 run then aborted with `FAULT_TX_DENIED Q5 TC4`. The zero-only
   coordinator has since been modified to wait for the *native UART physical*
   2..100ms RX gap before consuming a frame, with defer and denial logging.
-  That change is not yet compiled/flashed/verified on hardware.
+  The 2026-11-09 06:27 trial then passed native RX-gap checks (GAP DEFER0)
+  and reached Q9/TC8 with eight time-window sensor responses showing
+  eRPM=0 and THpct0, but aborted with AGE P219 IO11 ERR0 HF0. The
+  authentic 0x21 peer timestamp exceeded the TurnLab 200ms deadline.
+  The normal policy later reported LOST1/HANDSHAKING; no full three-second
+  zero-only sequence has been proven yet.
+
+  **2026-11-09 code patch, not yet locally compiled/flashed:** ONLY the
+  unarmable CH1-minimum TurnLab permits a fresh, valid zero-throttle
+  and zero-eRPM 0x80 sensor response (maximum one per real hardware TC,
+  received within 12ms) to satisfy the temporary timing witness.
+  AutoConnect's 300ms peer timeout is deferred solely with this witness
+  and intact IO/disarm/UART interlocks, inside the immutable three-second
+  window. The authenticated 0x21 peer timestamp is NEVER overwritten
+  by a source-less 0x80. Lost/bad/nonzero replies and expired leases
+  fail closed. Native motor operation and flight arming stay disabled.
 - RP4TD raw RC3 input responded across 990..2011us, valid RC/failsafe
   `RC1 FS0`. `SERVO3_FUNCTION=70` was mapped (`MAP1`), but while the
   flight controller was disarmed, SERVO3 remained at 1100 and
