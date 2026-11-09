@@ -263,12 +263,20 @@ int main()
         Turn accepted(spektrum_turnlab_profile());
         auto initial = evidence(1000);
         assert(accepted.start(true, initial, 1000, true));
-        auto during = evidence(1420);
-        during.peer_ms = 1000;
-        during.reply_ms = 1410;
         uint8_t frame[Turn::LENGTH] {};
-        assert(accepted.prepare(during, 1420, frame, sizeof(frame)) ==
-               Turn::ZERO_LENGTH);
+        // Exercise the real 20ms cadence; never bypass the separate 60ms
+        // control-supervision deadline to simulate an old 0x21 timeout.
+        for (uint32_t t = 1000; t <= 1420; t += 20) {
+            auto during = evidence(t);
+            during.peer_ms = 1000;
+            if (t >= 1200) {
+                during.reply_ms = t - 2; // synthetic TC-associated 0x80
+            }
+            assert(accepted.prepare(during, t, frame, sizeof(frame)) ==
+                   Turn::ZERO_LENGTH);
+            assert(accepted.take(frame, Turn::ZERO_LENGTH, during, t));
+            assert(accepted.complete(t + 2, true));
+        }
         ++tests;
     }
     {
