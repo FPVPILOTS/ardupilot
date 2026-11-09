@@ -34,7 +34,8 @@ public:
     // controller must abort its native lease whenever this returns no active
     // handshake and its previously-owned UART transaction is still pending.
     Action tick(uint32_t now_us, bool disarmed_bench_safe,
-                bool bus_idle_high, bool uart_rx_restored)
+                bool bus_idle_high, bool uart_rx_restored,
+                bool unarmable_zero_reply_witness = false)
     {
         const uint32_t now_ms = now_us / 1000U;
         if (_policy.status().state == State::HANDSHAKE) {
@@ -53,7 +54,8 @@ public:
                 _policy.handshake_failed(now_ms);
             }
         }
-        const auto action = _policy.update(now_ms, disarmed_bench_safe, bus_idle_high);
+        const auto action = _policy.update(now_ms, disarmed_bench_safe, bus_idle_high,
+                                           unarmable_zero_reply_witness);
         if (_policy.status().state != State::HANDSHAKE &&
             _reader.active()) {
             _reader.stop(); // clear stale prepared packet / callbacks
