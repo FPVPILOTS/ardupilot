@@ -17,6 +17,8 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     _uid = uid;
     _pending_ms = now_ms;
     _pending = true;
+    _auto_retry_disarmed = false;
+    _ever_armed = false;
     return true;
 }
 
@@ -25,10 +27,29 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
 {
     WITH_SEMAPHORE(_lock);
     _demand = demand;
+    if (demand.armed || hal.util->get_soft_armed()) {
+        // No automatic armed relink after a motor, RC or ESC fault.
+        _ever_armed = true;
+        _auto_retry_disarmed = false;
+    }
     if (_restore_pending && !hal.util->get_soft_armed()) {
         _uart.begin(115200);
         _receiver.resume();
         _restore_pending = false;
+    }
+    // Power-on ordering: if FC booted first and ESC did not reply within
+    // the finite handshake window, permit a new *disarmed* attempt after
+    // cooldown. No retry after any armed session, UART collision or wrong
+    // peer/protocol fault. Arming stays blocked until real zero telemetry.
+    if (_auto_retry_disarmed && !_active && !_pending && !_restore_pending &&
+        !_ever_armed && !hal.util->get_soft_armed() &&
+        int32_t(now_ms - _retry_at_ms) >= 0) {
+        _auto_retry_disarmed = false;
+        const uint32_t nonce = (_uid ^ now_ms) | 1U;
+        if (_owner.prepare(nonce, _qualification.io_firmware_crc)) {
+            _pending_ms = now_ms;
+            _pending = true;
+        }
     }
     if (_pending) {
         if (hal.util->get_soft_armed() || uint32_t(now_ms - _pending_ms) >= 200) {
@@ -59,6 +80,8 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
 void AP_SpektrumSmartESC_ChibiOS::stop()
 {
     WITH_SEMAPHORE(_lock);
+    _auto_retry_disarmed = false;
+    _ever_armed = true; // Explicit operator stop cannot self-restart.
     stop_locked();
 }
 
@@ -126,7 +149,18 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                     }
                 }
 #endif
-                if (_motor.status().state == AP_SpektrumSmartESC_Motor::State::FAULT) { stop_locked(); }
+                if (_motor.status().state == AP_SpektrumSmartESC_Motor::State::FAULT) {
+                    const auto why = _motor.status().fault;
+                    // Only NO ESC / stale solicited telemetry while never
+                    // armed is eligible for deferred handshake retry.
+                    // UART/ownership/protocol/RC/arming faults latch shut.
+                    if (why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS &&
+                        !_ever_armed && !hal.util->get_soft_armed()) {
+                        _retry_at_ms = AP_HAL::millis() + 4000U;
+                        _auto_retry_disarmed = true;
+                    }
+                    stop_locked();
+                }
             }
         }
         hal.scheduler->delay(1);
