@@ -102,6 +102,11 @@ bool AP_SpektrumSmartESC_Reader::sent(uint32_t now_us)
     _prepared = false;
     _phase = now_us;
     if (_status.state == State::QUERY_TX) {
+        const uint32_t offset_ms = uint32_t(now_us - _started) / 1000U;
+        if (_status.tx_frames == 1) {
+            _status.first_targeted_tc_ms = offset_ms;
+        }
+        _status.last_targeted_tc_ms = offset_ms;
         _status.state = State::RESPONSE;
         // Fixed lower bound and small deterministic jitter prevent phase locking
         // with the slave's 50-ms announcements. No catch-up bursts after stalls.
@@ -189,6 +194,11 @@ void AP_SpektrumSmartESC_Reader::observe(const uint8_t *p, uint8_t n, uint32_t n
     if (n == 14 && p[1] == 0x21 && p[3] == _target && p[5] >= 1 && p[5] <= 100 && p[6] <= 1) {
         if (p[4] == 0 && (_status.state == State::WAITING || (_power_on &&
             (_status.state == State::PREPARED || _status.state == State::RESPONSE)))) {
+            const uint32_t offset_ms = uint32_t(now_us - _started) / 1000U;
+            if (_status.startup_announcements == 0) {
+                _status.first_announcement_ms = offset_ms;
+            }
+            _status.last_announcement_ms = offset_ms;
             _status.startup_announcements++;
             // Only an addressed, CRC-validated, spontaneous ESC announce in
             // PREPARED may request an early targeted handshake. No CRC-invalid
@@ -209,6 +219,7 @@ void AP_SpektrumSmartESC_Reader::observe(const uint8_t *p, uint8_t n, uint32_t n
         }
         if (p[4] == _status.source && _status.state == State::RESPONSE && uint32_t(now_us - _phase) < 50000) {
             _status.responses++;
+            _status.last_targeted_reply_ms = uint32_t(now_us - _started) / 1000U;
             _status.device = p[3]; _status.priority = p[5]; _status.baud_mask = p[6]; _status.info = p[7];
             _status.uid = uint32_t(p[8]) | (uint32_t(p[9]) << 8) |
                           (uint32_t(p[10]) << 16) | (uint32_t(p[11]) << 24);
