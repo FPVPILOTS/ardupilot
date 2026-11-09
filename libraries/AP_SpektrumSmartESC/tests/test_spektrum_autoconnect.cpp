@@ -104,6 +104,18 @@ static void unarmable_zero_reply_lease_does_not_authenticate_peer()
     assert(p.status().reason == Reason::PEER_TIMEOUT);
     assert(p.status().last_peer_ms == 1020);
     assert(p.status().lost == 1);
+    // If a REAL source-checked 0x21 reappears late during an already
+    // accepted zero-only reply lease, it may renew authenticated peer time.
+    // A source-less 0x80 by itself NEVER calls peer_seen().
+    Auto late; late.enable(0);
+    assert(late.update(1000, true, true) == Action::BEGIN_HANDSHAKE);
+    assert(late.handshake_complete(1010, 0x40, true, true));
+    assert(late.peer_seen(1500, 0x40, true, true));
+    assert(late.status().last_peer_ms == 1500);
+    assert(late.update(1600, true, true) == Action::NONE);
+    assert(late.status().state == State::LINKED);
+    assert(!late.peer_seen(1900, 0x40, true)); // no lease -> stale link fault
+    assert(late.status().state == State::BACKOFF);
     // Safety, faults and competing masters still latch even when hold=true.
     Auto unsafe; unsafe.enable(0);
     assert(unsafe.update(1000, true, true) == Action::BEGIN_HANDSHAKE);
