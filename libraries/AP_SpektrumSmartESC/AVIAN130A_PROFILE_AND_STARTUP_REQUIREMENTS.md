@@ -58,6 +58,25 @@ controller or PWM fallback is part of this architecture.
   flight controller was disarmed, SERVO3 remained at 1100 and
   `STOP1 ARM0`. This is intentional.
 
+## 2026-11-09 17:53 first-reply regression
+
+The newer firmware (e5763bf8) proved native `0xCD` CH1=768
+hardware transmit completion once (Q1/TC1), but reported zero CRC-valid
+turn responses (RX0 WIN0 OUT0) and aborted as
+`FAULT_ZERO_REPLY_TIMEOUT`. This is **not** proof the ESC accepted the
+command; the strict per-frame 12ms response rule aborted after the first
+packet, unlike the earlier Q9/TC8 eight-response session.
+
+The source now separates **reply correlation** (0x80 within 12ms of a
+real TC, requiring eRPM=0, THpct=0) from **initial acquisition**:
+up to 100ms of CH1=minimum, and after the first qualified reply a
+50ms last-reply freshness limit. Any missing answer past those
+limits aborts; no authenticated 0x21 peer timestamp is modified, and
+the original IO/stop/disarmed interlocks stay mandatory. No hardware
+validation or armed/motor permission is implied. This fix must pass
+host tests and the custom board build before another rotor-disconnected
+bench trial.
+
 ## Separation of firmware modes
 
 - **TurnLab**: permanently unarmable. `SPKT_TURNRUN=2` sends only a
