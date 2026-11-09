@@ -147,6 +147,16 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
             _armed_seen = true;
             _initial_idle = false; // An arming edge must itself observe zero/forward/stopped.
         }
+        if (!d.rc_ok && !d.armed && !_armed_seen) {
+            // FC can boot before ELRS/RP4TD. Do not permanently fault an
+            // otherwise healthy, DISARMED ESC session just because RC input
+            // is not yet available. No 0xCD is transmitted here, and any
+            // unexpected nonzero demand/reverse/failsafe still fails closed.
+            if (d.magnitude != 0 || d.reverse || d.failsafe) {
+                fault(Fault::INVALID_DEMAND);
+            }
+            return;
+        }
         if (!d.rc_ok) { fault(Fault::RC_LOSS); return; }
         if (!d.control_ok || d.failsafe || uint32_t(now_ms - d.acquired_ms) >= 50) {
             fault(Fault::CONTROL_LOSS); return;
