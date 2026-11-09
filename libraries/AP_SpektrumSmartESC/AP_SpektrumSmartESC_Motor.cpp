@@ -147,21 +147,20 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
             _armed_seen = true;
             _initial_idle = false; // An arming edge must itself observe zero/forward/stopped.
         }
-        if (!d.rc_ok && !d.armed && !_armed_seen) {
-            // FC can boot before ELRS/RP4TD. Do not permanently fault an
-            // otherwise healthy, DISARMED ESC session just because RC input
-            // is not yet available. No 0xCD is transmitted here, and any
-            // unexpected nonzero demand/reverse/failsafe still fails closed.
-            if (d.magnitude != 0 || d.reverse) {
-                fault(Fault::INVALID_DEMAND);
-            }
-            // A radio-related Plane failsafe may already be true while
-            // RP4TD is still booting; with disarmed zero demand it only
-            // inhibits control and must not latch a permanent motor fault.
-            return;
+        // FC/ESC may boot before ELRS/RP4TD has produced its first RC
+        // sample. Keep the *dedicated SRXL2 slave* in RUNNING with CH1=zero
+        // while DISARMED only; otherwise the ESC may time out and restart
+        // handshake before a transmitter is switched on. Absolutely no
+        // nonzero or reverse request can be sent through this exception.
+        const bool waiting_for_rc_at_boot = !d.armed && !_armed_seen &&
+            !d.rc_ok && d.magnitude == 0 && !d.reverse;
+        if (!d.rc_ok && !waiting_for_rc_at_boot) {
+            fault(Fault::RC_LOSS); return;
         }
-        if (!d.rc_ok) { fault(Fault::RC_LOSS); return; }
-        if (!d.control_ok || d.failsafe || uint32_t(now_ms - d.acquired_ms) >= 50) {
+        if ((!d.control_ok || d.failsafe) && !waiting_for_rc_at_boot) {
+            fault(Fault::CONTROL_LOSS); return;
+        }
+        if (uint32_t(now_ms - d.acquired_ms) >= 50) {
             fault(Fault::CONTROL_LOSS); return;
         }
         if ((d.reverse || _status.reverse || _transition) &&
