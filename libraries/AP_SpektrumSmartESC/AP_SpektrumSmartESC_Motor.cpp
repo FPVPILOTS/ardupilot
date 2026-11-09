@@ -260,6 +260,18 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
     // response to our own actual completed 0xCD request, not as identity.
     constexpr uint32_t FIRST_SENSOR_GRACE_US = 100000U;
     constexpr uint32_t SENSOR_STALE_US = 75000U;
+    constexpr uint32_t MAX_COMPLETED_TX_SILENCE_US = 100000U;
+    // TX progress and RX freshness are independent. Previously the
+    // sensor/peer watchdog only ran AFTER the first completed control,
+    // so a physically busy/low UART could prevent every 0xCD forever:
+    // controls==0, no fresh reply required, and no automatic fault.
+    // The timestamp advances ONLY after actual hardware TC, never when
+    // a packet is queued or the bus happens to be idle.
+    // This also bounds lost TX progress after a formerly healthy link.
+    if (uint32_t(now_us - _last_tx) >= MAX_COMPLETED_TX_SILENCE_US) {
+        fault(Fault::ESC_LOSS);
+        return;
+    }
     if (_profile.handshake_only_bench &&
         uint32_t(now_us - _last_peer) >= 100000U) {
         // Preserve the OLD finite, never-armable, no-sensor mock fallback.
