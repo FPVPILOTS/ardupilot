@@ -269,7 +269,7 @@ bool DiagnosticRX::diagnostic_turn_lab_start(uint32_t nonce, bool zero_only, uin
 }
 
 bool DiagnosticRX::diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bool finish,
-                                      uint32_t control_ms, uint32_t peer_ms)
+                                      uint32_t control_ms, uint32_t peer_ms, uint32_t reply_ms)
 {
     if (!hal.scheduler->in_main_thread()) { return false; }
     if (finish || hal.util->get_soft_armed()) {
@@ -292,7 +292,8 @@ bool DiagnosticRX::diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bo
     evidence.emergency_stop = SRV_Channels::get_emergency_stop();
     evidence.control_ms = control_ms;
     evidence.peer_ms = peer_ms;
-    evidence.peer = peer_ms != 0; // Source/CRC checked by the sole AutoSession RX consumer.
+    evidence.peer = peer_ms != 0;
+    evidence.reply_ms = reply_ms; // Zero-only; original peer ID/time stays immutable. // Source/CRC checked by the sole AutoSession RX consumer.
     evidence.uart_ok = receive_errors() == _turn_errors;
     chSysLock();
     _turn_evidence = evidence;
