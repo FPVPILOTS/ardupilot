@@ -36,10 +36,11 @@ private:
     SpektrumUART4 _port;
     AP_SpektrumSmartESC_Motor _motor;
     AP_SpektrumSmartESC_Motor::Qualification _qualification;
-    uint32_t _uid = 0, _pending_ms = 0;
+    uint32_t _uid = 0, _pending_ms = 0, _retry_at_ms = 0;
     uint32_t _telemetry_sequence = 0;
     uint8_t _target = 0;
     bool _pending = false, _active = false;
     bool _thread_started = false, _restore_pending = false;
+    bool _auto_retry_disarmed = false, _ever_armed = false;
 };
 #endif
