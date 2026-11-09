@@ -274,6 +274,43 @@ static void esc_first_with_no_reannouncement_still_polls()
     assert(s.status().successful == 1);
 }
 
+// On the real FC-only reboot at 20:21 the already powered Avian sent
+// two CRC-valid 0x40->0x00 announcements, not a requested 0x40->0x30
+// response. Record their actual timing, never promote them to LINKED,
+// and do not assume more 0x21 transmissions are accepted by the ESC.
+static void fc_reboot_receives_two_d00_but_no_d30()
+{
+    Session s;
+    s.enable(0, 0x40, 0x1234U);
+    assert(s.tick(1000000, true, true, true) == Action::BEGIN_HANDSHAKE);
+    uint8_t announce[] = {0xA6, 0x21, 14, 0x40, 0x00, 10, 0, 4,
+                          0x12, 0x34, 0x56, 0x78, 0, 0};
+    seal(announce);
+    for (uint8_t b : announce) { s.feed(b, 1050000); }
+    assert(s.reader_status().startup_announcements == 1);
+    assert(s.reader_status().first_announcement_ms == 50U);
+    uint8_t packet[80] {};
+    assert(s.prepare(1052000, packet, sizeof(packet), true) == 14);
+    assert(packet[3] == 0x30 && packet[4] == 0x40);
+    assert(s.sent(1053500)); // Native UART TX complete.
+    assert(s.reader_status().first_targeted_tc_ms == 53U);
+    for (uint8_t b : announce) { s.feed(b, 1100000); }
+    const auto &st = s.reader_status();
+    assert(st.startup_announcements == 2);
+    assert(st.last_announcement_ms == 100U);
+    assert(st.responses == 0);
+    assert(st.last_targeted_reply_ms == 0);
+    assert(s.status().successful == 0);
+    assert(s.tick(1110000, true, true, true) == Action::NONE);
+    assert(s.prepare(1112000, packet, sizeof(packet), true) == 14);
+    assert(s.sent(1113500));
+    assert(s.reader_status().last_targeted_tc_ms == 113U);
+    assert(s.tick(8000000, true, true, true) == Action::NONE);
+    assert(s.status().state == State::BACKOFF);
+    assert(s.status().successful == 0);
+    assert(s.status().reason == Auto::Reason::HANDSHAKE_TIMEOUT);
+}
+
 static void master_conflict_and_unsafe_gate_latch()
 {
     Session s;
@@ -301,5 +338,6 @@ int main()
     master_conflict_and_unsafe_gate_latch();
     fc_first_esc_late_requires_targeted_reconnect();
     esc_first_with_no_reannouncement_still_polls();
-    std::puts("9 automatic SRXL2 boot/reconnect auto-session tests passed (simulation only)");
+    fc_reboot_receives_two_d00_but_no_d30();
+    std::puts("10 automatic SRXL2 boot/reconnect auto-session tests passed (simulation only)");
 }
