@@ -231,6 +231,21 @@ int main()
         ++tests;
     }
     {
+        // 2026-11-09 17:53:56 physical log: Q1 TC1 / RX0 failed too
+        // early because a reply was REQUIRED after the very first 0xCD.
+        // Five CH1-only zero attempts at 50Hz may bootstrap 0x80;
+        // a permanent lack of replies is still a bounded hard abort.
+        assert(!Turn::zero_reply_overdue(1010, 1000, 0));
+        assert(!Turn::zero_reply_overdue(1099, 1000, 0));
+        assert(Turn::zero_reply_overdue(1100, 1000, 0));
+        assert(!Turn::zero_reply_overdue(1130, 1000, 1100));
+        assert(!Turn::zero_reply_overdue(1149, 1000, 1100));
+        assert(Turn::zero_reply_overdue(1150, 1000, 1100));
+        assert(!Turn::zero_reply_overdue(15, 0xFFFFFFF0U, 0));
+        assert(Turn::zero_reply_overdue(84, 0xFFFFFFF0U, 0));
+        ++tests;
+    }
+    {
         // Phase 22B: only an existing, disarmed, single-ESC, zero-only
         // session may use a verified 0x80 reply as a *timing witness*.
         // Identity remains the original source-checked 0x21 peer timestamp.
