@@ -159,6 +159,62 @@ replug reconnect; sustained normal SRXL2 `0xCD` and solicited
 `0x80` traffic, stopped evidence, reverse, or motor arming.
 Retain special IOMCU and non-armable profile while evaluating.
 
+### 2026-11-09 20:16–20:17 — simultaneous battery boot FAIL, ESC-only repower PASS
+
+User performed two real **motor-phase-disconnected** tests with
+`Pix6C-SPKT-AutoLink` ArduPlane 4.7.1 `b24dc3a1`:
+
+A. Aircraft battery powers both Pixhawk and Avian, then USB/Mission
+Planner connection: AutoLink repeatedly sends correct 0x21 handshakes
+with true UART TX-completion/RX restoration. At 20:16:17,
+`SPK17 HS TX77 RXB0 CRC0 RP0`, `UART Q245 C245 R245 F0`,
+`ID00 TRY3 OK0 LOST0`; repeated
+`SPK23 WHY HANDSHAKE_TIMEOUT`. Up to five failed attempts and
+more than 400 true completed handshake TXs were recorded. Line
+L1, no receive frames. This proves FMU sends after boot but the
+ESC did not answer; it does **not** prove an exact reason.
+
+B. Keeping Pixhawk on USB and removing/reconnecting ESC battery:
+at 20:17:07 `SPK23 LINK SRXL2_LINK_ESTABLISHED`,
+`SPK17 PEER S40 D30 T21 A1`, `HS TX2 RXB28 CRC2 RP1`,
+`ID40 TRY6 OK1 LOST0`. `FRM H878 C0 T0 O0`
+by 20:17:52. UART historical `E5 FE5` appeared around
+ESC repower; no observed increase during the stable link.
+No 0xCD or 0x80, still the unarmable AutoLab.
+
+**Diagnosis:** boot sequencing is now the primary issue.
+`AP_SpektrumSmartESC_Reader::PREPARE_MS=2000` and
+`AP_SpektrumSmartESC_AutoConnect::STARTUP_LISTEN_MS=1000`
+delay FC's first unsolicited 0x21 query after ArduPilot init,
+unless an ESC 0x40->0x00 advertisement arrives to grant early
+TX. That is likely far later than an ESC which powers immediately
+from the same aircraft pack. Published Spektrum documentation
+shows automatic PWM/SRXL2 mode selection in certain Smart Throttle
+systems and ~200ms startup requirements for **some receivers**,
+but this does **not** establish Avian 130A Ver A firmware 04.0.27
+has that exact cutoff. It may instead be another persistent
+power-on receive state.
+
+**Discriminator using EXISTING image, no reflashing:** in the
+failed simultaneous-power state, leave Avian continuously powered
+and command a normal FC-only reboot through Mission Planner (motor
+phases still physically unplugged); inspect whether retries ever
+produce RXB>0 or RP>0. Then separately reboot *only* Avian while FC
+stays powered. If only Avian repower recovers, its latched startup
+mode/handshake acceptance timing is favored; if FC-only reboot
+recovers, examine FC UART/power state. Avoid any "reset ESC" packet
+or guessed firmware programming command. Neither observation
+qualifies motor arming.
+
+**Engineering direction:** measure boot-to-first true UART TC and
+the Avian power-on edge with an independent analyzer; study whether
+early/forced-SRXL2 is available on *this ESC*, not merely on
+Spektrum receivers; evaluate MCU early-start handshake before
+ArduPlane init, or qualified FC-first supply sequencing. Do not
+simply reduce the 2s RX-first gate on a motor-connected shared
+PWM/SRXL2 signal without validating false-mode motor behavior.
+Do not promise simultaneous boot is fixed by the present code.
+
 ### Build status: IMPORTANT
 
 The user supplied WSL `./waf plane` build exitcode 0 for
