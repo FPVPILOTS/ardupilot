@@ -54,6 +54,7 @@ strings "$bin" | grep -F "SPK22 GAP DEFER%lu" >/dev/null
 strings "$bin" | grep -F "SPK22 TX NATIVE age%lu flags%02X HF%lu ERR%lu" >/dev/null
 strings "$bin" | grep -F "SPK22 SENS VcV%u eRPM%lu THpct%u M%04X" >/dev/null
 strings "$bin" | grep -F "SPK22 CH1 IDLE UNVERIFIED; SENSOR TH%u%%" >/dev/null
+strings "$bin" | grep -F "SPK22 ZERO RX TIMEOUT first%u age%lu good%lu" >/dev/null
 strings "$bin" | grep -F "FAULT_ZERO_REPLY_TIMEOUT" >/dev/null
 strings "$bin" | grep -F "FAULT_ZERO_SENSOR" >/dev/null
 strings "$bin" | grep -F "SPKRC IN3=%u S3=%u MAP%u ARM%u RC%u FS%u" >/dev/null
