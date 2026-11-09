@@ -40,7 +40,8 @@ public:
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
     bool diagnostic_turn_lab_start(uint32_t nonce, bool zero_only, uint32_t &started_ms) override;
     bool diagnostic_turn_lab(const uint8_t *packet, uint8_t length, bool finish,
-                             uint32_t control_ms, uint32_t peer_ms) override;
+                             uint32_t control_ms, uint32_t peer_ms,
+                             uint32_t reply_ms = 0) override;
 #endif
     bool diagnostic_poll_lab_start() override;
     bool diagnostic_poll_lab(const uint8_t *packet, uint8_t length, bool finish) override;
