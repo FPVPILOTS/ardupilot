@@ -690,6 +690,30 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
                       (unsigned long)link.attempts,
                       (unsigned long)link.successful,
                       (unsigned long)link.lost);
+        // SPK24 is read-only forensic evidence for the exact 20:21 FC-only
+        // reboot case: ESC 0x40->D00 announcements while no D30 targeted
+        // reply arrives, followed by a framing-error lockout. Events are
+        // reported immediately, not lost in the 5-second SPK17 snapshots.
+        const auto &hs = _auto_session.reader_status();
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK24 A%lu F%lu L%lu Q%lu R%lu",
+                      (unsigned long)hs.startup_announcements,
+                      (unsigned long)hs.first_announcement_ms,
+                      (unsigned long)hs.last_announcement_ms,
+                      (unsigned long)hs.last_targeted_tc_ms,
+                      (unsigned long)hs.last_targeted_reply_ms);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK24 UART Q%lu C%lu R%lu F%lu",
+                      (unsigned long)hw.handshake_queued,
+                      (unsigned long)hw.handshake_completed,
+                      (unsigned long)hw.handshake_restored,
+                      (unsigned long)hw.handshake_faults);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK24 ERR FE%lu NE%lu O%lu REL%lu",
+                      (unsigned long)hw.framing,
+                      (unsigned long)hw.noise,
+                      (unsigned long)hw.overruns,
+                      (unsigned long)hw.release_errors);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK24 TIMES RX%lu TC%lu",
+                      (unsigned long)hw.last_uart_rx_ms,
+                      (unsigned long)hw.handshake_tc_ms);
     }
     if (now_ms - _auto_log_ms >= 5000U) {
         _auto_log_ms = now_ms;
