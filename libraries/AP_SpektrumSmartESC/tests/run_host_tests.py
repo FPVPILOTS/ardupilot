@@ -19,6 +19,7 @@ def main():
     recovery_executable = args.out.resolve() / 'test_spektrum_uart_recovery.exe'
     autoconnect_executable = args.out.resolve() / 'test_spektrum_autoconnect.exe'
     autosession_executable = args.out.resolve() / 'test_spektrum_autosession.exe'
+    autolinkfast_executable = args.out.resolve() / 'test_spektrum_autolinkfast.exe'
     lease_executable = args.out.resolve() / 'test_spektrum_lab_lease.exe'
     passive_telem_executable = args.out.resolve() / 'test_spektrum_passive_telem.exe'
     offline_poll_executable = args.out.resolve() / 'test_spektrum_telem_poll_sim.exe'
@@ -51,6 +52,16 @@ def main():
              str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
              str(library / 'tests/test_spektrum_autosession.cpp'), '-o', str(autosession_executable)],
             [str(autosession_executable)],
+            # Separate, non-armable fast app startup compile target. No
+            # standard AutoLink or motor profile is affected.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             '-DSPKTSMART_STANDALONE_TEST',
+             '-DAP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT=1',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
+             str(library / 'tests/test_spektrum_autolinkfast.cpp'),
+             '-o', str(autolinkfast_executable)],
+            [str(autolinkfast_executable)],
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
              str(library / 'AP_SpektrumSmartESC.cpp'),
              str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
