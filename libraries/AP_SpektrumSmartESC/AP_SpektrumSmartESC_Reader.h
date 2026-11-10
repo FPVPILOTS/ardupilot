@@ -8,7 +8,17 @@ class AP_SpektrumSmartESC_Reader {
 public:
     static constexpr uint8_t SOURCE = 0x31; // FC unit 1, NOT proof of master authority.
     static constexpr uint8_t POWERON_SOURCE = 0x30; // WingFlight's FC-unit-0 profile, not receiver emulation.
+#ifndef AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
+#define AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
+    // Non-armable AutoLinkFast ONLY: 50ms receive-first period before
+    // requesting ESC 0x40. Not an early-MCU bootstrap. ALL native UART
+    // idle, half-duplex, TC and RX restoration checks remain mandatory.
+    static constexpr uint32_t PREPARE_MS = 50, WINDOW_MS = 5000, RETRY_MS = 50;
+#else
     static constexpr uint32_t PREPARE_MS = 2000, WINDOW_MS = 5000, RETRY_MS = 50;
+#endif
     static constexpr uint8_t MAX_QUERIES = WINDOW_MS / RETRY_MS;
     enum class State : uint8_t { DISABLED, WAITING, QUERY_TX, RESPONSE, CONFIRM_TX,
                                  DISCOVERED, TIMEOUT, FAULT, BLOCKED, PREPARED };
