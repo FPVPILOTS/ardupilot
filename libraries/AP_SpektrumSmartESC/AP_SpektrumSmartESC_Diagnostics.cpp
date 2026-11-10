@@ -237,7 +237,17 @@ void AP_SpektrumSmartESC_Diagnostics::init()
             uid = (uid ^ id[i]) * 16777619U;
         }
         _auto_uid = uid;
-        _auto_session.enable(AP_HAL::millis(), uint8_t(_hs_target.get()), uid);
+        _auto_init_ms = AP_HAL::millis();
+        _auto_session.enable(_auto_init_ms, uint8_t(_hs_target.get()), uid);
+#if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
+        // Compare FC-app startup with handshake scheduling. This is NOT
+        // the physical ESC battery-on timestamp, which needs an external
+        // instrument to measure.
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK25 FAST INIT%lu L%lu P%lu",
+                      (unsigned long)_auto_init_ms,
+                      (unsigned long)AP_SpektrumSmartESC_AutoConnect::STARTUP_LISTEN_MS,
+                      (unsigned long)AP_SpektrumSmartESC_Reader::PREPARE_MS);
+#endif
         _auto_rx = AP_SpektrumSmartESC(0x30, uint8_t(_hs_target.get()), 50, false);
         _auto_started = true;
         _receiver->suspend(); // Native AutoLab owns the sole RX consumer.
@@ -717,6 +727,12 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     }
     if (now_ms - _auto_log_ms >= 5000U) {
         _auto_log_ms = now_ms;
+#if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK25 INIT%lu FIRSTTC%lu LASTTC%lu",
+                      (unsigned long)_auto_init_ms,
+                      (unsigned long)hw.handshake_tc_ms,
+                      (unsigned long)now_ms);
+#endif
         const auto &st = _auto_session.status();
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 %s", AP_SpektrumSmartESC_AutoConnect::state_name(st.state));
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 WHY %s", AP_SpektrumSmartESC_AutoConnect::reason_name(st.reason));
