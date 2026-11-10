@@ -103,6 +103,7 @@ private:
     uint32_t _auto_uid = 0;
     uint32_t _auto_uart_error_baseline = 0;
     uint32_t _auto_log_ms = 0;
+    uint32_t _auto_init_ms = 0; // uptime at app-level AutoLink start, not ESC battery edge
     // Event-based reports capture LINKED even when it lasts <5 seconds.
     AP_SpektrumSmartESC_AutoConnect::State _auto_logged_state =
         AP_SpektrumSmartESC_AutoConnect::State::OFF;
