@@ -36,7 +36,18 @@ public:
 
     // 1000 ms listen-before-talk; 7.5 s bounded handshake; 300 ms heartbeat
     // loss; 1/2/4s retries, capped at 3 consecutive failures + 10s cooldown.
+#ifndef AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
+#define AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
+    // COMPARE-ONLY, non-armable dedicated AutoLinkFast board: Spektrum
+    // listens for 50ms on power-on. This is relative to AP AutoLink init,
+    // NOT to the aircraft battery/ESC power-on edge. No other board gets
+    // the shortened policy window. UART/bus-idle and CRC checks unchanged.
+    static constexpr uint32_t STARTUP_LISTEN_MS = 50;
+#else
     static constexpr uint32_t STARTUP_LISTEN_MS = 1000;
+#endif
     static constexpr uint32_t HANDSHAKE_DEADLINE_MS = 7500;
     static constexpr uint32_t PEER_TIMEOUT_MS = 300;
     static constexpr uint32_t BACKOFF_BASE_MS = 1000;
