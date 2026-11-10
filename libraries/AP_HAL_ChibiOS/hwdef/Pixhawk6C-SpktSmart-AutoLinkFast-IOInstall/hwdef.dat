@@ -1,0 +1,16 @@
+# Controlled ONE-BATTERY power-on comparison only. NOT flight firmware.
+# 50ms AutoLink listen + 50ms receive-only native handshake prepare
+# replaces the ordinary 1000+2000ms AFTER ArduPlane initialization.
+# This does not run during ChibiOS boot and may still be too late for
+# Avian hardware that chooses protocol before the FC application starts.
+# Only CRC-checked 14-byte 0x21; NO 0xCD, motor, throttle or reverse.
+include ../Pixhawk6C-SpktSmart/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-AutoFast"
+define AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB 1
+define AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT 1
+
+# Preserve the same MAIN3-inhibited special IOMCU companion.
+ROMFS io_firmware.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+ROMFS io_firmware_dshot.bin build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+define AP_IOMCU_FIRMWARE_UPDATE_ENABLED 1
