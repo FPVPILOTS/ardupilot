@@ -253,6 +253,40 @@ boot fix yet. If possible, measure AUX7 with a logic analyzer to
 distinguish the physical wire-level D00/D40 response interleaving.
 Do NOT weaken UART error failsafe to turn a fault into a LINKED status.
 
+### 2026-11-10 05:56 — same-battery cold start remains RX0; AutoLinkFast experiment
+
+User supplied a *true normal aircraft one-battery power-on* log from
+`Pix6C-SPKT-AutoLink`, githash `72391813`, where that battery
+energized BOTH the Avian 130A and Pixhawk 6C. After AutoLink began,
+actual native UART4 TC+RX restoration continued normally with
+`SPK17 UART Q168 C168 R168 F0`, but `HS TX50 RXB0 CRC0 RP0`,
+`SPK24 A0 F0 L0 Q6982 R0`, no UART errors (`FE0 NE0 O0 REL0`)
+and repeated `HANDSHAKE_TIMEOUT`, `TRY3 OK0 LOST0`.
+User confirmed ESC-only battery repower after keeping FC powered
+restores a valid link. This is a **reproducible timing/power-order issue**;
+exact ESC SRXL2 vs PWM fallback state remains an unproven hypothesis.
+
+Added an opt-in, isolated, non-armable `Pixhawk6C-SpktSmart-AutoLinkFast-IOInstall`
+configuration with first *application-level* handshake eligibility
+50ms listen + 50ms reader prepare (previously 1000+2000ms).
+The config is separate from ordinary AutoLink and ALL motor firmware.
+Only 0x21 frames are permitted; all physical TC, UART/RX restore, CRC
+and competing-master gates remain in place; special MAIN3-inhibited
+IOMCU image preserved. SPK25 prints the uptime of AutoLink application
+init (not the independent ESC power-on timestamp). A dedicated
+fast-profile host test has passed in GitHub Actions run
+`42759839664`: three fast startup/handshake/silent-peer lockout
+tests plus existing suites. The *new* Pixhawk firmware board build
+and physical one-battery test have NOT been performed by the user.
+
+Build instructions/acceptance: `AUTOLINKFAST_ONE_BATTERY_TEST.md`.
+If the fast app-level handshake still fails, do not keep shortening
+time bounds blindly: FC might not have booted before the Avian's mode
+decision. Verify early electrical timing independently, then design
+an FC-first (single-battery) supply/start solution or truly early
+co-processor bootstrap; preserve the direct ArduPilot control path
+and never claim a motor-ready link from handshake alone.
+
 ### Build status: IMPORTANT
 
 The user supplied WSL `./waf plane` build exitcode 0 for
