@@ -73,8 +73,14 @@ public:
     bool ready_to_arm(uint32_t now_ms, uint32_t now_us) const
     {
         return _leased && (_status.state == State::IDLE || _status.state == State::FORWARD) &&
-            owned(now_ms) && _initial_idle && !_armed_seen && !_waiting_reply &&
+            owned(now_ms) && _initial_idle && !_armed_seen &&
             _status.fault == Fault::NONE && _status.controls != 0 &&
+            // Another ordinary CH1=zero telemetry poll may already be awaiting
+            // a reply when Plane checks ARM readiness. Do not make the ARM
+            // gate depend on that narrow bus-slot phase: the previous
+            // TC-completed neutral command and an independently fresh,
+            // stopped/zero-throttle 0x80 sample remain mandatory. Failure of
+            // the pending poll is still handled by the motor watchdog.
             // A handshake-only bench session never qualifies for flight arming.
             !_profile.handshake_only_bench &&
             _status.throttle == _profile.zero && !_status.reverse &&
