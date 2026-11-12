@@ -238,7 +238,12 @@ void AP_SpektrumSmartESC_Diagnostics::init()
         }
         _auto_uid = uid;
         _auto_init_ms = AP_HAL::millis();
+        _auto_first_tc_ms = 0;
+        _auto_fault_gate = 0;
         _auto_session.enable(_auto_init_ms, uint8_t(_hs_target.get()), uid);
+#if AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+        _early_app_boot_active = true;
+#endif
 #if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
         // Compare FC-app startup with handshake scheduling. This is NOT
         // the physical ESC battery-on timestamp, which needs an external
@@ -402,6 +407,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         _poll_pending = false;
 #endif
         _auto_telem_observer.invalidate();
+        if (_auto_fault_gate == 0) { _auto_fault_gate = 1; } // Unsafe bench precondition
         _auto_session.uart_fault();
         if (port != nullptr && _auto_leased) {
             (void)port->diagnostic_handshake(nullptr, 0, true);
@@ -412,10 +418,12 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 
     AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
     if (!port->receive_diagnostics(hw)) {
+        if (_auto_fault_gate == 0) { _auto_fault_gate = 2; } // Diagnostics unavailable
         _auto_session.uart_fault();
     }
     if (_auto_leased && port->receive_errors() != _auto_uart_error_baseline) {
         // Never clear new framing/noise/overrun evidence just to reconnect.
+        if (_auto_fault_gate == 0) { _auto_fault_gate = 3; } // New native UART error
         _auto_session.uart_fault();
     }
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
@@ -428,7 +436,11 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
 #endif
     if (_auto_inflight && (hw.handshake_flags & 4) != 0 &&
         _auto_session.status().state == AP_SpektrumSmartESC_AutoConnect::State::HANDSHAKE) {
+        if (_auto_first_tc_ms == 0) {
+            _auto_first_tc_ms = hw.handshake_tc_ms; // First native TC after this boot
+        }
         if (!_auto_session.sent(hw.handshake_tc_ms * 1000U)) {
+            if (_auto_fault_gate == 0) { _auto_fault_gate = 4; } // Reader rejected TC
             _auto_session.uart_fault();
         }
         _auto_inflight = false;
@@ -541,6 +553,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
             _auto_fast_grants++;
         } else {
             _auto_fast_denied++;
+            if (_auto_fault_gate == 0) { _auto_fault_gate = 5; } // Startup announce rejected
             _auto_session.uart_fault();
         }
     }
@@ -655,6 +668,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         _auto_uart_error_baseline = port->receive_errors();
         if (_auto_leased ||
             !port->diagnostic_handshake_start(uint8_t(_hs_target.get()), _auto_uid, true)) {
+            if (_auto_fault_gate == 0) { _auto_fault_gate = 6; } // Native lease denied
             _auto_session.uart_fault();
         } else {
             _auto_leased = true;
@@ -674,6 +688,7 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
             if (port->diagnostic_handshake(_auto_packet, length, false)) {
                 _auto_inflight = true;
             } else {
+                if (_auto_fault_gate == 0) { _auto_fault_gate = 7; } // Native 0x21 TX denied
                 _auto_session.uart_fault();
             }
         }
@@ -728,10 +743,14 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
     if (now_ms - _auto_log_ms >= 5000U) {
         _auto_log_ms = now_ms;
 #if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK25 INIT%lu FIRSTTC%lu LASTTC%lu",
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK25 INIT%lu FIRSTTC%lu NOW%lu",
                       (unsigned long)_auto_init_ms,
-                      (unsigned long)hw.handshake_tc_ms,
+                      (unsigned long)_auto_first_tc_ms,
                       (unsigned long)now_ms);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK26 G%u RX%lu ERR%lu",
+                      unsigned(_auto_fault_gate),
+                      (unsigned long)hw.last_uart_rx_ms,
+                      (unsigned long)port->receive_errors());
 #endif
         const auto &st = _auto_session.status();
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "SPK17 %s", AP_SpektrumSmartESC_AutoConnect::state_name(st.state));
