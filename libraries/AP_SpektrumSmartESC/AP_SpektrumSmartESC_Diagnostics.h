@@ -122,6 +122,8 @@ private:
     bool _auto_leased = false, _auto_inflight = false;
 #if AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     bool _early_app_boot_active = false;
+    bool _early_app_boot_pumping = false;
+    uint32_t _early_app_boot_last_ms = 0;
 #endif
     void update_auto_reader(uint32_t now_ms);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
