@@ -5,8 +5,11 @@ on:
   push:
     branches:
       - feature/spktsmart-bench6-contract
+      - feature/spktsmart-early-app-boot-20261112
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
+      - 'libraries/AP_Vehicle/AP_Vehicle.cpp'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyApp-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-host.yml'
       - 'libraries/AP_HAL/UARTDriver.h'
       - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.*'
