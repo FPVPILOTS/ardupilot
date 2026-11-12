@@ -31,3 +31,5 @@ jobs:
           g++ --version
       - name: Compile and run all Spektrum Smart ESC C++ host suites
         run: python3 libraries/AP_SpektrumSmartESC/tests/run_host_tests.py
+      - name: Verify our channel packets using the pinned official Spektrum slave parser
+        run: bash libraries/AP_SpektrumSmartESC/tests/run_vendor_srxl2_interop.sh
