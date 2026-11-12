@@ -233,14 +233,16 @@ int main()
     {
         // 2026-11-09 17:53:56 physical log: Q1 TC1 / RX0 failed too
         // early because a reply was REQUIRED after the very first 0xCD.
-        // Five CH1-only zero attempts at 50Hz may bootstrap 0x80;
-        // a permanent lack of replies is still a bounded hard abort.
+        // Five CH1-only zero attempts at 50Hz may bootstrap 0x80.
+        // After first valid response, 120ms permits gaps observed on the
+        // 2026-11-12 bench without granting an unbounded zero-only lease.
+        // A permanent lack of replies is still a hard abort.
         assert(!Turn::zero_reply_overdue(1010, 1000, 0));
         assert(!Turn::zero_reply_overdue(1099, 1000, 0));
         assert(Turn::zero_reply_overdue(1100, 1000, 0));
         assert(!Turn::zero_reply_overdue(1130, 1000, 1100));
-        assert(!Turn::zero_reply_overdue(1149, 1000, 1100));
-        assert(Turn::zero_reply_overdue(1150, 1000, 1100));
+        assert(!Turn::zero_reply_overdue(1219, 1000, 1100));
+        assert(Turn::zero_reply_overdue(1220, 1000, 1100));
         assert(!Turn::zero_reply_overdue(15, 0xFFFFFFF0U, 0));
         assert(Turn::zero_reply_overdue(84, 0xFFFFFFF0U, 0));
         ++tests;
@@ -254,7 +256,7 @@ int main()
         e.reply_ms = 1400;  // Verified, matching 0x80 at TC+3ms
         assert(!e.safe(1420, false)); // The MOTOR mode still fails closed.
         assert(e.safe(1420, true));
-        e.reply_ms = 1360; // 60ms since reply: stale, cannot renew.
+        e.reply_ms = 1299; // 121ms since reply: stale, cannot renew.
         assert(!e.safe(1420, true));
         e.reply_ms = 1400;
         e.peer = false; // identity lost: source-less reply does not recreate it.
