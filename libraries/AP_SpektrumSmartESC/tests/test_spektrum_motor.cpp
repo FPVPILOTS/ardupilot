@@ -527,6 +527,14 @@ TEST(SpektrumMotor, ArmingNeedsCompletedNeutralReplyAndFreshOwnership)
     EXPECT_FALSE(f.motor.ready_to_arm(72,72000));
     f.reply(73000);
     EXPECT_TRUE(f.motor.ready_to_arm(73,73000));
+    // The normal 11ms SRXL2 bus starts another zero-throttle 0xCD,
+    // whose reply is pending when an asynchronous ARM check occurs.
+    // Readiness must be based on the *previous* TC-completed zero and
+    // fresh valid stopped telemetry, not the exact slot phase.
+    f.tick(81000);
+    f.port.complete=true; f.tick(83000);
+    EXPECT_EQ(f.motor.status().controls,2U);
+    EXPECT_TRUE(f.motor.ready_to_arm(83,83000));
     f.owner.r.main3_inhibited=false;
     EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
     f.owner.r.main3_inhibited=true;
