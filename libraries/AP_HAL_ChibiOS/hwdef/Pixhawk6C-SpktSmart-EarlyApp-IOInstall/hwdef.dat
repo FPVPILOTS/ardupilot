@@ -4,5 +4,7 @@
 # rather than near the end of AP_Vehicle::setup(). It does not run at MCU reset.
 # A physically independent logic analyzer remains necessary to prove timing.
 include ../Pixhawk6C-SpktSmart-AutoLinkFast-IOInstall/hwdef.dat
+# Parent already defines the short name. Remove it before overriding.
+undef CHIBIOS_SHORT_BOARD_NAME
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-EarlyApp"
 define AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT 1
