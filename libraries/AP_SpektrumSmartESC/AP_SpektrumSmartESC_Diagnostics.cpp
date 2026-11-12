@@ -1266,7 +1266,31 @@ void AP_SpektrumSmartESC_Diagnostics::update()
     }
     const uint32_t now = AP_HAL::millis();
     if (_native_motor != nullptr || _motor_selected) {
-        return; // Native selection (even when invalid) never falls back to a bench RX master.
+        // Source-qualified native motor selection owns this path.  Previously
+        // update() returned without publishing ANY native motor diagnostics,
+        // so the operator could not distinguish handshake, zero-throttle
+        // commissioning, telemetry loss or a reverse-direction interlock.
+        // Read-only reporting: never triggers start, arming or a 0xCD frame.
+        if (uint32_t(now - _last_log_ms) >= 1000U) {
+            _last_log_ms = now;
+            if (_native_motor != nullptr) {
+                const auto s = _native_motor->status();
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                    "SPK27 M S%u F%u TX%lu CD%lu TLM%lu",
+                    unsigned(s.state), unsigned(s.fault),
+                    (unsigned long)s.tx_frames,
+                    (unsigned long)s.controls,
+                    (unsigned long)s.telemetry);
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                    "SPK27 CH1%u CH7%u REV%u RDY%u",
+                    unsigned(s.throttle), unsigned(s.direction),
+                    unsigned(s.reverse), unsigned(motor_arming_ready()));
+            } else {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                    "SPK27 MOTOR BLOCKED: NO QUALIFIED SESSION");
+            }
+        }
+        return; // Never fall back to bench RX/AutoLab while MOTOR selected.
     }
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
     if (_auto == 1
