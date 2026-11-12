@@ -68,6 +68,10 @@ public:
     void feed(uint8_t byte, uint32_t acquisition_us);
     void disable();
     const Status &status() const { return _status; }
+    // Worker may need to retire the previous physical UART transaction
+    // before draining RX. Only a true hardware TC may clear this flag;
+    // it is never permission to queue a new command.
+    bool transmitting() const { return _tx; }
     bool telemetry(AP_SpektrumSmartESC::Telemetry &data, uint32_t now_us) const;
     uint32_t telemetry_age_us(uint32_t now_us) const { return uint32_t(now_us - _telemetry_since); }
     bool ready_to_arm(uint32_t now_ms, uint32_t now_us) const
