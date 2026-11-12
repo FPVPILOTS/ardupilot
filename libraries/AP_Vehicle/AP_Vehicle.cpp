@@ -415,6 +415,13 @@ void AP_Vehicle::setup()
 
     BoardConfig.init();
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+    // Isolated non-armable 0x21-only commissioning image. Parameters, GCS,
+    // serial manager and board/IO setup have finished. Begin observing the
+    // dedicated AUX7 bus before the remainder of vehicle setup.
+    spektrum_smart_esc.init();
+#endif
+
 #if HAL_CANMANAGER_ENABLED
     can_mgr.init();
 #endif
@@ -529,7 +536,7 @@ void AP_Vehicle::setup()
     filters.init();
 #endif
 
-#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && !AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     spektrum_smart_esc.init();
 #endif
 
@@ -545,6 +552,12 @@ void AP_Vehicle::setup()
 
 #if AP_ARMING_ENABLED
     AP::arming().init();
+#endif
+
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+    // The normal scheduler owns the same diagnostics after setup. Do not
+    // leave an independent delay-callback pump enabled during operation.
+    spektrum_smart_esc.finish_early_boot();
 #endif
 
     // invalidate count in case an enable parameter changed during
@@ -742,6 +755,11 @@ void AP_Vehicle::scheduler_delay_callback()
 #endif
 
     const uint32_t tnow = AP_HAL::millis();
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+    // Called only on long boot delays, before the regular scheduler starts.
+    // No motor, reverse or arbitrary SRXL2 control is enabled by this pump.
+    _singleton->spektrum_smart_esc.update_early_boot(tnow);
+#endif
     if (tnow - last_1hz > 1000) {
         last_1hz = tnow;
         GCS_SEND_MESSAGE(MSG_HEARTBEAT);
