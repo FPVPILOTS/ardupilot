@@ -36,6 +36,12 @@ public:
     bool waveform_requested() const { return _waveform.get() != 0; }
     void init();
     void update();
+#if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+    // EarlyApp lab only: service the existing 0x21-only session during the
+    // vehicle setup delay callback, then relinquish to the normal task.
+    void update_early_boot(uint32_t now_ms);
+    void finish_early_boot();
+#endif
     void plane_shadow(bool armed, bool rc_ok, bool failsafe, bool reverse_available, bool reverse_permitted);
     struct MotorEvidence {
         bool ground = false, stopped = false;
@@ -104,6 +110,8 @@ private:
     uint32_t _auto_uart_error_baseline = 0;
     uint32_t _auto_log_ms = 0;
     uint32_t _auto_init_ms = 0; // uptime at app-level AutoLink start, not ESC battery edge
+    uint32_t _auto_first_tc_ms = 0; // first real native TC, not a queued packet
+    uint8_t _auto_fault_gate = 0;   // first safety/transport gate which latched a fault
     // Event-based reports capture LINKED even when it lasts <5 seconds.
     AP_SpektrumSmartESC_AutoConnect::State _auto_logged_state =
         AP_SpektrumSmartESC_AutoConnect::State::OFF;
@@ -112,6 +120,9 @@ private:
     uint32_t _auto_fast_grants = 0, _auto_fast_denied = 0;
     bool _auto_started = false;
     bool _auto_leased = false, _auto_inflight = false;
+#if AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+    bool _early_app_boot_active = false;
+#endif
     void update_auto_reader(uint32_t now_ms);
 #if AP_SPEKTRUM_SMART_ESC_POLL_LAB
     AP_Int8 _pollack;
