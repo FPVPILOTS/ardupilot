@@ -295,7 +295,7 @@ TEST(SpektrumMotor, BoundedSixPercentForwardThenReverseRequiresStoppedWitness)
     // Only a separately supplied fresh stopped witness can start the
     // zero-throttle dwell before changing CH7.
     f.d.stopped = true;
-    for (uint32_t us = 122000; us < 174000; us += 13000) {
+    for (uint32_t us = 122000; us <= 174000; us += 13000) {
         f.cycle(us);
     }
     check(1000, 60000, true); // CH7 changes at ZERO only.
