@@ -54,7 +54,8 @@ strings "$bin" | grep -F "SPK24 A%lu F%lu L%lu Q%lu R%lu" > /dev/null
 strings "$bin" | grep -F "SPK24 ERR FE%lu NE%lu O%lu REL%lu" > /dev/null
 strings "$bin" | grep -F "SPK24 TIMES RX%lu TC%lu" > /dev/null
 strings "$bin" | grep -F "SPK25 FAST INIT%lu L%lu P%lu" > /dev/null
-strings "$bin" | grep -F "SPK25 INIT%lu FIRSTTC%lu LASTTC%lu" > /dev/null
+strings "$bin" | grep -F "SPK25 INIT%lu FIRSTTC%lu NOW%lu" > /dev/null
+strings "$bin" | grep -F "SPK26 G%u RX%lu ERR%lu" > /dev/null
 strings "$bin" | grep -F "SPKT MOTOR BLOCKED: SOURCE/IO/ESC UNQUALIFIED" > /dev/null
 if strings "$bin" | grep -F "SPK22 ZERO TRIAL CH1=" > /dev/null; then
     echo "Refusing image with TurnLab 0xCD trial enabled." >&2
