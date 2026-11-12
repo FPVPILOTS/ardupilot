@@ -536,10 +536,10 @@ TEST(SpektrumMotor, ArmingNeedsCompletedNeutralReplyAndFreshOwnership)
     EXPECT_EQ(f.motor.status().controls,2U);
     EXPECT_TRUE(f.motor.ready_to_arm(83,83000));
     f.owner.r.main3_inhibited=false;
-    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+    EXPECT_FALSE(f.motor.ready_to_arm(83,83000));
     f.owner.r.main3_inhibited=true;
     f.motor.disable();
-    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+    EXPECT_FALSE(f.motor.ready_to_arm(83,83000));
 }
 
 TEST(SpektrumMotor, ControlCadenceIsMeasuredStartToStartNotAfterTC)
