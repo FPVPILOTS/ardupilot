@@ -257,6 +257,96 @@ TEST(SpektrumMotor, ReverseDwellAndReturn)
     for (unsigned t=239000;t<=291000;t+=13000) { f.cycle(t); }
     EXPECT_FALSE(f.motor.status().reverse); EXPECT_EQ(f.motor.status().throttle,1000);
 }
+// Commissioning sequence on the ACTUAL Motor coordinator with mock UART.
+// Values and stop witnesses here are synthetic: never evidence that Avian
+// accepts a given CH1 value or a given CH7 forward/reverse polarity.
+TEST(SpektrumMotor, BoundedSixPercentForwardThenReverseRequiresStoppedWitness)
+{
+    Fixture f;
+    f.discover();
+    auto check = [&](uint16_t throttle, uint16_t direction, bool reverse) {
+        Engine::Channels decoded {};
+        EXPECT_TRUE(Engine::decode_channels(f.port.sent, f.port.length, decoded));
+        EXPECT_EQ(decoded.mask, 0x41U); // CH1 and CH7, not physical AUX7 PWM.
+        EXPECT_EQ(decoded.reply_id, 0x40);
+        EXPECT_EQ(decoded.values[0], throttle);
+        EXPECT_EQ(decoded.values[6], direction);
+        EXPECT_EQ(f.motor.status().throttle, throttle);
+        EXPECT_EQ(f.motor.status().reverse, reverse);
+        EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    };
+
+    // The first completed control frame must be neutral/forward.
+    f.cycle(70000);
+    check(1000, 2000, false);
+    f.d.magnitude = 0.06f;
+    f.cycle(83000);
+    check(4600, 2000, false);
+
+    // An in-motion reverse demand MUST transmit CH1=zero on the OLD
+    // direction, never send reverse-plus-throttle in the same frame.
+    f.d.reverse = true;
+    f.d.stopped = false;
+    f.cycle(96000);
+    check(1000, 2000, false);
+    f.cycle(109000);
+    check(1000, 2000, false);
+
+    // Only a separately supplied fresh stopped witness can start the
+    // zero-throttle dwell before changing CH7.
+    f.d.stopped = true;
+    for (uint32_t us = 122000; us < 174000; us += 13000) {
+        f.cycle(us);
+    }
+    check(1000, 60000, true); // CH7 changes at ZERO only.
+    f.cycle(187000);
+    check(1000, 60000, true); // Post-direction dwell still zero.
+
+    // Reverse magnitude remains bounded by caller to six percent.
+    f.d.magnitude = 0.06f;
+    f.cycle(226000);
+    check(4600, 60000, true);
+
+    // Returning to forward also enforces stopped and zero-before-CH7.
+    f.d.reverse = false;
+    f.d.stopped = false;
+    f.cycle(239000);
+    check(1000, 60000, true);
+    f.d.stopped = true;
+    for (uint32_t us = 252000; us <= 317000; us += 13000) {
+        f.cycle(us);
+    }
+    check(1000, 2000, false);
+    f.d.magnitude = 0.0f;
+    f.cycle(369000);
+    check(1000, 2000, false);
+}
+
+TEST(SpektrumMotor, ReverseTestLatchesOffOnRCLoss)
+{
+    Fixture f;
+    f.discover();
+    f.cycle(70000);
+    f.d.magnitude = 0.06f;
+    f.cycle(83000);
+    f.d.reverse = true;
+    f.d.stopped = false;
+    f.cycle(96000);
+    // A disconnected RP4TD or stale RC quality must stop the software
+    // session and MUST NOT silently reconnect to the last reverse demand.
+    const unsigned sent = f.port.starts;
+    f.d.rc_ok = false;
+    f.tick(97000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::RC_LOSS);
+    EXPECT_FALSE(f.owner.held);
+    EXPECT_FALSE(f.port.held);
+    f.d.rc_ok = true;
+    f.d.reverse = false;
+    f.d.magnitude = 0;
+    f.tick(120000);
+    EXPECT_EQ(f.port.starts, sent);
+}
+
 TEST(SpektrumMotor, SafetyFaultsLatchAndNeverReenablePWM)
 {
     for (unsigned scenario=0;scenario<9;scenario++) {
@@ -631,6 +721,7 @@ int main()
 {
     PublishedRevKChannelVector(); CodecBoundsOrderingAndFailsafe(); PhysicalPortAlwaysBlocked();
     QualificationAndStartupNeutral(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
+    BoundedSixPercentForwardThenReverseRequiresStoppedWitness(); ReverseTestLatchesOffOnRCLoss();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
     EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); StaleDemandAndReceipt();
     IndependentMillisSurvivesMicrosWrap();
@@ -646,7 +737,7 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("33 prepared master/command safety tests passed (mock transport only)");
+    std::puts("35 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
