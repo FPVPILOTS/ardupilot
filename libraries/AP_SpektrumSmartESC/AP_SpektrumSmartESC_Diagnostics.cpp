@@ -887,6 +887,26 @@ void AP_SpektrumSmartESC_Diagnostics::update_auto_reader(uint32_t now_ms)
         }
     }
 }
+#if AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+void AP_SpektrumSmartESC_Diagnostics::update_early_boot(uint32_t now_ms)
+{
+    // Only the dedicated unarmable 0x21-only commissioning image calls this.
+    // Do not run this again from a nested scheduler-delay/GCS callback.
+    if (!_early_app_boot_active || !_auto_started || _early_app_boot_pumping ||
+        (_early_app_boot_last_ms != 0 && now_ms - _early_app_boot_last_ms < 2U)) {
+        return;
+    }
+    _early_app_boot_pumping = true;
+    _early_app_boot_last_ms = now_ms;
+    update_auto_reader(now_ms);
+    _early_app_boot_pumping = false;
+}
+
+void AP_SpektrumSmartESC_Diagnostics::finish_early_boot()
+{
+    _early_app_boot_active = false;
+}
+#endif
 #endif
 
 bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
