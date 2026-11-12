@@ -1,0 +1,8 @@
+# EARLY APPLICATION START LAB ONLY. Do not fly or connect the EDF motor phases.
+# Single-battery boot timing experiment, no 0xCD throttle, reverse or arming.
+# Starts the same AutoLinkFast 0x21-only transport immediately after BoardConfig,
+# rather than near the end of AP_Vehicle::setup(). It does not run at MCU reset.
+# A physically independent logic analyzer remains necessary to prove timing.
+include ../Pixhawk6C-SpktSmart-AutoLinkFast-IOInstall/hwdef.dat
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-EarlyApp"
+define AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT 1
