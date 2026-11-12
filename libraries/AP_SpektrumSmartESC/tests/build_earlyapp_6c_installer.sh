@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # EARLY-APP 0x21-only bench build. Never use in flight.
 # Motor phases DISCONNECTED; no throttle, reverse, 0xCD or arming.
-# Compared with EarlyApp, AutoLink begins after BoardConfig rather
-# than late vehicle setup. Not before ChibiOS/MCU boot.
+# Compared with AutoLinkFast, AutoLink begins after BoardConfig instead
+# of late vehicle setup. This is NOT ChibiOS/MCU-reset startup.
 # COMPILE ONLY: explicit Pixhawk6C+MAIN3-inhibited IOMCU EarlyApp Lab image.
 # Safe scope: 0x21 handshakes only. No 0xCD, throttle, reverse, or arming.
 # Flash only after review; this .apj updates the companion IOMCU.
