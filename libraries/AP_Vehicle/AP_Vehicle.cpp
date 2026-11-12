@@ -420,6 +420,14 @@ void AP_Vehicle::setup()
     // serial manager and board/IO setup have finished. Begin observing the
     // dedicated AUX7 bus before the remainder of vehicle setup.
     spektrum_smart_esc.init();
+    // Give the lab handshake a bounded, regularly serviced initial window.
+    // The ordinary vehicle sensors have not started; motor output and arming
+    // are permanently disabled by this board profile. Not flight firmware.
+    const uint32_t early_spkt_start_ms = AP_HAL::millis();
+    while (uint32_t(AP_HAL::millis() - early_spkt_start_ms) < 180U) {
+        spektrum_smart_esc.update_early_boot(AP_HAL::millis());
+        hal.scheduler->delay(2);
+    }
 #endif
 
 #if HAL_CANMANAGER_ENABLED
