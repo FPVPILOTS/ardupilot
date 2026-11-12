@@ -20,7 +20,14 @@ public:
     // Allow at most five zero-only attempts to discover its first valid
     // 0x80 reply. This is an UNARMABLE diagnostic, never a motor command.
     static constexpr uint32_t ZERO_FIRST_REPLY_MS = 100;
-    static constexpr uint32_t ZERO_REPLY_FRESH_MS = 50;
+    // The physical 2026-11-12 Avian trial completed six CH1-only 0xCD
+    // frames, with two correlated zero-throttle/zero-eRPM 0x80 replies;
+    // the former 50ms post-first-reply deadline cut the experiment at
+    // 55ms despite no new UART errors. This bounded 120ms observation
+    // interval is for the UNARMABLE, three-second zero-only test only.
+    // It is NOT a flight or nonzero-motor telemetry-loss tolerance and
+    // does not extend the 12ms per-packet correlation window.
+    static constexpr uint32_t ZERO_REPLY_FRESH_MS = 120;
     static bool zero_reply_overdue(uint32_t now, uint32_t started_ms,
                                    uint32_t last_qualified_reply_ms)
     {
