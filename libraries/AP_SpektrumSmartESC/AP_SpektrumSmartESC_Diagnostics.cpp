@@ -1282,6 +1282,9 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     (unsigned long)s.controls,
                     (unsigned long)s.telemetry);
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                    "SPK27 SENSOR LATE%lu",
+                    (unsigned long)s.late_sensors);
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 CH1%u CH7%u REV%u RDY%u",
                     unsigned(s.throttle), unsigned(s.direction),
                     unsigned(s.reverse), unsigned(motor_arming_ready()));
