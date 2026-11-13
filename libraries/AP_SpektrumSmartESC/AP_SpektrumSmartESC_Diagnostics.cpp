@@ -1288,6 +1288,25 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     "SPK27 CH1%u CH7%u REV%u RDY%u",
                     unsigned(s.throttle), unsigned(s.direction),
                     unsigned(s.reverse), unsigned(motor_arming_ready()));
+                // A pre-first-TC TURNAROUND can otherwise produce only
+                // "F14 TX0", hiding exactly why the native PA0/UART4
+                // instance stopped. Read hardware only through the
+                // existing guarded diagnostics (no TX, no ARM override).
+                if (s.fault == AP_SpektrumSmartESC_Motor::Fault::TURNAROUND) {
+                    auto *uart4 = hal.diagnostic_rx_uart();
+                    AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+                    if (uart4 != nullptr && uart4->receive_diagnostics(hw)) {
+                        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                            "SPK27 U FL%u REL%lu FE%lu",
+                            unsigned(hw.flags),
+                            (unsigned long)hw.release_errors,
+                            (unsigned long)hw.framing);
+                        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                            "SPK27 U CR1%08lX CR3%08lX",
+                            (unsigned long)hw.cr1,
+                            (unsigned long)hw.cr3);
+                    }
+                }
             } else {
                 GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
                     "SPK27 MOTOR BLOCKED: NO QUALIFIED SESSION");
