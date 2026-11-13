@@ -422,6 +422,22 @@ TEST(SpektrumMotor, TelemetryFreshnessAndCorruptResponse)
     f.tick(170000);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS); // CRC-bad reply cannot renew telemetry freshness.
 }
+TEST(SpektrumMotor, LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry)
+{
+    Fixture f; f.discover(); f.cycle(70000);
+    EXPECT_EQ(f.motor.status().telemetry,1U);
+    f.tick(83000); f.port.complete=true; f.tick(85000);
+    f.reply(101000); // 16ms after TC: too late for the 15ms reply slot
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().late_sensors,1U);
+    EXPECT_EQ(f.motor.status().telemetry,1U); // no refresh or ARM proof
+    f.tick(104000); // >2ms after physically acquired late sensor
+    f.port.complete=true; f.tick(106000);
+    f.reply(107000); // next solicited sensor is inside its own reply slot
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().telemetry,2U);
+    EXPECT_EQ(f.motor.status().late_sensors,1U);
+}
 TEST(SpektrumMotor, StaleDemandAndReceipt)
 {
     Fixture f; f.discover(); f.cycle(70000);
@@ -731,7 +747,7 @@ int main()
     QualificationAndStartupNeutral(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
     BoundedSixPercentForwardThenReverseRequiresStoppedWitness(); ReverseTestLatchesOffOnRCLoss();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
-    EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); StaleDemandAndReceipt();
+    EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry(); StaleDemandAndReceipt();
     IndependentMillisSurvivesMicrosWrap();
     BusBusyNeverRetriesForever();
     FinalPlaneAdapterPreservesRangeAndDirection(); PlaneAdapterCannotUseOtherOutputsOrImplicitReverse();
@@ -745,7 +761,7 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("35 prepared master/command safety tests passed (mock transport only)");
+    std::puts("36 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
