@@ -37,7 +37,10 @@ void AP_SpektrumSmartESC_Motor::disable()
         const bool released = _port.release_rx();
         _port.relinquish();
         _owner.release();
-        if (!released) {
+        // Preserve the ORIGINAL fault if hardware cleanup also fails.
+        // Previously any UART/transport fault could be overwritten by
+        // TURNAROUND here, obscuring the true pre-first-TC failure as F14.
+        if (!released && _status.fault == Fault::NONE) {
             _status.fault = Fault::TURNAROUND;
         }
     }
