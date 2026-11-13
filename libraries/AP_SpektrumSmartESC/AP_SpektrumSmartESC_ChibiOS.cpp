@@ -131,12 +131,26 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
         {
             WITH_SEMAPHORE(_lock);
             if (_active) {
-                _motor.update(_demand,AP_HAL::micros(),AP_HAL::millis());
+                // Retire a previously queued UART transmission first: the
+                // native driver must restore RX after actual hardware TC
+                // before the parser can accept an incoming sensor response.
+                // Never run the general control/timeout watchdog *before*
+                // consuming already-acquired RX bytes; an otherwise fresh
+                // 0x80 reply may be waiting in the UART ring when this
+                // worker wakes up after a scheduler delay.
+                if (_motor.transmitting()) {
+                    _motor.update(_demand, AP_HAL::micros(), AP_HAL::millis());
+                }
                 uint8_t byte;
                 uint32_t timestamp_ms;
                 for (uint16_t i=0; i<512 && _uart.read_timed(byte,timestamp_ms); i++) {
                     _motor.feed(byte,timestamp_ms*1000U);
                 }
+                // Now test freshness against the newest complete CRC-checked
+                // input and schedule at most the normal next control frame.
+                // All arming, IO-owner, RC and UART interlocks remain in the
+                // motor controller itself.
+                _motor.update(_demand, AP_HAL::micros(), AP_HAL::millis());
 #if HAL_WITH_ESC_TELEM
                 AP_SpektrumSmartESC::Telemetry current;
                 if (!_motor.telemetry(current,AP_HAL::micros())) { _receiver.invalidate_native(); }
