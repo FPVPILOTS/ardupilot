@@ -1337,6 +1337,14 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                             unsigned(hw.flags),
                             (unsigned long)hw.last_uart_rx_ms,
                             (unsigned long)port->receive_errors());
+                        // Raw receive state distinguishes a physically
+                        // silent RX pad from a UART stuck in the wrong mode.
+                        // Read-only: no UART reset or automatic ARM.
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK29 UART C1%08lX C3%08lX IS%08lX",
+                            (unsigned long)hw.cr1,
+                            (unsigned long)hw.cr3,
+                            (unsigned long)hw.isr);
                         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                             "SPK27 U FE%lu NE%lu ORE%lu",
                             (unsigned long)hw.framing,
