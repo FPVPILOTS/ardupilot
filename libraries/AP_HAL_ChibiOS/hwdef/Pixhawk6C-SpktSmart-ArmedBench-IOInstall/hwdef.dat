@@ -1,12 +1,14 @@
 # EXPLICIT, NON-FLIGHT Avian SRXL2 armed bench commissioning image.
 # NOT the ordinary Pixhawk6C, production or TurnLab target.
-# COMPILE-ONLY candidate for future NORMAL ArduPlane arming.
-# Does NOT currently enable motor TX: the production profile stays unqualified.
-# No automatic arming; no MAIN3 PWM fallback; RC/ESC/UART faults latch.
-# Proposed 0..6% control vector is source-level ONLY: actual ESC motor
-# power/RPM at those wire values has NOT been physically qualified.
-# CH7/reverse is unqualified and is deliberately NOT transmitted.
-# Never flash this target expecting a ready-to-arm motor controller.
+# Opt-in NORMAL ArduPlane arming for non-flight CH1-only commissioning:
+# operator sets SPKT_MOTOR=1 before reboot; no automatic ARM or PWM fallback.
+# UART4 sends only CH1 reference code 768..4608 and solicits ESC telemetry.
+# Real IOMCU inhibit readback, TC-completed zero, and a fresh stopped/zero
+# throttle ESC sensor reply MUST be seen before ARM is allowed.
+# RC/control/ESC/UART loss, owner loss and disarm still latch motor control off.
+# Channel 7/reverse is deliberately NOT transmitted in this board.
+# The source-derived reference range is NOT a certified Avian calibration.
+# This is an experimental non-flight commissioning image, not flight firmware.
 include ../Pixhawk6C-SpktSmart/hwdef.dat
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-ArmedBench"
 define AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL 1
