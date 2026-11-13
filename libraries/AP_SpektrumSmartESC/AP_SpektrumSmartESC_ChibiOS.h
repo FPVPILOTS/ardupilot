@@ -20,6 +20,7 @@ public:
     void update(const AP_SpektrumSmartESC_Motor::Demand &demand, uint32_t now_us, uint32_t now_ms);
     void stop();
     AP_SpektrumSmartESC_Motor::Status status() const;
+    AP_SpektrumSmartESC_Reader::Status handshake_status() const;
     bool ready_to_arm() const;
     // Read-only, fresh ESC-reported zero throttle and zero electrical RPM.
     // The sensor payload has no explicit SRXL2 source ID; the production
