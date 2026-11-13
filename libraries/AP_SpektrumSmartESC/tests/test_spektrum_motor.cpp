@@ -409,6 +409,19 @@ TEST(SpektrumMotor, EchoAndReleaseFailure)
     EXPECT_EQ(release.motor.status().fault,Motor::Fault::TURNAROUND);
     EXPECT_FALSE(release.motor.start(qualification(),true,0x40,1,80000,80));
 }
+TEST(SpektrumMotor, PrimaryUARTFailureIsNotOverwrittenByCleanupFault)
+{
+    Fixture f; f.discover(); f.tick(70000);
+    f.port.release_ok = false;
+    f.port.collide = true;
+    f.tick(71000);
+    // A failed RX teardown must not turn the real UART error into F14,
+    // otherwise actual on-board failure attribution becomes impossible.
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::UART);
+    EXPECT_EQ(f.motor.status().state,Motor::State::FAULT);
+    EXPECT_FALSE(f.owner.held);
+    EXPECT_EQ(f.motor.status().tx_frames,2U); // prior discovery only
+}
 TEST(SpektrumMotor, TelemetryFreshnessAndCorruptResponse)
 {
     Fixture f; f.discover(); f.cycle(70000);
@@ -747,7 +760,7 @@ int main()
     QualificationAndStartupNeutral(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
     BoundedSixPercentForwardThenReverseRequiresStoppedWitness(); ReverseTestLatchesOffOnRCLoss();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
-    EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry(); StaleDemandAndReceipt();
+    EchoAndReleaseFailure(); PrimaryUARTFailureIsNotOverwrittenByCleanupFault(); TelemetryFreshnessAndCorruptResponse(); LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry(); StaleDemandAndReceipt();
     IndependentMillisSurvivesMicrosWrap();
     BusBusyNeverRetriesForever();
     FinalPlaneAdapterPreservesRangeAndDirection(); PlaneAdapterCannotUseOtherOutputsOrImplicitReverse();
@@ -761,7 +774,7 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("36 prepared master/command safety tests passed (mock transport only)");
+    std::puts("37 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
