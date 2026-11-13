@@ -57,6 +57,20 @@ TEST(SpektrumUartRecovery, RecoveredCounterRetainedForLiveBaseline)
     EXPECT_FALSE(2 == baseline); // A *new* session error must fail comparison.
 }
 
+TEST(SpektrumUartRecovery, NativePortModeFourIsPassiveMonitoring)
+{
+    using Gate = AP_SpektrumSmartESC_UartRecovery;
+    // Regresses the actual Pix6C boot: _begin() calls start_samples(4),
+    // while the physical RX remains connected (UART FL9/FL11).
+    // A 100% framing-only error history must not be excluded merely
+    // because the normal reserved UART monitor is active.
+    EXPECT_TRUE(Gate::passive_uart_mode(4));
+    EXPECT_TRUE(Gate::passive_uart_mode(0));
+    EXPECT_FALSE(Gate::passive_uart_mode(1));
+    EXPECT_FALSE(Gate::passive_uart_mode(2));
+    EXPECT_FALSE(Gate::passive_uart_mode(3));
+}
+
 TEST(SpektrumUartRecovery, NativeStartupFEPredicateNeverRetriesActiveMotor)
 {
     using Gate = AP_SpektrumSmartESC_UartRecovery;
@@ -86,9 +100,10 @@ int main()
     RepeatedFramingRestartsWindow();
     NonFramingErrorsRemainBlocked();
     RecoveredCounterRetainedForLiveBaseline();
+    NativePortModeFourIsPassiveMonitoring();
     NativeStartupFEPredicateNeverRetriesActiveMotor();
     TimestampWrapAround();
-    std::puts("7 UART recovery policy tests passed");
+    std::puts("8 UART recovery policy tests passed");
 }
 #else
 AP_GTEST_MAIN()
