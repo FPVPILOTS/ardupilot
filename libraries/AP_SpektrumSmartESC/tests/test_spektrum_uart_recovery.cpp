@@ -57,6 +57,19 @@ TEST(SpektrumUartRecovery, RecoveredCounterRetainedForLiveBaseline)
     EXPECT_FALSE(2 == baseline); // A *new* session error must fail comparison.
 }
 
+TEST(SpektrumUartRecovery, NativeStartupFEPredicateNeverRetriesActiveMotor)
+{
+    using Gate = AP_SpektrumSmartESC_UartRecovery;
+    EXPECT_TRUE(Gate::allow_native_fe_startup_retry(false, false, 0, 0, 0, true));
+    EXPECT_TRUE(Gate::allow_native_fe_startup_retry(false, false, 0, 0, 1, true));
+    EXPECT_FALSE(Gate::allow_native_fe_startup_retry(false, false, 0, 0, 2, true));
+    EXPECT_FALSE(Gate::allow_native_fe_startup_retry(true, false, 0, 0, 0, true));
+    EXPECT_FALSE(Gate::allow_native_fe_startup_retry(false, true, 0, 0, 0, true));
+    EXPECT_FALSE(Gate::allow_native_fe_startup_retry(false, false, 1, 0, 0, true));
+    EXPECT_FALSE(Gate::allow_native_fe_startup_retry(false, false, 0, 1, 0, true));
+    EXPECT_FALSE(Gate::allow_native_fe_startup_retry(false, false, 0, 0, 0, false));
+}
+
 TEST(SpektrumUartRecovery, TimestampWrapAround)
 {
     AP_SpektrumSmartESC_UartRecovery gate;
@@ -73,8 +86,9 @@ int main()
     RepeatedFramingRestartsWindow();
     NonFramingErrorsRemainBlocked();
     RecoveredCounterRetainedForLiveBaseline();
+    NativeStartupFEPredicateNeverRetriesActiveMotor();
     TimestampWrapAround();
-    std::puts("6 UART recovery policy tests passed");
+    std::puts("7 UART recovery policy tests passed");
 }
 #else
 AP_GTEST_MAIN()
