@@ -45,7 +45,8 @@ public:
         uint8_t device = 0, priority = 0, baud_mask = 0, info = 0, type = 0;
         uint8_t source = SOURCE, queued = 0;
     };
-    bool start(bool authorized, bool disarmed, uint8_t target, uint32_t uid, uint32_t now_us, bool power_on = false);
+    bool start(bool authorized, bool disarmed, uint8_t target, uint32_t uid, uint32_t now_us,
+               bool power_on = false, bool fast_power_on = false);
     void update(uint32_t now_us);
     uint8_t prepare(uint32_t now_us, uint8_t *packet, size_t capacity, bool bus_idle = true);
     bool sent(uint32_t now_us); // Only after actual UART TC, never DMA-empty/queued.
@@ -68,6 +69,10 @@ private:
     Status _status;
     uint32_t _started = 0, _phase = 0, _uid = 0, _last_activity = 0;
     uint32_t _next_query = 0;
+    // Explicit native ArmedBench override. Reader.cpp may use distinct
+    // compiler settings from the board's Motor.cpp: transport behavior
+    // must not silently depend on its static header macro.
+    uint32_t _prepare_ms = PREPARE_MS;
     uint8_t _target = 0;
     bool _prepared = false, _power_on = false;
     uint8_t _capture[64] {};

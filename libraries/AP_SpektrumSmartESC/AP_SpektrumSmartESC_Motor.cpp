@@ -127,7 +127,8 @@ bool AP_SpektrumSmartESC_Motor::start(const Qualification &q, bool disarmed, uin
     // Unlike the old 0x31 remote-receiver profile, this matches the
     // actual Pixhawk6C/Avian handshake already observed on the bench.
     const bool native_fc_master = !_port.simulated();
-    if (!_reader.start(true, true, target, uid, now_us, native_fc_master)) {
+    if (!_reader.start(true, true, target, uid, now_us, native_fc_master,
+                       AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL && native_fc_master)) {
         fault(Fault::PROTOCOL);
         return false;
     }
@@ -320,7 +321,9 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us,
                 if (int32_t(now_us - _bench_retry_at_us) < 0) {
                     return;
                 }
-                if (!_reader.start(true, true, _target, _uid, now_us, !_port.simulated())) {
+                if (!_reader.start(true, true, _target, _uid, now_us, !_port.simulated(),
+                                   AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL &&
+                                   !_port.simulated())) {
                     fault(Fault::PROTOCOL);
                     return;
                 }

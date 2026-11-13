@@ -46,8 +46,9 @@ int main()
     static_assert(AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL == 1,
                   "Compile this suite only with the isolated bench flag");
     assert(Motor::physical_control_available());
-    static_assert(AP_SpektrumSmartESC_Reader::PREPARE_MS == 50,
-                  "ArmedBench must send its first targeted handshake after 50ms RX-first");
+    static_assert(AP_SpektrumSmartESC_Reader::PREPARE_MS == 2000,
+                  "Host test retains 2-second default reader timing: "
+                  "native ArmedBench must override it explicitly at runtime");
     static_assert(AP_SpektrumSmartESC_Reader::WINDOW_MS == 5000,
                   "ArmedBench must keep finite 5-second native handshake window");
     const auto profile = spektrum_production_profile();

@@ -122,7 +122,6 @@ def main():
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
              '-DSPKTSMART_STANDALONE_TEST',
              '-DAP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL=1',
-             '-DAP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT=1',
              str(library / 'AP_SpektrumSmartESC.cpp'),
              str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
              str(library / 'AP_SpektrumSmartESC_ChannelData.cpp'),

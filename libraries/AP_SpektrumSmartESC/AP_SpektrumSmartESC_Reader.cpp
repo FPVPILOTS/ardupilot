@@ -13,7 +13,8 @@ bool AP_SpektrumSmartESC_Reader::handshake_packet(const uint8_t *p, size_t n)
 }
 
 bool AP_SpektrumSmartESC_Reader::start(bool authorized, bool disarmed, uint8_t target,
-                                     uint32_t uid, uint32_t now_us, bool power_on)
+                                     uint32_t uid, uint32_t now_us, bool power_on,
+                                     bool fast_power_on)
 {
     _status = {};
     _prepared = false;
@@ -21,6 +22,7 @@ bool AP_SpektrumSmartESC_Reader::start(bool authorized, bool disarmed, uint8_t t
     _startup_pending = false;
     _startup_acquired_ms = 0;
     _power_on = power_on;
+    _prepare_ms = power_on && fast_power_on ? 50U : PREPARE_MS;
     _status.source = power_on ? POWERON_SOURCE : SOURCE;
     if (!authorized || !disarmed || target < 0x40 || target > 0x4F) {
         _status.state = State::BLOCKED;
@@ -28,7 +30,7 @@ bool AP_SpektrumSmartESC_Reader::start(bool authorized, bool disarmed, uint8_t t
     }
     _parser = AP_SpektrumSmartESC(_status.source, target, 50, false);
     _uid = uid; _target = target; _started = _phase = _last_activity = now_us;
-    _next_query = now_us + (power_on ? PREPARE_MS * 1000U : 50000U);
+    _next_query = now_us + (power_on ? _prepare_ms * 1000U : 50000U);
     _status.state = power_on ? State::PREPARED : State::WAITING;
     return true;
 }
@@ -40,11 +42,11 @@ bool AP_SpektrumSmartESC_Reader::active() const
 
 void AP_SpektrumSmartESC_Reader::update(uint32_t now_us)
 {
-    const uint32_t deadline = _power_on ? (PREPARE_MS + WINDOW_MS) * 1000U : 200000U;
+    const uint32_t deadline = _power_on ? (_prepare_ms + WINDOW_MS) * 1000U : 200000U;
     if (active() && uint32_t(now_us - _started) >= deadline) {
         _status.timeouts++;
         _status.state = State::TIMEOUT; // No retries or restart loop.
-    } else if (_status.state == State::PREPARED && uint32_t(now_us - _started) >= PREPARE_MS * 1000U) {
+    } else if (_status.state == State::PREPARED && uint32_t(now_us - _started) >= _prepare_ms * 1000U) {
         _status.state = State::WAITING;
     } else if (_status.state == State::RESPONSE && uint32_t(now_us - _phase) >= 50000) {
         if (_power_on && _status.queued < MAX_QUERIES) {
@@ -62,7 +64,7 @@ uint8_t AP_SpektrumSmartESC_Reader::prepare(uint32_t now_us, uint8_t *packet, si
     if (_prepared || !active() || !bus_idle || _status.state == State::PREPARED) {
         return 0;
     }
-    const uint32_t deadline = _power_on ? (PREPARE_MS + WINDOW_MS) * 1000U : 200000U;
+    const uint32_t deadline = _power_on ? (_prepare_ms + WINDOW_MS) * 1000U : 200000U;
     if (uint32_t(now_us - _started) >= deadline - 3000U) {
         _status.timeouts++;
         _status.state = State::TIMEOUT; // Reserve the native 3-ms watchdog window.
