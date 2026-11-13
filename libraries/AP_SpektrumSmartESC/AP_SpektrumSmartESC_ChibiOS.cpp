@@ -199,12 +199,13 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                     // ESC boot. Retry at most twice and only after quiet.
                     // A UART fault after any completed frame, nonzero
                     // demand, bad RX classification or ARM still latches.
-                    const bool initial_fe = disarmed &&
+                    const bool initial_fe =
                         why == AP_SpektrumSmartESC_Motor::Fault::UART &&
-                        s.tx_frames == 0 && s.controls == 0 &&
                         _demand.magnitude == 0 && !_demand.reverse &&
-                        _startup_framing_retries < 2 &&
-                        _uart.framing_only_fault(false);
+                        AP_SpektrumSmartESC_UartRecovery::allow_native_fe_startup_retry(
+                            _ever_armed, hal.util->get_soft_armed() || _demand.armed,
+                            s.tx_frames, s.controls, _startup_framing_retries,
+                            _uart.framing_only_fault(false));
                     if (initial_fe) {
                         _startup_framing_retries++;
                         _retry_requires_framing_quiet = true;
