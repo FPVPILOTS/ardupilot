@@ -55,6 +55,7 @@ public:
         State state = State::DISABLED;
         Fault fault = Fault::NONE;
         uint32_t tx_frames = 0, tx_bytes = 0, controls = 0, telemetry = 0;
+        uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
         bool simulated = true, reverse = false;
     };
