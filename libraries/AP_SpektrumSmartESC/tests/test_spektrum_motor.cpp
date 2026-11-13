@@ -154,6 +154,36 @@ TEST(SpektrumMotor, PhysicalPortAlwaysBlocked)
     EXPECT_EQ(f.port.starts,0U); EXPECT_FALSE(f.owner.held);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::QUALIFICATION);
 }
+TEST(SpektrumMotor, NativeFC0HandshakeAcceptsRealAvianDestination)
+{
+    // The physical Avian replied with source 0x40 / destination 0x30
+    // during the earlier working TurnLab session. Verify the native
+    // master reader really accepts that response without using the
+    // simulator-only FC0x31 fixture.
+    AP_SpektrumSmartESC_Reader reader;
+    EXPECT_TRUE(reader.start(true, true, 0x40, 0x12345678U, 0, true));
+    EXPECT_EQ(reader.status().source, 0x30);
+    uint8_t query[80] {};
+    EXPECT_EQ(reader.prepare(2001000, query, sizeof(query)), 14U);
+    EXPECT_EQ(query[3], 0x30);
+    EXPECT_EQ(query[4], 0x40);
+    EXPECT_TRUE(reader.sent(2003000));
+    const uint8_t response[] = {0x40, 0x30, 1, 0, 0, 0x78, 0x56, 0x34, 0x12};
+    uint8_t packet[80] {};
+    const auto n = Engine::encode(0x21, response, sizeof(response), packet, sizeof(packet));
+    EXPECT_EQ(n, 14U);
+    for (unsigned i = 0; i < n; i++) {
+        reader.feed(packet[i], 2005000);
+    }
+    EXPECT_EQ(reader.status().responses, 1U);
+    EXPECT_EQ(reader.status().device, 0x40);
+    EXPECT_EQ(reader.status().last_hs_dst, 0x30);
+    EXPECT_EQ(reader.status().state, AP_SpektrumSmartESC_Reader::State::CONFIRM_TX);
+    EXPECT_EQ(reader.prepare(2008000, query, sizeof(query)), 14U);
+    EXPECT_EQ(query[4], 0xFF);
+    EXPECT_TRUE(reader.sent(2010000));
+    EXPECT_EQ(reader.status().state, AP_SpektrumSmartESC_Reader::State::DISCOVERED);
+}
 TEST(SpektrumMotor, DedicatedFCMasterAndDisarmedRCBoot)
 {
     // Spektrum's dedicated FC0 master identity 0x30 was verified against
@@ -757,7 +787,7 @@ TEST(SpektrumMotor, WrongSensorReplyIsNotSuccessfulControlAck)
 int main()
 {
     PublishedRevKChannelVector(); CodecBoundsOrderingAndFailsafe(); PhysicalPortAlwaysBlocked();
-    QualificationAndStartupNeutral(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
+    QualificationAndStartupNeutral(); NativeFC0HandshakeAcceptsRealAvianDestination(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
     BoundedSixPercentForwardThenReverseRequiresStoppedWitness(); ReverseTestLatchesOffOnRCLoss();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
     EchoAndReleaseFailure(); PrimaryUARTFailureIsNotOverwrittenByCleanupFault(); TelemetryFreshnessAndCorruptResponse(); LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry(); StaleDemandAndReceipt();
@@ -774,7 +804,7 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("37 prepared master/command safety tests passed (mock transport only)");
+    std::puts("38 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
