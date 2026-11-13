@@ -23,6 +23,8 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     _pending_ms = now_ms;
     _pending = true;
     _auto_retry_disarmed = false;
+    _retry_requires_framing_quiet = false;
+    _startup_framing_retries = 0;
     _ever_armed = false;
     return true;
 }
@@ -50,6 +52,16 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         !_ever_armed && !hal.util->get_soft_armed() &&
         int32_t(now_ms - _retry_at_ms) >= 0) {
         _auto_retry_disarmed = false;
+        // After a strictly FE-only startup fault, an automatic disarmed
+        // reconnect is allowed only if *all* UART errors were framing-only
+        // and at least 500ms have elapsed since the last such error.
+        // Do not clear the counters or bypass normal UART owner acquisition.
+        const bool quiet = !_retry_requires_framing_quiet ||
+            _uart.framing_only_fault(true);
+        _retry_requires_framing_quiet = false;
+        if (!quiet) {
+            return; // Other error or continuing FE: latch, no retry.
+        }
         const uint32_t nonce = (_uid ^ now_ms) | 1U;
         if (_owner.prepare(nonce, _qualification.io_firmware_crc)) {
             _pending_ms = now_ms;
@@ -179,8 +191,27 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                     // Only NO ESC / stale solicited telemetry while never
                     // armed is eligible for deferred handshake retry.
                     // UART/ownership/protocol/RC/arming faults latch shut.
-                    if (why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS &&
-                        !_ever_armed && !hal.util->get_soft_armed()) {
+                    const auto s = _motor.status();
+                    const bool disarmed = !_ever_armed && !hal.util->get_soft_armed() &&
+                        !_demand.armed;
+                    // A FE-only startup glitch (actual 2026-11-13 logs:
+                    // F7, FE3/7, TX0, CD0, RX B0/1) may be transient during
+                    // ESC boot. Retry at most twice and only after quiet.
+                    // A UART fault after any completed frame, nonzero
+                    // demand, bad RX classification or ARM still latches.
+                    const bool initial_fe = disarmed &&
+                        why == AP_SpektrumSmartESC_Motor::Fault::UART &&
+                        s.tx_frames == 0 && s.controls == 0 &&
+                        _demand.magnitude == 0 && !_demand.reverse &&
+                        _startup_framing_retries < 2 &&
+                        _uart.framing_only_fault(false);
+                    if (initial_fe) {
+                        _startup_framing_retries++;
+                        _retry_requires_framing_quiet = true;
+                        _retry_at_ms = AP_HAL::millis() + 1000U;
+                        _auto_retry_disarmed = true;
+                    } else if (disarmed && why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS) {
+                        _retry_requires_framing_quiet = false;
                         _retry_at_ms = AP_HAL::millis() + 4000U;
                         _auto_retry_disarmed = true;
                     }
