@@ -55,8 +55,10 @@ inline AP_SpektrumSmartESC_ProductionProfile spektrum_production_profile()
     // NON-FLIGHT commissioned bench profile: opt-in via SPKT_MOTOR=1.
     // Keep all physical-certification booleans false: the bounded CH1 range
     // is an experimental wire candidate, not a reviewed Avian calibration.
-    // Normal ArduPlane ARM is withheld until real IO/ESC zero witnesses
-    // arrive; forward-only digital control is capped in the native UART
+    // ARM-before-link on this *isolated* image means monitor-only until
+    // a physical stop witness and a fresh DISARM/re-ARM. The real motor
+    // output still requires independently fresh sensor evidence; digital
+    // forward-only control is capped in the native UART
     // whitelist and all RC/control/ESC loss latches remain active.
     AP_SpektrumSmartESC_ProductionProfile p;
     p.operator_qualified = false;

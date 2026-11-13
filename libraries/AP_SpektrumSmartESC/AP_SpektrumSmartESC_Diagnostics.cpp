@@ -1282,6 +1282,10 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     (unsigned long)s.controls,
                     (unsigned long)s.telemetry);
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                    "SPK28 ARM MON%u RET%u RDY%u",
+                    unsigned(s.bench_monitor), unsigned(s.bench_link_retries),
+                    unsigned(motor_arming_ready()));
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 SENSOR LATE%lu",
                     (unsigned long)s.late_sensors);
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
@@ -1472,6 +1476,17 @@ void AP_SpektrumSmartESC_Diagnostics::update()
 #endif
 
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
+bool AP_SpektrumSmartESC_Diagnostics::armed_bench_arm_permitted() const
+{
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL && \
+    CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+    return _motor_enable.get() == 1 && _motor_selected && !bench_blocked() &&
+        _native_motor != nullptr && _native_motor->bench_arm_permitted();
+#else
+    return false;
+#endif
+}
+
 bool AP_SpektrumSmartESC_Diagnostics::motor_arming_ready() const
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)

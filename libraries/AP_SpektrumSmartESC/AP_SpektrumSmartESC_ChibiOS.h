@@ -29,6 +29,9 @@ public:
     };
     StartupDiagnostics startup_diagnostics() const;
     bool ready_to_arm() const;
+    // Explicit non-flight bench ARM monitor: a live, zero-demand discovery
+    // lease; never grants native motor output or bypasses normal checks.
+    bool bench_arm_permitted() const;
     // Read-only, fresh ESC-reported zero throttle and zero electrical RPM.
     // The sensor payload has no explicit SRXL2 source ID; the production
     // profile additionally requires a qualified isolated one-ESC bus.

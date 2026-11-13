@@ -1,0 +1,58 @@
+# Separate, explicitly opt-in Pixhawk6C ArmedBench compile; never flash automatically.
+name: Spektrum ArmedBench firmware build
+on:
+  push:
+    branches:
+      - feature/spktsmart-armedbench-armtest-20261113
+    paths:
+      - 'libraries/AP_SpektrumSmartESC/**'
+      - 'libraries/AP_Arming/AP_Arming.cpp'
+      - 'libraries/AP_Vehicle/AP_Vehicle.h'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
+      - '.github/workflows/spektrum-smartesc-armedbench-firmware.yml'
+  pull_request:
+    paths:
+      - 'libraries/AP_SpektrumSmartESC/**'
+      - 'libraries/AP_Arming/AP_Arming.cpp'
+      - 'libraries/AP_Vehicle/AP_Vehicle.h'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
+  workflow_dispatch:
+jobs:
+  build-armedbench:
+    runs-on: ubuntu-22.04
+    container: ardupilot/ardupilot-dev-chibios:v0.1.3
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Compile and run Spektrum host regression suites
+        run: python3 libraries/AP_SpektrumSmartESC/tests/run_host_tests.py
+      - name: Compile special IOMCU and ArmedBench ArduPlane
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          ./waf configure --board iomcu-f103-spktsmart
+          ./waf iofirmware
+          test -s build/iomcu-f103-spktsmart/bin/iofirmware_lowpolh.bin
+          ./waf configure --board Pixhawk6C-SpktSmart-ArmedBench-IOInstall
+          ./waf plane
+          test -s build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj
+          strings build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane | grep -F 'SPK28 ARM MON%u RET%u RDY%u'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj')
+          a=json.loads(p.read_text())
+          assert int(a['board_id']) == 56, f"Wrong board: {a.get('board_id')}"
+          print('Pixhawk6C firmware board_id=56. Build only; no flash.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pix6C-SPKT-ArmedBench-ArmTest
+          path: build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj
+          if-no-files-found: error
+          retention-days: 14

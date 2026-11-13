@@ -73,5 +73,10 @@ int main()
     assert(!Motor::control_packet(packet, 0));
     assert(!Motor::control_packet(nullptr, 16));
 
+    // The unlinked bench ARM policy may never send a nonzero CH1 packet.
+    // Actual virtual-ARM transition and retry safety are source-gated to
+    // this separate compile variant; ordinary Motor tests remain unchanged.
+    assert(profile.channels.reverse_verified == false);
+    assert(profile.channels.full == 4608);
     std::puts("ArmedBench bounded CH1-only whitelist tests passed (host; no hardware)");
 }

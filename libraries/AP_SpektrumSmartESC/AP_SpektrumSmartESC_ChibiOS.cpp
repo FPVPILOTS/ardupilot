@@ -146,6 +146,26 @@ bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
         _motor.ready_to_arm(now_ms,AP_HAL::micros());
 }
 
+bool AP_SpektrumSmartESC_ChibiOS::bench_arm_permitted() const
+{
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+    WITH_SEMAPHORE(_lock);
+    const uint32_t now_ms = AP_HAL::millis();
+    const auto state = _motor.status().state;
+    return _active && !_pending && !_restore_pending && !_ever_armed &&
+        (state == AP_SpektrumSmartESC_Motor::State::DISCOVERY ||
+         state == AP_SpektrumSmartESC_Motor::State::IDLE) &&
+        _motor.status().fault == AP_SpektrumSmartESC_Motor::Fault::NONE &&
+        !_demand.armed && _demand.rc_ok && _demand.control_ok &&
+        !_demand.failsafe && _demand.magnitude == 0 && !_demand.reverse &&
+        uint32_t(now_ms - _demand.acquired_ms) < 50U &&
+        _demand.ground_authorized &&
+        uint32_t(now_ms - _demand.ground_ms) < 100U;
+#else
+    return false;
+#endif
+}
+
 bool AP_SpektrumSmartESC_ChibiOS::stopped_observed() const
 {
     WITH_SEMAPHORE(_lock);

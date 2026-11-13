@@ -74,6 +74,8 @@ bool AP_SpektrumSmartESC_Motor::start(const Qualification &q, bool disarmed, uin
         return false;
     }
     _status = {};
+    _bench_retry_at_us = 0;
+    _uid = uid;
     _status.simulated = _port.simulated();
     _qualification = q;
     // Ordinary motor firmware requires independently qualified physical
@@ -156,11 +158,43 @@ bool AP_SpektrumSmartESC_Motor::transmit(uint8_t length, uint32_t now_us, bool h
     return true;
 }
 
-void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_t now_ms)
+void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us, uint32_t now_ms)
 {
     if (_status.state == State::DISABLED || _status.state == State::FAULT) {
         return;
     }
+    // Only the isolated experimental ArmedBench image may acknowledge Plane
+    // ARM while the ESC is still discovering. This is an observation-only
+    // ARM edge: do not forward it to the motor until the pilot DISARMS and
+    // explicitly ARMS again after genuine zero/stop telemetry is available.
+    // In particular, a late-handshake link cannot launch the EDF on a stale
+    // or raised throttle stick.
+    Demand neutral {};
+    const Demand *effective = &requested;
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+    if (requested.armed && !_armed_seen && !_status.bench_monitor &&
+        !ready_to_arm(now_ms, now_us)) {
+        _status.bench_monitor = true;
+    }
+    if (_status.bench_monitor) {
+        if (!requested.armed) {
+            _status.bench_monitor = false; // Real disarm/rearm required.
+        } else {
+            if (!requested.rc_ok || !requested.control_ok || requested.failsafe ||
+                uint32_t(now_ms - requested.acquired_ms) >= 50U ||
+                requested.reverse) {
+                fault(requested.rc_ok ? Fault::CONTROL_LOSS : Fault::RC_LOSS);
+                return;
+            }
+            neutral = requested;
+            neutral.armed = false;
+            neutral.magnitude = 0;
+            neutral.reverse = false;
+            effective = &neutral;
+        }
+    }
+#endif
+    const Demand &d = *effective;
     if (!owned(now_ms)) {
         fault(Fault::OWNERSHIP);
         return;
@@ -266,9 +300,37 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &d, uint32_t now_us, uint32_
             return;
         }
         if (!_reader.active()) {
-            // No response from a not-yet-powered ESC is recoverable while
-            // DISARMED. Unexpected/wrong-identity SRXL2 frames are NOT:
-            // they remain protocol faults and must not auto-reconnect.
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+            // ARM-before-link bench is monitor-only. Allow at most TWO
+            // additional handshake windows with zero RX bytes, within the
+            // same UART/IO lease and without any 0xCD control frames.
+            // Wrong peers, CRC-invalid traffic, motor commands, UART
+            // errors or nonzero/reverse demands never take this path.
+            if (_status.bench_monitor && _status.controls == 0 &&
+                _reader.status().state == AP_SpektrumSmartESC_Reader::State::TIMEOUT &&
+                _reader.status().rx_bytes == 0) {
+                if (_status.bench_link_retries >= 2) {
+                    fault(Fault::ESC_LOSS);
+                    return;
+                }
+                if (_bench_retry_at_us == 0) {
+                    _bench_retry_at_us = now_us + 4000000U;
+                    return;
+                }
+                if (int32_t(now_us - _bench_retry_at_us) < 0) {
+                    return;
+                }
+                if (!_reader.start(true, true, _target, _uid, now_us, !_port.simulated())) {
+                    fault(Fault::PROTOCOL);
+                    return;
+                }
+                ++_status.bench_link_retries;
+                _bench_retry_at_us = 0;
+                return;
+            }
+#endif
+            // Normal disarmed ESC-loss recovery remains in ChibiOS;
+            // any invalid peer/protocol traffic fails closed.
             fault(_reader.status().state == AP_SpektrumSmartESC_Reader::State::TIMEOUT ?
                 Fault::ESC_LOSS : Fault::PROTOCOL);
             return;

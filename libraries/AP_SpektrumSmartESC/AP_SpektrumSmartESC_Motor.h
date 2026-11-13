@@ -58,6 +58,9 @@ public:
         uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
         bool simulated = true, reverse = false;
+        // ARM-before-link stays monitor-only until a full disarm/rearm.
+        bool bench_monitor = false;
+        uint8_t bench_link_retries = 0;
     };
     AP_SpektrumSmartESC_Motor(AP_SpektrumSmartESC_Bus::Port &port, Owner &owner,
                               const AP_SpektrumSmartESC_Commands::Profile &profile);
@@ -139,6 +142,7 @@ private:
     bool _initial_idle = false, _transition = false, _neutral = false, _have_telemetry = false;
     bool _direction_changed = false;
     bool _armed_seen = false;
+    uint32_t _bench_retry_at_us = 0, _uid = 0;
     uint32_t _epoch = 0, _io_boot = 0, _tx_since = 0, _last_tx = 0, _last_rx = 0;
     uint32_t _reply_since = 0, _neutral_since = 0, _telemetry_since = 0;
     uint32_t _last_peer = 0;

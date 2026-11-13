@@ -3,8 +3,12 @@
 # Opt-in NORMAL ArduPlane arming for non-flight CH1-only commissioning:
 # operator sets SPKT_MOTOR=1 before reboot; no automatic ARM or PWM fallback.
 # UART4 sends only CH1 reference code 768..4608 and solicits ESC telemetry.
-# Real IOMCU inhibit readback, TC-completed zero, and a fresh stopped/zero
-# throttle ESC sensor reply MUST be seen before ARM is allowed.
+# With SPKT_MOTOR=1, an initial ARM request during discovery is allowed
+# ONLY as monitor-only, with zero non-native motor demand and no automatic
+# motor activation on a late link. Disarm and re-arm after link and verified
+# stopped/zero sensor response before any forward control can be considered.
+# Real IOMCU inhibit readback remains required. RX0/telemetry absence must
+# never be confused with a validated ESC response.
 # RC/control/ESC/UART loss, owner loss and disarm still latch motor control off.
 # Channel 7/reverse is deliberately NOT transmitted in this board.
 # The source-derived reference range is NOT a certified Avian calibration.

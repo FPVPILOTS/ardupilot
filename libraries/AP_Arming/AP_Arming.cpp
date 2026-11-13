@@ -1883,6 +1883,15 @@ bool AP_Arming::spektrum_bench_checks(bool report) const
 {
     const auto *vehicle = AP::vehicle();
     if (vehicle != nullptr && vehicle->spektrum_bench_active()) {
+        // Only the separately built ArmedBench image may acknowledge a
+        // fresh, explicitly requested Plane ARM during unlinked discovery.
+        // ARMING_REQUIRE=0 must not turn this into an automatic boot-arm.
+        // The native motor remains monitor-only until DISARM + re-ARM
+        // after a real authenticated link and zero/stopped sensor witness.
+        if (vehicle->spektrum_armed_bench_arm_permitted() &&
+            arming_required() != Required::NO) {
+            return true;
+        }
         if (vehicle->spektrum_motor_selected()) {
             check_failed(report, "SPKT motor not ready: check SPK27");
         } else {

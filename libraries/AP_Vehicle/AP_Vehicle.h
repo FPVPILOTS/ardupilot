@@ -110,6 +110,7 @@ public:
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
     bool spektrum_bench_active() const { return spektrum_smart_esc.arming_blocked(); }
     bool spektrum_motor_selected() const { return spektrum_smart_esc.motor_selected(); }
+    bool spektrum_armed_bench_arm_permitted() const { return spektrum_smart_esc.armed_bench_arm_permitted(); }
 #endif
 
     // setup() is called once during vehicle startup to initialise the
