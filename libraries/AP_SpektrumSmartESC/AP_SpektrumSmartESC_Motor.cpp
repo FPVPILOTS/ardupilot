@@ -4,7 +4,8 @@
 
 bool AP_SpektrumSmartESC_Motor::control_packet(const uint8_t *p, uint8_t n)
 {
-    if (p == nullptr || p[0] != 0xA6 || p[1] != 0xCD || p[2] != n ||
+    if (p == nullptr || (n != 16 && n != 18) ||
+        p[0] != 0xA6 || p[1] != 0xCD || p[2] != n ||
         p[3] != 0 || p[4] < 0x40 || p[4] > 0x4F ||
         p[5] != 0 || p[6] != 0 || p[7] != 0 ||
         p[9] != 0 || p[10] != 0 || p[11] != 0 ||
