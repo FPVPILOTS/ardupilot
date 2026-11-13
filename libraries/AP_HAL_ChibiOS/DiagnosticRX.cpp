@@ -91,7 +91,8 @@ bool DiagnosticRX::framing_only_fault(bool require_quiet) const
     // or release failure into an automatic rearmable recovery path.
     const bool framing_only = _framing != 0 && _errors == _framing &&
         _noise == 0 && _parity == 0 && _overruns == 0 &&
-        _overflow == 0 && _release_errors == 0 && _probe_mode == 0;
+        _overflow == 0 && _release_errors == 0 &&
+        AP_SpektrumSmartESC_UartRecovery::passive_uart_mode(_probe_mode);
     const bool eligible = !require_quiet ||
         _uart_recovery.eligible(_errors, AP_HAL::millis());
     chSysUnlock();
