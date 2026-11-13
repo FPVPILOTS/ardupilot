@@ -12,9 +12,11 @@ public:
 #define AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT 0
 #endif
 #if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
-    // Non-armable AutoLinkFast ONLY: 50ms receive-first period before
-    // requesting ESC 0x40. Not an early-MCU bootstrap. ALL native UART
-    // idle, half-duplex, TC and RX restoration checks remain mandatory.
+    // Dedicated AutoLinkFast and *explicit opt-in* ArmedBench only:
+    // 50ms receive-first period before requesting ESC 0x40. This is
+    // relative to the driver start, NOT the Pixhawk MCU reset or the
+    // ESC battery edge. Other boards retain the original 2-second window.
+    // UART idle, half-duplex, TC, CRC and RX restoration remain mandatory.
     static constexpr uint32_t PREPARE_MS = 50, WINDOW_MS = 5000, RETRY_MS = 50;
 #else
     static constexpr uint32_t PREPARE_MS = 2000, WINDOW_MS = 5000, RETRY_MS = 50;

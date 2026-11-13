@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/spktsmart-armedbench-armtest-20261113
+      - feature/spktsmart-auto-poweron-20261113
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
@@ -42,6 +43,7 @@ jobs:
           ./waf plane
           test -s build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj
           strings build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane | grep -F 'SPK28 ARM MON%u RET%u RDY%u'
+          strings build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane | grep -F 'SPK29 HS ST%u Q%lu FIRST%lums'
           python3 - <<'PY'
           import json
           from pathlib import Path

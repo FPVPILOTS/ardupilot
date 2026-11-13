@@ -66,12 +66,30 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         if (_owner.prepare(nonce, _qualification.io_firmware_crc)) {
             _pending_ms = now_ms;
             _pending = true;
+        } else {
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+            // IOMCU proof can arrive late after a cold boot. Keep trying
+            // only while disarmed: no UART lease, handshake or motor TX is
+            // granted without an actual fresh inhibit receipt.
+            _retry_at_ms = now_ms + 1000U;
+            _auto_retry_disarmed = true;
+#endif
         }
     }
     if (_pending) {
         if (hal.util->get_soft_armed() || uint32_t(now_ms - _pending_ms) >= 200) {
             _pending = false;
             _owner.release();
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+            // Do not permanently strand the battery-on boot when the IO
+            // companion hasn't replied within the 200-ms proof window.
+            // No motor output can start without independent IO proof.
+            if (!_ever_armed && !hal.util->get_soft_armed()) {
+                _retry_at_ms = now_ms + 1000U;
+                _auto_retry_disarmed = true;
+                _retry_requires_framing_quiet = false;
+            }
+#endif
             return;
         }
         if (!_owner.acquire(1)) {

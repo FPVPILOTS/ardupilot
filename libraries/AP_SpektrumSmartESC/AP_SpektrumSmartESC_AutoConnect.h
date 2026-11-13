@@ -40,10 +40,10 @@ public:
 #define AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT 0
 #endif
 #if AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT
-    // COMPARE-ONLY, non-armable dedicated AutoLinkFast board: Spektrum
-    // listens for 50ms on power-on. This is relative to AP AutoLink init,
-    // NOT to the aircraft battery/ESC power-on edge. No other board gets
-    // the shortened policy window. UART/bus-idle and CRC checks unchanged.
+    // Fast startup is enabled only by dedicated board definitions.
+    // AutoLinkFast is non-armable; ArmedBench uses a separate native
+    // handshake coordinator with independent motor interlocks.
+    // This relative timer is NOT an MCU-reset or ESC battery timestamp.
     static constexpr uint32_t STARTUP_LISTEN_MS = 50;
 #else
     static constexpr uint32_t STARTUP_LISTEN_MS = 1000;

@@ -1308,6 +1308,11 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                         unsigned(startup.waiting_for_fe_quiet),
                         unsigned(startup.ever_armed));
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK29 HS ST%u Q%lu FIRST%lums",
+                        unsigned(hs.state),
+                        (unsigned long)hs.tx_frames,
+                        (unsigned long)hs.first_targeted_tc_ms);
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK27 HS B%lu F%lu RP%u E%lu",
                         (unsigned long)hs.rx_bytes,
                         (unsigned long)hs.rx_frames,

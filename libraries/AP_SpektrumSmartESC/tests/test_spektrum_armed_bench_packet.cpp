@@ -46,6 +46,10 @@ int main()
     static_assert(AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL == 1,
                   "Compile this suite only with the isolated bench flag");
     assert(Motor::physical_control_available());
+    static_assert(AP_SpektrumSmartESC_Reader::PREPARE_MS == 50,
+                  "ArmedBench must send its first targeted handshake after 50ms RX-first");
+    static_assert(AP_SpektrumSmartESC_Reader::WINDOW_MS == 5000,
+                  "ArmedBench must keep finite 5-second native handshake window");
     const auto profile = spektrum_production_profile();
     // A selected *bench* build may be syntactically eligible for an
     // explicit disarmed session, but cannot claim physical certification.
@@ -102,6 +106,57 @@ int main()
     assert(!Motor::control_packet(packet, n));
     assert(!Motor::control_packet(packet, 0));
     assert(!Motor::control_packet(nullptr, 16));
+
+    // Cold-start / FC-first: receive-only for 50ms, then actively request
+    // the ESC on FC0 master (0x30). No 0xCD or ARM without reply/telemetry.
+    {
+        BenchPort port;
+        BenchOwner owner;
+        Motor motor(port, owner, profile.channels);
+        assert(motor.start(profile.qualification, true, 0x40,
+                           0x12345678U, 0U, 0U));
+        Motor::Demand d {};
+        owner.r.acquired_ms = d.acquired_ms = 49U;
+        motor.update(d, 49000U, 49U);
+        assert(port.starts == 0);
+        owner.r.acquired_ms = d.acquired_ms = 50U;
+        motor.update(d, 50000U, 50U);
+        assert(port.starts == 1 && port.type == 0x21);
+        assert(motor.status().controls == 0);
+        port.complete = true;
+        owner.r.acquired_ms = d.acquired_ms = 52U;
+        motor.update(d, 52000U, 52U);
+        assert(motor.status().tx_frames == 1);
+        assert(motor.reader_status().first_targeted_tc_ms == 52U);
+        assert(motor.status().controls == 0);
+
+        // Physically observed FC0/ESC0 handshake vector, synthetically
+        // reproduced here using the same parser (not fake readiness).
+        const uint8_t payload[] = {0x40, 0x30, 10, 0, 0,
+                                   0x78, 0x56, 0x34, 0x12};
+        uint8_t frame[80] {};
+        const uint8_t n = AP_SpektrumSmartESC::encode(
+            0x21, payload, sizeof(payload), frame, sizeof(frame));
+        assert(n == 14);
+        for (unsigned i = 0; i < n; i++) {
+            motor.feed(frame[i], 53000U);
+        }
+        assert(motor.reader_status().responses == 1);
+        owner.r.acquired_ms = d.acquired_ms = 54000U / 1000U;
+        motor.update(d, 54000U, 54U);
+        assert(port.starts == 1); // 2-ms half-duplex RX silence.
+        owner.r.acquired_ms = d.acquired_ms = 56000U / 1000U;
+        motor.update(d, 56000U, 56U);
+        assert(port.starts == 2 && port.type == 0x21);
+        port.complete = true;
+        owner.r.acquired_ms = d.acquired_ms = 58000U / 1000U;
+        motor.update(d, 58000U, 58U);
+        owner.r.acquired_ms = d.acquired_ms = 59000U / 1000U;
+        motor.update(d, 59000U, 59U);
+        assert(motor.status().state == Motor::State::IDLE);
+        assert(motor.status().controls == 0);
+        assert(!motor.ready_to_arm(59U, 59000U));
+    }
 
     // Native object receives a real Plane ARM *before* the ESC responds.
     // Only the 0x21 handshake is permitted, even after a finite retry.

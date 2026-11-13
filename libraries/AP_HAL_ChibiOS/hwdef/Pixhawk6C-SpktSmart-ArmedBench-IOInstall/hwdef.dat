@@ -16,6 +16,10 @@
 include ../Pixhawk6C-SpktSmart/hwdef.dat
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-ArmedBench"
 define AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL 1
+# Dedicated single-wire FC master, previously observed as 0x30 -> ESC 0x40:
+# 50-ms UART receive-first startup instead of a 2-second silent interval.
+# Keep the full 5-second bounded discovery window and disarmed reconnect.
+define AP_SPEKTRUM_SMART_ESC_AUTOLINK_FAST_BOOT 1
 
 # This opt-in image retains the special MAIN3-inhibited IOMCU companion.
 # Flashing the .apj may update the IOMCU. NEVER use stock IO firmware here.
