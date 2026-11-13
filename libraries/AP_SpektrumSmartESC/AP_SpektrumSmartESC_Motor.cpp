@@ -4,10 +4,26 @@
 
 bool AP_SpektrumSmartESC_Motor::control_packet(const uint8_t *p, uint8_t n)
 {
-    return p != nullptr && n == 18 && p[0] == 0xA6 && p[1] == 0xCD && p[2] == n &&
-        p[3] == 0 && p[4] >= 0x40 && p[4] <= 0x4F && p[5] == 0 && p[6] == 0 && p[7] == 0 &&
-        p[8] == 0x41 && p[9] == 0 && p[10] == 0 && p[11] == 0 &&
-        (p[12] & 3U) == 0 && (p[14] & 3U) == 0 && AP_SpektrumSmartESC::crc16(p, n) == 0;
+    if (p == nullptr || p[0] != 0xA6 || p[1] != 0xCD || p[2] != n ||
+        p[3] != 0 || p[4] < 0x40 || p[4] > 0x4F ||
+        p[5] != 0 || p[6] != 0 || p[7] != 0 ||
+        p[9] != 0 || p[10] != 0 || p[11] != 0 ||
+        (p[12] & 3U) != 0) {
+        return false;
+    }
+#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+    // Explicitly named, independently source-qualified experimental image:
+    // CH1 only, no CH7 direction, and a bounded reference wire interval.
+    // The FULL production whitelist is deliberately not available here.
+    // These limits do not assert that the real ESC accepts these endpoints.
+    const uint16_t throttle = uint16_t(p[12]) | (uint16_t(p[13]) << 8);
+    return n == 16 && p[8] == 0x01 && throttle >= 768U &&
+        throttle <= 4608U && AP_SpektrumSmartESC::crc16(p, n) == 0;
+#else
+    // Ordinary source-qualified production profile: CH1 and CH7 ONLY.
+    return n == 18 && p[8] == 0x41 && (p[14] & 3U) == 0 &&
+        AP_SpektrumSmartESC::crc16(p, n) == 0;
+#endif
 }
 
 AP_SpektrumSmartESC_Motor::AP_SpektrumSmartESC_Motor(AP_SpektrumSmartESC_Bus::Port &port, Owner &owner,
