@@ -411,12 +411,18 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
         _last_peer = acquisition_us;
         return;
     }
-    if (!_waiting_reply ||
-        uint32_t(acquisition_us - _reply_since) >= 15000U || n != 22 || packet[1] != 0x80 ||
-        packet[3] != _source) {
+    if (n != 22 || packet[1] != 0x80 || packet[3] != _source) {
         fault(Fault::PROTOCOL);
         return;
     }
+    // A CRC-correct ESC sensor response may be acquired after the 15ms
+    // transaction window (or after the previous reply was already consumed).
+    // It is NOT evidence of a fresh command, but dropping that one late
+    // response need not declare the entire link corrupt. The independent
+    // sensor/TC watchdog still faults if valid timely replies stop.
+    const bool reply_current = _waiting_reply &&
+        int32_t(acquisition_us - _reply_since) >= 0 &&
+        uint32_t(acquisition_us - _reply_since) < 15000U;
     // Telemetry does not include a sender ID. Dedicated-bus ownership is required;
     // neither CRC nor a destination proves that the sender is an Avian 130A.
     // A 0x80 sensor packet has no source device ID. It may be a telemetry
@@ -427,6 +433,10 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, decoded) ||
         decoded.valid == 0) {
         fault(Fault::PROTOCOL);
+        return;
+    }
+    if (!reply_current) {
+        _status.late_sensors++;
         return;
     }
     _waiting_reply = false;
