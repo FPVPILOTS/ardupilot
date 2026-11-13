@@ -21,6 +21,13 @@ public:
     void stop();
     AP_SpektrumSmartESC_Motor::Status status() const;
     AP_SpektrumSmartESC_Reader::Status handshake_status() const;
+    // Read-only, mutex-protected startup retry evidence for GCS. Retries
+    // cannot cause ARM or a 0xCD command without real peer/telemetry proof.
+    struct StartupDiagnostics {
+        uint8_t fe_attempts = 0;
+        bool retry_pending = false, waiting_for_fe_quiet = false, ever_armed = false;
+    };
+    StartupDiagnostics startup_diagnostics() const;
     bool ready_to_arm() const;
     // Read-only, fresh ESC-reported zero throttle and zero electrical RPM.
     // The sensor payload has no explicit SRXL2 source ID; the production
