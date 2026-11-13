@@ -6,10 +6,13 @@ on:
       - feature/spktsmart-armedbench-armtest-20261113
       - feature/spktsmart-auto-poweron-20261113
       - feature/spktsmart-boot-timing-fix-20261113
+      - feature/spktsmart-aux7-internal-pullup-20261113
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
       - 'libraries/AP_Vehicle/AP_Vehicle.h'
+      - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp'
+      - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-armedbench-firmware.yml'
   pull_request:
@@ -17,6 +20,8 @@ on:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
       - 'libraries/AP_Vehicle/AP_Vehicle.h'
+      - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp'
+      - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
   workflow_dispatch:
 jobs:
@@ -45,6 +50,11 @@ jobs:
           test -s build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj
           strings build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane | grep -F 'SPK28 ARM MON%u RET%u RDY%u'
           strings build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane | grep -F 'SPK29 HS ST%u Q%lu FIRST%lums'
+          strings build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane | grep -F 'SPK30 PA0 PU%u MODE%u'
+          # A real PA0 pull-up must be present in all three ownership phases.
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 1' libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/hwdef.dat
+          grep -Fq 'PAL_STM32_PUPDR_PULLUP' libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp
+          grep -Fq 'PAL_STM32_PUPDR_PULLUP' libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp
           python3 - <<'PY'
           import json
           from pathlib import Path

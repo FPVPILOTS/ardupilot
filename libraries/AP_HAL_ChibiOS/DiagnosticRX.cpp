@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "DiagnosticRX.h"
+#ifndef AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+#define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 0
+#endif
 #if defined(AP_SPEKTRUM_SMART_ESC_TURN_LAB) && AP_SPEKTRUM_SMART_ESC_TURN_LAB
 #include <AP_IOMCU/AP_IOMCU.h>
 #include <SRV_Channel/SRV_Channel.h>
@@ -52,7 +55,14 @@ void DiagnosticRX::_begin(uint32_t baud, uint16_t, uint16_t)
         chSysUnlock();
         return;
     }
+#if AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+    // Dedicated ArmedBench: hold the half-duplex open-drain wire HIGH with
+    // the internal *weak* 3.3V pull-up in both UART RX and UART TX direction.
+    palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_ALTERNATE(8) |
+                   PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
+#else
     palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_ALTERNATE(8) | PAL_STM32_OTYPE_OPENDRAIN);
+#endif
     _head = _tail = 0;
     _initialized = true;
     start_samples(4);
@@ -115,6 +125,11 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
     }
     if ((GPIOA->MODER & 3U) == 0) {
         status.flags |= 4;
+    }
+    // Bit 4: PA0's actual internal pull-up register, independently
+    // readable even while the UART is receiving or transmitting.
+    if ((GPIOA->PUPDR & 3U) == 1U) {
+        status.flags |= 16;
     }
     if ((GPIOA->MODER & 3U) == 2U && (GPIOA->AFRL & 15U) == 8U && (GPIOA->OTYPER & 1U)) {
         status.flags |= 8;
@@ -541,7 +556,10 @@ void DiagnosticRX::poll()
                                      AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB));
         const bool wrong_mux = (GPIOA->MODER & 3U) != 2U || (GPIOA->AFRL & 15U) != 8U ||
                                !(GPIOA->OTYPER & 1U);
-        if (unexpected_tx || wrong_mux || (UART4->CR2 & USART_CR2_SWAP) || !(UART4->CR3 & USART_CR3_HDSEL)) {
+        const bool missing_pullup = AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP &&
+                                    (GPIOA->PUPDR & 3U) != 1U;
+        if (unexpected_tx || wrong_mux || missing_pullup ||
+            (UART4->CR2 & USART_CR2_SWAP) || !(UART4->CR3 & USART_CR3_HDSEL)) {
             safe_input();
             _errors++;
             _release_errors++;

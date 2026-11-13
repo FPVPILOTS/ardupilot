@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "SpektrumUART4.h"
+#ifndef AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+#define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 0
+#endif
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Reader.h>
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Motor.h>
 
@@ -128,6 +131,7 @@ void SpektrumUART4::service() const
     if (_rx._errors != _error_baseline || !(UART4->CR3 & USART_CR3_HDSEL) ||
         (UART4->CR2 & USART_CR2_SWAP) ||
         (GPIOA->MODER & 3U) != 2U || (GPIOA->AFRL & 15U) != 8U || !(GPIOA->OTYPER & 1U) ||
+        (AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP && (GPIOA->PUPDR & 3U) != 1U) ||
         (UART4->ISR & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE))) {
         _fault = true;
         return;
@@ -319,7 +323,12 @@ bool SpektrumUART4::release_rx_locked()
     const bool was_transmitting = _data != nullptr;
     // Input mode immediately disconnects the UART from the pad, including
     // during an abort. Do not assume TE-clear is instantaneous at the pad.
+#if AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+    // Keep the bus biased HIGH during the RX-turnaround disconnect, too.
+    palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_INPUT_PULLUP);
+#else
     palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_INPUT);
+#endif
     chVTResetI(&_timeout);
     UART4->CR1 &= ~(USART_CR1_TE | USART_CR1_RE | USART_CR1_TCIE);
     UART4->RQR = USART_RQR_TXFRQ | USART_RQR_RXFRQ;
@@ -333,11 +342,17 @@ bool SpektrumUART4::release_rx_locked()
         _rx._errors++;
     }
     if (receive) {
+#if AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+        palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_ALTERNATE(8) |
+                       PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
+#else
         palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_ALTERNATE(8) | PAL_STM32_OTYPE_OPENDRAIN);
+#endif
         if (was_transmitting) {
             _rx._handshake_restored++;
         }
     }
-    return receive;
+    return receive && (!AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP ||
+                       (GPIOA->PUPDR & 3U) == 1U);
 }
 #endif

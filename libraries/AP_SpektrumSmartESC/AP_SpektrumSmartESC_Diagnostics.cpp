@@ -1346,6 +1346,10 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                             (unsigned long)hw.cr3,
                             (unsigned long)hw.isr);
                         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK30 PA0 PU%u MODE%u",
+                            unsigned((hw.flags & 16U) != 0),
+                            unsigned((hw.flags & 8U) != 0));
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                             "SPK27 U FE%lu NE%lu ORE%lu",
                             (unsigned long)hw.framing,
                             (unsigned long)hw.noise,

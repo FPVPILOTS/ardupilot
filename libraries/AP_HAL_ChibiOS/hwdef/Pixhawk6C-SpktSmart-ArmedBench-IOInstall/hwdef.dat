@@ -16,6 +16,9 @@
 include ../Pixhawk6C-SpktSmart/hwdef.dat
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-ArmedBench"
 define AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL 1
+# Only this isolated ArmedBench board enables STM32 PA0 internal weak
+# pull-up in UART4 AF8 open-drain half-duplex; ordinary boards unchanged.
+define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 1
 # Native ArmedBench uses an EXPLICIT fast_power_on reader argument:
 # 50-ms UART RX-first startup; no AutoLinkFast macro from a separate
 # compilation unit. Keep 5-second discovery and disarmed reconnect.
