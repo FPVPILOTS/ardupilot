@@ -105,6 +105,12 @@ AP_SpektrumSmartESC_Motor::Status AP_SpektrumSmartESC_ChibiOS::status() const
     return _motor.status();
 }
 
+AP_SpektrumSmartESC_Reader::Status AP_SpektrumSmartESC_ChibiOS::handshake_status() const
+{
+    WITH_SEMAPHORE(_lock);
+    return _motor.reader_status();
+}
+
 bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
 {
     WITH_SEMAPHORE(_lock);
