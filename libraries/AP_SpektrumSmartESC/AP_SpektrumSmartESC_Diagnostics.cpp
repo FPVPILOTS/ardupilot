@@ -1296,6 +1296,13 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                 if (uint32_t(now - _last_reader_log_ms) >= 5000U) {
                     _last_reader_log_ms = now;
                     const auto hs = _native_motor->handshake_status();
+                    const auto startup = _native_motor->startup_diagnostics();
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK27 RET FE%u P%u Q%u ARM%u",
+                        unsigned(startup.fe_attempts),
+                        unsigned(startup.retry_pending),
+                        unsigned(startup.waiting_for_fe_quiet),
+                        unsigned(startup.ever_armed));
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK27 HS B%lu F%lu RP%u E%lu",
                         (unsigned long)hs.rx_bytes,
