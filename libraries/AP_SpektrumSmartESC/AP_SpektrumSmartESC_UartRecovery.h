@@ -12,6 +12,17 @@ class AP_SpektrumSmartESC_UartRecovery {
 public:
     static constexpr uint32_t QUIET_MS = 500;
 
+    // Strict decision used by the physical native adapter, not a generic
+    // instruction to forgive bad UART traffic. A failed attempt has not
+    // published a single completed frame or entered armed control.
+    static bool allow_native_fe_startup_retry(bool ever_armed, bool armed,
+                                              uint32_t tx_frames, uint32_t controls,
+                                              uint8_t retries, bool framing_only)
+    {
+        return !ever_armed && !armed && tx_frames == 0 && controls == 0 &&
+               retries < 2 && framing_only;
+    }
+
     void record_framing_only(uint32_t now_ms)
     {
         _framing_only_events++;
