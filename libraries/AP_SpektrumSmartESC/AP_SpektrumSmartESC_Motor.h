@@ -69,6 +69,9 @@ public:
     void feed(uint8_t byte, uint32_t acquisition_us);
     void disable();
     const Status &status() const { return _status; }
+    // Read-only handshake evidence. The ChibiOS adapter copies it while
+    // holding the same lock as the UART worker; it cannot grant ARM or TX.
+    AP_SpektrumSmartESC_Reader::Status reader_status() const { return _reader.status(); }
     // Worker may need to retire the previous physical UART transaction
     // before draining RX. Only a true hardware TC may clear this flag;
     // it is never permission to queue a new command.
