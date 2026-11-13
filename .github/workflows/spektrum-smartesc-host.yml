@@ -10,6 +10,11 @@ on:
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Vehicle/AP_Vehicle.cpp'
+      - 'libraries/AP_Vehicle/AP_Vehicle.h'
+      - 'libraries/AP_Arming/AP_Arming.cpp'
+      - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.*'
+      - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.*'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyApp-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-host.yml'
       - 'libraries/AP_HAL/UARTDriver.h'
@@ -17,6 +22,11 @@ on:
   pull_request:
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
+      - 'libraries/AP_Vehicle/AP_Vehicle.h'
+      - 'libraries/AP_Arming/AP_Arming.cpp'
+      - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.*'
+      - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.*'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-host.yml'
 jobs:
   srxl2-host:
