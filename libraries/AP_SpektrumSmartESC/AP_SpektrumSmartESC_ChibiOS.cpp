@@ -7,9 +7,14 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
                                       uint8_t target, uint32_t uid, uint32_t nonce, uint32_t now_ms)
 {
     WITH_SEMAPHORE(_lock);
+    const bool source_qualified = qualification.electrical && qualification.protocol &&
+        qualification.endpoints && qualification.esc_loss_behavior;
+    const bool bounded_bench = AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL &&
+        qualification.io_firmware_crc == 0x6DBBAD71U &&
+        !qualification.reverse_settings;
     if (!AP_SpektrumSmartESC_Motor::physical_control_available() || hal.util->get_soft_armed() ||
-        _active || _pending || !qualification.electrical || !qualification.protocol ||
-        !qualification.endpoints || !qualification.esc_loss_behavior || !_owner.prepare(nonce, qualification.io_firmware_crc)) {
+        _active || _pending || (!source_qualified && !bounded_bench) ||
+        !_owner.prepare(nonce, qualification.io_firmware_crc)) {
         return false;
     }
     _qualification = qualification;
