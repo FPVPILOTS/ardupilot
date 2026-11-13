@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "../AP_SpektrumSmartESC_Motor.h"
 #include "../AP_SpektrumSmartESC_ChannelData.h"
+#include "../AP_SpektrumSmartESC_ProductionProfile.h"
 #include <cassert>
 #include <cstdio>
 
@@ -15,6 +16,22 @@ int main()
     static_assert(AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL == 1,
                   "Compile this suite only with the isolated bench flag");
     assert(Motor::physical_control_available());
+    const auto profile = spektrum_production_profile();
+    // A selected *bench* build may be syntactically eligible for an
+    // explicit disarmed session, but cannot claim physical certification.
+    assert(profile.valid());
+    assert(!profile.operator_qualified);
+    assert(!profile.channels.throttle_verified);
+    assert(!profile.channels.reverse_verified);
+    assert(!profile.qualification.electrical);
+    assert(!profile.qualification.protocol);
+    assert(!profile.qualification.endpoints);
+    assert(!profile.qualification.esc_loss_behavior);
+    assert(!profile.qualification.reverse_settings);
+    assert(profile.esc_id == 0x40);
+    assert(profile.channels.zero == 768);
+    assert(profile.channels.full == 4608);
+    assert(profile.qualification.io_firmware_crc == 0x6DBBAD71U);
 
     uint16_t values[32] {};
     uint8_t packet[80] {};
