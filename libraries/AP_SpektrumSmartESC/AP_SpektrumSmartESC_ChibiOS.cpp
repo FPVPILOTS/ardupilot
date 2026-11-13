@@ -7,9 +7,14 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
                                       uint8_t target, uint32_t uid, uint32_t nonce, uint32_t now_ms)
 {
     WITH_SEMAPHORE(_lock);
+    const bool source_qualified = qualification.electrical && qualification.protocol &&
+        qualification.endpoints && qualification.esc_loss_behavior;
+    const bool bounded_bench = AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL &&
+        qualification.io_firmware_crc == 0x6DBBAD71U &&
+        !qualification.reverse_settings;
     if (!AP_SpektrumSmartESC_Motor::physical_control_available() || hal.util->get_soft_armed() ||
-        _active || _pending || !qualification.electrical || !qualification.protocol ||
-        !qualification.endpoints || !qualification.esc_loss_behavior || !_owner.prepare(nonce, qualification.io_firmware_crc)) {
+        _active || _pending || (!source_qualified && !bounded_bench) ||
+        !_owner.prepare(nonce, qualification.io_firmware_crc)) {
         return false;
     }
     _qualification = qualification;
@@ -18,6 +23,8 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     _pending_ms = now_ms;
     _pending = true;
     _auto_retry_disarmed = false;
+    _retry_requires_framing_quiet = false;
+    _startup_framing_retries = 0;
     _ever_armed = false;
     return true;
 }
@@ -45,6 +52,16 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         !_ever_armed && !hal.util->get_soft_armed() &&
         int32_t(now_ms - _retry_at_ms) >= 0) {
         _auto_retry_disarmed = false;
+        // After a strictly FE-only startup fault, an automatic disarmed
+        // reconnect is allowed only if *all* UART errors were framing-only
+        // and at least 500ms have elapsed since the last such error.
+        // Do not clear the counters or bypass normal UART owner acquisition.
+        const bool quiet = !_retry_requires_framing_quiet ||
+            _uart.framing_only_fault(true);
+        _retry_requires_framing_quiet = false;
+        if (!quiet) {
+            return; // Other error or continuing FE: latch, no retry.
+        }
         const uint32_t nonce = (_uid ^ now_ms) | 1U;
         if (_owner.prepare(nonce, _qualification.io_firmware_crc)) {
             _pending_ms = now_ms;
@@ -100,6 +117,24 @@ AP_SpektrumSmartESC_Motor::Status AP_SpektrumSmartESC_ChibiOS::status() const
     return _motor.status();
 }
 
+AP_SpektrumSmartESC_Reader::Status AP_SpektrumSmartESC_ChibiOS::handshake_status() const
+{
+    WITH_SEMAPHORE(_lock);
+    return _motor.reader_status();
+}
+
+AP_SpektrumSmartESC_ChibiOS::StartupDiagnostics
+AP_SpektrumSmartESC_ChibiOS::startup_diagnostics() const
+{
+    WITH_SEMAPHORE(_lock);
+    StartupDiagnostics result {};
+    result.fe_attempts = _startup_framing_retries;
+    result.retry_pending = _auto_retry_disarmed;
+    result.waiting_for_fe_quiet = _retry_requires_framing_quiet;
+    result.ever_armed = _ever_armed;
+    return result;
+}
+
 bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
 {
     WITH_SEMAPHORE(_lock);
@@ -131,12 +166,26 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
         {
             WITH_SEMAPHORE(_lock);
             if (_active) {
-                _motor.update(_demand,AP_HAL::micros(),AP_HAL::millis());
+                // Retire a previously queued UART transmission first: the
+                // native driver must restore RX after actual hardware TC
+                // before the parser can accept an incoming sensor response.
+                // Never run the general control/timeout watchdog *before*
+                // consuming already-acquired RX bytes; an otherwise fresh
+                // 0x80 reply may be waiting in the UART ring when this
+                // worker wakes up after a scheduler delay.
+                if (_motor.transmitting()) {
+                    _motor.update(_demand, AP_HAL::micros(), AP_HAL::millis());
+                }
                 uint8_t byte;
                 uint32_t timestamp_ms;
                 for (uint16_t i=0; i<512 && _uart.read_timed(byte,timestamp_ms); i++) {
                     _motor.feed(byte,timestamp_ms*1000U);
                 }
+                // Now test freshness against the newest complete CRC-checked
+                // input and schedule at most the normal next control frame.
+                // All arming, IO-owner, RC and UART interlocks remain in the
+                // motor controller itself.
+                _motor.update(_demand, AP_HAL::micros(), AP_HAL::millis());
 #if HAL_WITH_ESC_TELEM
                 AP_SpektrumSmartESC::Telemetry current;
                 if (!_motor.telemetry(current,AP_HAL::micros())) { _receiver.invalidate_native(); }
@@ -154,8 +203,28 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                     // Only NO ESC / stale solicited telemetry while never
                     // armed is eligible for deferred handshake retry.
                     // UART/ownership/protocol/RC/arming faults latch shut.
-                    if (why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS &&
-                        !_ever_armed && !hal.util->get_soft_armed()) {
+                    const auto s = _motor.status();
+                    const bool disarmed = !_ever_armed && !hal.util->get_soft_armed() &&
+                        !_demand.armed;
+                    // A FE-only startup glitch (actual 2026-11-13 logs:
+                    // F7, FE3/7, TX0, CD0, RX B0/1) may be transient during
+                    // ESC boot. Retry at most twice and only after quiet.
+                    // A UART fault after any completed frame, nonzero
+                    // demand, bad RX classification or ARM still latches.
+                    const bool initial_fe =
+                        why == AP_SpektrumSmartESC_Motor::Fault::UART &&
+                        _demand.magnitude == 0 && !_demand.reverse &&
+                        AP_SpektrumSmartESC_UartRecovery::allow_native_fe_startup_retry(
+                            _ever_armed, hal.util->get_soft_armed() || _demand.armed,
+                            s.tx_frames, s.controls, _startup_framing_retries,
+                            _uart.framing_only_fault(false));
+                    if (initial_fe) {
+                        _startup_framing_retries++;
+                        _retry_requires_framing_quiet = true;
+                        _retry_at_ms = AP_HAL::millis() + 1000U;
+                        _auto_retry_disarmed = true;
+                    } else if (disarmed && why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS) {
+                        _retry_requires_framing_quiet = false;
                         _retry_at_ms = AP_HAL::millis() + 4000U;
                         _auto_retry_disarmed = true;
                     }

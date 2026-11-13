@@ -51,6 +51,10 @@ public:
     bool read_timed(uint8_t &byte, uint32_t &timestamp_ms) override;
     uint32_t receive_errors() const override;
     bool receive_diagnostics(ReceiveDiagnostics &status) const override;
+    // Pure framing errors during disarmed startup can be retried after the
+    // existing 500ms quiet-window policy. Other UART/mux/overflow/cleanup
+    // errors remain latched. No armed or nonzero-motor recovery.
+    bool framing_only_fault(bool require_quiet) const;
 protected:
     void _begin(uint32_t baud, uint16_t rx, uint16_t tx) override;
     void _end() override;

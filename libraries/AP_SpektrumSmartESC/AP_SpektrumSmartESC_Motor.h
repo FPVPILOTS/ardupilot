@@ -55,6 +55,7 @@ public:
         State state = State::DISABLED;
         Fault fault = Fault::NONE;
         uint32_t tx_frames = 0, tx_bytes = 0, controls = 0, telemetry = 0;
+        uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
         bool simulated = true, reverse = false;
     };
@@ -68,13 +69,26 @@ public:
     void feed(uint8_t byte, uint32_t acquisition_us);
     void disable();
     const Status &status() const { return _status; }
+    // Read-only handshake evidence. The ChibiOS adapter copies it while
+    // holding the same lock as the UART worker; it cannot grant ARM or TX.
+    AP_SpektrumSmartESC_Reader::Status reader_status() const { return _reader.status(); }
+    // Worker may need to retire the previous physical UART transaction
+    // before draining RX. Only a true hardware TC may clear this flag;
+    // it is never permission to queue a new command.
+    bool transmitting() const { return _tx; }
     bool telemetry(AP_SpektrumSmartESC::Telemetry &data, uint32_t now_us) const;
     uint32_t telemetry_age_us(uint32_t now_us) const { return uint32_t(now_us - _telemetry_since); }
     bool ready_to_arm(uint32_t now_ms, uint32_t now_us) const
     {
         return _leased && (_status.state == State::IDLE || _status.state == State::FORWARD) &&
-            owned(now_ms) && _initial_idle && !_armed_seen && !_waiting_reply &&
+            owned(now_ms) && _initial_idle && !_armed_seen &&
             _status.fault == Fault::NONE && _status.controls != 0 &&
+            // Another ordinary CH1=zero telemetry poll may already be awaiting
+            // a reply when Plane checks ARM readiness. Do not make the ARM
+            // gate depend on that narrow bus-slot phase: the previous
+            // TC-completed neutral command and an independently fresh,
+            // stopped/zero-throttle 0x80 sample remain mandatory. Failure of
+            // the pending poll is still handled by the motor watchdog.
             // A handshake-only bench session never qualifies for flight arming.
             !_profile.handshake_only_bench &&
             _status.throttle == _profile.zero && !_status.reverse &&

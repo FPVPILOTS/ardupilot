@@ -1883,7 +1883,11 @@ bool AP_Arming::spektrum_bench_checks(bool report) const
 {
     const auto *vehicle = AP::vehicle();
     if (vehicle != nullptr && vehicle->spektrum_bench_active()) {
-        check_failed(report, "SPKT bench active: disable and reboot");
+        if (vehicle->spektrum_motor_selected()) {
+            check_failed(report, "SPKT motor not ready: check SPK27");
+        } else {
+            check_failed(report, "SPKT bench active: disable and reboot");
+        }
         return false;
     }
     return true;

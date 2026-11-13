@@ -16,16 +16,17 @@ struct AP_SpektrumSmartESC_ProductionProfile {
     bool valid() const
     {
 #if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
-        // Explicit NON-FLIGHT, separately named build: digital CH1 only,
-        // 0..6% of the Spektrum reference full-scale wire interval. These
-        // are trial values, not physical full-throttle certification.
-        // The operator must still set SPKT_MOTOR=1 and ARM normally,
-        // and live TC-correlated zero ESC telemetry is required to arm.
-        return operator_qualified && esc_id == 0x40 &&
+        // EXPLICIT NON-FLIGHT commissioning image, selected only through
+        // both its dedicated board build and the persistent SPKT_MOTOR=1
+        // operator parameter. CH1 is restricted to a reference candidate
+        // 768..4608, with CH7 absent. These are NOT certified ESC endpoints,
+        // so do not relabel the unverified source flags below as true.
+        // Instead, ARM readiness is earned from actual IO inhibit ownership,
+        // completed CH1=768 UART transmission and fresh physical 0x80
+        // zero-throttle/zero-eRPM replies, alongside normal RC/failsafe gates.
+        return esc_id == 0x40 &&
             qualification.io_firmware_crc == 0x6DBBAD71U &&
-            qualification.electrical && qualification.protocol &&
-            qualification.endpoints && qualification.esc_loss_behavior &&
-            channels.throttle_verified && channels.throttle_channel == 0 &&
+            channels.throttle_channel == 0 &&
             channels.zero == 768U && channels.full == 4608U &&
             !channels.reverse_verified && !qualification.reverse_settings &&
             !channels.handshake_only_bench;
@@ -51,13 +52,12 @@ struct AP_SpektrumSmartESC_ProductionProfile {
 inline AP_SpektrumSmartESC_ProductionProfile spektrum_production_profile()
 {
 #if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
-    // NON-FLIGHT commissioning target exists to COMPILE and TEST the
-    // eventual normal-arming integration. A board define, operator intent,
-    // or source-derived estimate is NOT hardware qualification.
-    // Keep the proposed CH1 wire values for simulation/trace comparison
-    // but leave ALL physical capabilities unqualified until reviewed
-    // evidence and dedicated hardware tests prove them. A build must not
-    // silently grant motor TX/arming simply by selecting this hwdef.
+    // NON-FLIGHT commissioned bench profile: opt-in via SPKT_MOTOR=1.
+    // Keep all physical-certification booleans false: the bounded CH1 range
+    // is an experimental wire candidate, not a reviewed Avian calibration.
+    // Normal ArduPlane ARM is withheld until real IO/ESC zero witnesses
+    // arrive; forward-only digital control is capped in the native UART
+    // whitelist and all RC/control/ESC loss latches remain active.
     AP_SpektrumSmartESC_ProductionProfile p;
     p.operator_qualified = false;
     p.esc_id = 0x40;

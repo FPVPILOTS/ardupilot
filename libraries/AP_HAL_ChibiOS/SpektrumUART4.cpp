@@ -12,7 +12,7 @@ SpektrumUART4 *SpektrumUART4::_active;
 
 // No IRQ is allocated in the shipped, unverified build. The handler's logic
 // below is still compiled and type-checked with the actual H743 headers.
-#if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) && !defined(SPKTSMART_UART4_REGISTER_TEST)
+#if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) && !defined(SPKTSMART_UART4_REGISTER_TEST)
 OSAL_IRQ_HANDLER(STM32_UART4_HANDLER);
 OSAL_IRQ_HANDLER(STM32_UART4_HANDLER)
 {
@@ -35,7 +35,7 @@ bool SpektrumUART4::owned() const
 bool SpektrumUART4::acquire()
 {
     // This constant check also guards initialization, not just TDR writes.
-    if (!(AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) ||
+    if (!(AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) ||
         !hal.scheduler->in_main_thread()) {
         return false;
     }
@@ -219,7 +219,8 @@ bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
 #endif
          ) :
         AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? AP_SpektrumSmartESC_Lab::packet(data, length) :
-        ((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED && AP_SpektrumSmartESC_Reader::handshake_packet(data, length)) ||
+        (((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL) &&
+          AP_SpektrumSmartESC_Reader::handshake_packet(data, length)) ||
          (AP_SpektrumSmartESC_Motor::physical_control_available() && AP_SpektrumSmartESC_Motor::control_packet(data, length)));
     if (!allowed) {
         return false;

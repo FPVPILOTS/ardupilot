@@ -154,6 +154,36 @@ TEST(SpektrumMotor, PhysicalPortAlwaysBlocked)
     EXPECT_EQ(f.port.starts,0U); EXPECT_FALSE(f.owner.held);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::QUALIFICATION);
 }
+TEST(SpektrumMotor, NativeFC0HandshakeAcceptsRealAvianDestination)
+{
+    // The physical Avian replied with source 0x40 / destination 0x30
+    // during the earlier working TurnLab session. Verify the native
+    // master reader really accepts that response without using the
+    // simulator-only FC0x31 fixture.
+    AP_SpektrumSmartESC_Reader reader;
+    EXPECT_TRUE(reader.start(true, true, 0x40, 0x12345678U, 0, true));
+    EXPECT_EQ(reader.status().source, 0x30);
+    uint8_t query[80] {};
+    EXPECT_EQ(reader.prepare(2001000, query, sizeof(query)), 14U);
+    EXPECT_EQ(query[3], 0x30);
+    EXPECT_EQ(query[4], 0x40);
+    EXPECT_TRUE(reader.sent(2003000));
+    const uint8_t response[] = {0x40, 0x30, 1, 0, 0, 0x78, 0x56, 0x34, 0x12};
+    uint8_t packet[80] {};
+    const auto n = Engine::encode(0x21, response, sizeof(response), packet, sizeof(packet));
+    EXPECT_EQ(n, 14U);
+    for (unsigned i = 0; i < n; i++) {
+        reader.feed(packet[i], 2005000);
+    }
+    EXPECT_EQ(reader.status().responses, 1U);
+    EXPECT_EQ(reader.status().device, 0x40);
+    EXPECT_EQ(reader.status().last_hs_dst, 0x30);
+    EXPECT_EQ(reader.status().state, AP_SpektrumSmartESC_Reader::State::CONFIRM_TX);
+    EXPECT_EQ(reader.prepare(2008000, query, sizeof(query)), 14U);
+    EXPECT_EQ(query[4], 0xFF);
+    EXPECT_TRUE(reader.sent(2010000));
+    EXPECT_EQ(reader.status().state, AP_SpektrumSmartESC_Reader::State::DISCOVERED);
+}
 TEST(SpektrumMotor, DedicatedFCMasterAndDisarmedRCBoot)
 {
     // Spektrum's dedicated FC0 master identity 0x30 was verified against
@@ -409,6 +439,19 @@ TEST(SpektrumMotor, EchoAndReleaseFailure)
     EXPECT_EQ(release.motor.status().fault,Motor::Fault::TURNAROUND);
     EXPECT_FALSE(release.motor.start(qualification(),true,0x40,1,80000,80));
 }
+TEST(SpektrumMotor, PrimaryUARTFailureIsNotOverwrittenByCleanupFault)
+{
+    Fixture f; f.discover(); f.tick(70000);
+    f.port.release_ok = false;
+    f.port.collide = true;
+    f.tick(71000);
+    // A failed RX teardown must not turn the real UART error into F14,
+    // otherwise actual on-board failure attribution becomes impossible.
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::UART);
+    EXPECT_EQ(f.motor.status().state,Motor::State::FAULT);
+    EXPECT_FALSE(f.owner.held);
+    EXPECT_EQ(f.motor.status().tx_frames,2U); // prior discovery only
+}
 TEST(SpektrumMotor, TelemetryFreshnessAndCorruptResponse)
 {
     Fixture f; f.discover(); f.cycle(70000);
@@ -421,6 +464,22 @@ TEST(SpektrumMotor, TelemetryFreshnessAndCorruptResponse)
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
     f.tick(170000);
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS); // CRC-bad reply cannot renew telemetry freshness.
+}
+TEST(SpektrumMotor, LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry)
+{
+    Fixture f; f.discover(); f.cycle(70000);
+    EXPECT_EQ(f.motor.status().telemetry,1U);
+    f.tick(83000); f.port.complete=true; f.tick(85000);
+    f.reply(101000); // 16ms after TC: too late for the 15ms reply slot
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().late_sensors,1U);
+    EXPECT_EQ(f.motor.status().telemetry,1U); // no refresh or ARM proof
+    f.tick(104000); // >2ms after physically acquired late sensor
+    f.port.complete=true; f.tick(106000);
+    f.reply(107000); // next solicited sensor is inside its own reply slot
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().telemetry,2U);
+    EXPECT_EQ(f.motor.status().late_sensors,1U);
 }
 TEST(SpektrumMotor, StaleDemandAndReceipt)
 {
@@ -527,11 +586,19 @@ TEST(SpektrumMotor, ArmingNeedsCompletedNeutralReplyAndFreshOwnership)
     EXPECT_FALSE(f.motor.ready_to_arm(72,72000));
     f.reply(73000);
     EXPECT_TRUE(f.motor.ready_to_arm(73,73000));
+    // The normal 11ms SRXL2 bus starts another zero-throttle 0xCD,
+    // whose reply is pending when an asynchronous ARM check occurs.
+    // Readiness must be based on the *previous* TC-completed zero and
+    // fresh valid stopped telemetry, not the exact slot phase.
+    f.tick(81000);
+    f.port.complete=true; f.tick(83000);
+    EXPECT_EQ(f.motor.status().controls,2U);
+    EXPECT_TRUE(f.motor.ready_to_arm(83,83000));
     f.owner.r.main3_inhibited=false;
-    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+    EXPECT_FALSE(f.motor.ready_to_arm(83,83000));
     f.owner.r.main3_inhibited=true;
     f.motor.disable();
-    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+    EXPECT_FALSE(f.motor.ready_to_arm(83,83000));
 }
 
 TEST(SpektrumMotor, ControlCadenceIsMeasuredStartToStartNotAfterTC)
@@ -720,10 +787,10 @@ TEST(SpektrumMotor, WrongSensorReplyIsNotSuccessfulControlAck)
 int main()
 {
     PublishedRevKChannelVector(); CodecBoundsOrderingAndFailsafe(); PhysicalPortAlwaysBlocked();
-    QualificationAndStartupNeutral(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
+    QualificationAndStartupNeutral(); NativeFC0HandshakeAcceptsRealAvianDestination(); DedicatedFCMasterAndDisarmedRCBoot(); ThrottleQuartersAndChannelIsolation(); SixPercentMotorTurnIsOnlyATestDemand(); NormalMotorPathRetainsFullConfiguredThrottleRange(); ReverseDwellAndReturn();
     BoundedSixPercentForwardThenReverseRequiresStoppedWitness(); ReverseTestLatchesOffOnRCLoss();
     SafetyFaultsLatchAndNeverReenablePWM(); IOResetAndFailsafeInhibit(); TimeoutInvalidReplyAndNoRetry();
-    EchoAndReleaseFailure(); TelemetryFreshnessAndCorruptResponse(); StaleDemandAndReceipt();
+    EchoAndReleaseFailure(); PrimaryUARTFailureIsNotOverwrittenByCleanupFault(); TelemetryFreshnessAndCorruptResponse(); LateValidSensorDoesNotLatchProtocolFaultOrRenewTelemetry(); StaleDemandAndReceipt();
     IndependentMillisSurvivesMicrosWrap();
     BusBusyNeverRetriesForever();
     FinalPlaneAdapterPreservesRangeAndDirection(); PlaneAdapterCannotUseOtherOutputsOrImplicitReverse();
@@ -737,7 +804,7 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("35 prepared master/command safety tests passed (mock transport only)");
+    std::puts("38 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()

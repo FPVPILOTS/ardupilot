@@ -1282,9 +1282,78 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     (unsigned long)s.controls,
                     (unsigned long)s.telemetry);
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                    "SPK27 SENSOR LATE%lu",
+                    (unsigned long)s.late_sensors);
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 CH1%u CH7%u REV%u RDY%u",
                     unsigned(s.throttle), unsigned(s.direction),
                     unsigned(s.reverse), unsigned(motor_arming_ready()));
+                // Physical 2026-11-13 evidence: repeated 0x21 UART true
+                // TC (TX92) but never a native discovery/CH1 frame (CD0).
+                // Every 5s distinguish *no RX bytes at all* from valid but
+                // non-addressed 0x21 announcements, CRC failures and echoes.
+                // Counters are read-only and never relax an ARM interlock.
+                if (uint32_t(now - _last_reader_log_ms) >= 5000U) {
+                    _last_reader_log_ms = now;
+                    const auto hs = _native_motor->handshake_status();
+                    const auto startup = _native_motor->startup_diagnostics();
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK27 RET FE%u P%u Q%u ARM%u",
+                        unsigned(startup.fe_attempts),
+                        unsigned(startup.retry_pending),
+                        unsigned(startup.waiting_for_fe_quiet),
+                        unsigned(startup.ever_armed));
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK27 HS B%lu F%lu RP%u E%lu",
+                        (unsigned long)hs.rx_bytes,
+                        (unsigned long)hs.rx_frames,
+                        unsigned(hs.responses),
+                        (unsigned long)hs.echoes);
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK27 HS AN%lu BAD%lu CRC%lu",
+                        (unsigned long)hs.startup_announcements,
+                        (unsigned long)hs.unexpected,
+                        (unsigned long)hs.crc_errors);
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK27 HS S%02X D%02X P%u T%02X",
+                        unsigned(hs.last_hs_src),
+                        unsigned(hs.last_hs_dst),
+                        unsigned(hs.last_hs_priority),
+                        unsigned(hs.type));
+                    auto *port = hal.diagnostic_rx_uart();
+                    AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+                    if (port != nullptr && port->receive_diagnostics(hw)) {
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK27 U FL%u RX%lu ER%lu",
+                            unsigned(hw.flags),
+                            (unsigned long)hw.last_uart_rx_ms,
+                            (unsigned long)port->receive_errors());
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK27 U FE%lu NE%lu ORE%lu",
+                            (unsigned long)hw.framing,
+                            (unsigned long)hw.noise,
+                            (unsigned long)hw.overruns);
+                    }
+                }
+                // A pre-first-TC TURNAROUND can otherwise produce only
+                // "F14 TX0", hiding exactly why the native PA0/UART4
+                // instance stopped. Read hardware only through the
+                // existing guarded diagnostics (no TX, no ARM override).
+                if (s.fault == AP_SpektrumSmartESC_Motor::Fault::TURNAROUND) {
+                    auto *uart4 = hal.diagnostic_rx_uart();
+                    AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+                    if (uart4 != nullptr && uart4->receive_diagnostics(hw)) {
+                        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                            "SPK27 U FL%u REL%lu FE%lu",
+                            unsigned(hw.flags),
+                            (unsigned long)hw.release_errors,
+                            (unsigned long)hw.framing);
+                        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                            "SPK27 U CR1%08lX CR3%08lX",
+                            (unsigned long)hw.cr1,
+                            (unsigned long)hw.cr3);
+                    }
+                }
             } else {
                 GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
                     "SPK27 MOTOR BLOCKED: NO QUALIFIED SESSION");

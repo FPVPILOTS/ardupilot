@@ -84,6 +84,21 @@ uint32_t DiagnosticRX::receive_errors() const
     return errors;
 }
 
+bool DiagnosticRX::framing_only_fault(bool require_quiet) const
+{
+    chSysLock();
+    // Do not turn a TX ownership/mux failure, FIFO overrun, noise, parity
+    // or release failure into an automatic rearmable recovery path.
+    const bool framing_only = _framing != 0 && _errors == _framing &&
+        _noise == 0 && _parity == 0 && _overruns == 0 &&
+        _overflow == 0 && _release_errors == 0 &&
+        AP_SpektrumSmartESC_UartRecovery::passive_uart_mode(_probe_mode);
+    const bool eligible = !require_quiet ||
+        _uart_recovery.eligible(_errors, AP_HAL::millis());
+    chSysUnlock();
+    return framing_only && eligible;
+}
+
 bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
 {
     chSysLock();
@@ -123,7 +138,8 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
         status.handshake_flags |= 32;
     }
 #ifndef SPKTSMART_RX_REGISTER_TEST
-    if ((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) &&
+    if ((AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL ||
+         AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) &&
         _handshake_port != nullptr && _handshake_port->owned()) {
         status.handshake_flags |= 2;
         if (_handshake_port->_done) {
@@ -487,7 +503,8 @@ void DiagnosticRX::poll()
 {
     chSysLock();
 #ifndef SPKTSMART_RX_REGISTER_TEST
-    if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) {
+    if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL ||
+        AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) {
         SpektrumUART4::service_active_locked();
     }
 #endif
@@ -511,10 +528,17 @@ void DiagnosticRX::poll()
     if (_initialized) {
         // Like the output/capture ownership checks in RCOutput, stop rather
         // than continuing under an unexpected peripheral configuration.
-        // The experimental port may enable TE only in a validated build.
+        // In the explicitly opted-in ArmedBench, native UART4 TC/IRQ
+        // is permitted just like the special laboratory bus. Without
+        // this gate the 1kHz RX poll forcefully disconnects PA0 whenever
+        // the motor TX asserts TE, causing a TURNAROUND fault before
+        // any completed 0x21/0xCD frame is observed.
         const bool unexpected_tx = (UART4->CR1 & USART_CR1_TE) &&
                                   (_experimental_owner == nullptr ||
-                                   !(AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB));
+                                   !(AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED ||
+                                     AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL ||
+                                     AP_SPEKTRUM_SMART_ESC_LAB_ONLY ||
+                                     AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB));
         const bool wrong_mux = (GPIOA->MODER & 3U) != 2U || (GPIOA->AFRL & 15U) != 8U ||
                                !(GPIOA->OTYPER & 1U);
         if (unexpected_tx || wrong_mux || (UART4->CR2 & USART_CR2_SWAP) || !(UART4->CR3 & USART_CR3_HDSEL)) {

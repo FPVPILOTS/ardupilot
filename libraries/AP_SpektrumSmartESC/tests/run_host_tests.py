@@ -29,6 +29,7 @@ def main():
     rx_witness_executable = args.out.resolve() / 'test_spektrum_post_poll_diag.exe'
     turn_executable = args.out.resolve() / 'test_spektrum_turnlab.exe'
     motor_executable = args.out.resolve() / 'test_spektrum_motor.exe'
+    armed_bench_executable = args.out.resolve() / 'test_spektrum_armed_bench_packet.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -116,6 +117,18 @@ def main():
              str(library / 'tests/test_spektrum_motor.cpp'),
              '-o', str(motor_executable)],
             [str(motor_executable)],
+            # Exact source-level ArmedBench transport/whitelist contract. It
+            # never grants the physical production profile or sends UART.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             '-DSPKTSMART_STANDALONE_TEST',
+             '-DAP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL=1',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
+             str(library / 'AP_SpektrumSmartESC_ChannelData.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Motor.cpp'),
+             str(library / 'tests/test_spektrum_armed_bench_packet.cpp'),
+             '-o', str(armed_bench_executable)],
+            [str(armed_bench_executable)],
         ]
         if args.arm_cxx:
             commands.append([

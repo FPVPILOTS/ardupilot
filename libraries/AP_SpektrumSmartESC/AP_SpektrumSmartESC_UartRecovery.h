@@ -12,6 +12,27 @@ class AP_SpektrumSmartESC_UartRecovery {
 public:
     static constexpr uint32_t QUIET_MS = 500;
 
+    // DiagnosticRX::start_samples(4) is the normal reserved PA0 UART4
+    // electrical monitoring mode after _begin(). It is not an operator
+    // GPIO-probe request. A previous recovery check incorrectly required
+    // mode==0, permanently excluding every healthy initialized native
+    // UART4 session from the disarmed FE-only startup retry.
+    static constexpr bool passive_uart_mode(uint8_t mode)
+    {
+        return mode == 0 || mode == 4;
+    }
+
+    // Strict decision used by the physical native adapter, not a generic
+    // instruction to forgive bad UART traffic. A failed attempt has not
+    // published a single completed frame or entered armed control.
+    static bool allow_native_fe_startup_retry(bool ever_armed, bool armed,
+                                              uint32_t tx_frames, uint32_t controls,
+                                              uint8_t retries, bool framing_only)
+    {
+        return !ever_armed && !armed && tx_frames == 0 && controls == 0 &&
+               retries < 2 && framing_only;
+    }
+
     void record_framing_only(uint32_t now_ms)
     {
         _framing_only_events++;
