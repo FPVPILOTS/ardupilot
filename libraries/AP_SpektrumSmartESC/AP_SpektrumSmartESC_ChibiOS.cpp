@@ -123,6 +123,18 @@ AP_SpektrumSmartESC_Reader::Status AP_SpektrumSmartESC_ChibiOS::handshake_status
     return _motor.reader_status();
 }
 
+AP_SpektrumSmartESC_ChibiOS::StartupDiagnostics
+AP_SpektrumSmartESC_ChibiOS::startup_diagnostics() const
+{
+    WITH_SEMAPHORE(_lock);
+    StartupDiagnostics result {};
+    result.fe_attempts = _startup_framing_retries;
+    result.retry_pending = _auto_retry_disarmed;
+    result.waiting_for_fe_quiet = _retry_requires_framing_quiet;
+    result.ever_armed = _ever_armed;
+    return result;
+}
+
 bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
 {
     WITH_SEMAPHORE(_lock);
