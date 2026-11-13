@@ -43,5 +43,9 @@ private:
     bool _pending = false, _active = false;
     bool _thread_started = false, _restore_pending = false;
     bool _auto_retry_disarmed = false, _ever_armed = false;
+    // At most two disarmed, no-control, pure-FE startup retries.
+    // Not a generic UART recovery; never used during or after ARM.
+    bool _retry_requires_framing_quiet = false;
+    uint8_t _startup_framing_retries = 0;
 };
 #endif
