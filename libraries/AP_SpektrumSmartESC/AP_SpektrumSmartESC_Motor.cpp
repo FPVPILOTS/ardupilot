@@ -164,6 +164,15 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us,
     if (_status.state == State::DISABLED || _status.state == State::FAULT) {
         return;
     }
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // EarlyNative is a *non-armable* commissioning build. This motor-level
+    // gate is independent of AP_Arming configuration or a forced ARM.
+    // Even the inherited ArmedBench monitor-only exception is prohibited.
+    if (requested.armed) {
+        fault(Fault::DISARMED);
+        return;
+    }
+#endif
     // Only the isolated experimental ArmedBench image may acknowledge Plane
     // ARM while the ESC is still discovering. This is an observation-only
     // ARM edge: do not forward it to the motor until the pilot DISARMS and
