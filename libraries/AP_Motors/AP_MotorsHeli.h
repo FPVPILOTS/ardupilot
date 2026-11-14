@@ -256,6 +256,7 @@ protected:
     AP_Int16        _cyclic_max;                // Maximum cyclic angle of the swash plate in centi-degrees
     AP_Int16        _collective_min;            // Lowest possible servo position for the swashplate
     AP_Int16        _collective_max;            // Highest possible servo position for the swashplate
+    AP_Int8         _swash_pwm_mode;             // 0 legacy fixed endpoints, 1 per-servo range
     AP_Int8         _servo_mode;                // Pass radio inputs directly to servos during set-up through mission planner
     AP_Int8         _servo_test;                // sets number of cycles to test servo movement on bootup
     AP_Float        _collective_hover;          // estimated collective required to hover throttle in the range 0 ~ 1
