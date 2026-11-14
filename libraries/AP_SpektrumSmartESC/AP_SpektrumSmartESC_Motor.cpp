@@ -568,9 +568,28 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     AP_SpektrumSmartESC::Telemetry decoded {};
     if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, decoded) ||
         decoded.valid == 0) {
+        if (_status.unusable_sensor_frames == 0) {
+            _status.unusable_id = packet[4];
+            _status.unusable_secondary = packet[5];
+            _status.unusable_b2 = packet[6];
+            _status.unusable_b3 = packet[7];
+        }
+        ++_status.unusable_sensor_frames;
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+        // The explicitly unarmable EarlyNative image can OBSERVE other
+        // CRC-correct 0x80 sensor types. Spektrum telemetry has many
+        // sensor IDs besides ESC 0x20 (including 0x00 NODATA).
+        // Do NOT acknowledge a control, refresh motor telemetry,
+        // mark the ESC stopped, or extend the authenticated peer timer.
+        // Existing 75ms freshness / 15ms reply watchdogs still apply.
+        record_protocol_event(ProtocolEvent::UNUSABLE_SENSOR_OBSERVED, packet, n);
+        return;
+#else
+        // Preserve strict fail-closed behavior for any motor-capable image.
         record_protocol_event(ProtocolEvent::INVALID_ESC_TELEMETRY, packet, n);
         fault(Fault::PROTOCOL);
         return;
+#endif
     }
     if (!reply_current) {
         _status.late_sensors++;
