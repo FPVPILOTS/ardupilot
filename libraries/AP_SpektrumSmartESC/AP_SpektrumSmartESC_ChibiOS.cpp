@@ -20,7 +20,7 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     // immediately after BoardConfig. In EarlyNative ONLY, defer the lease
     // and retry while fully DISARMED. Never touch UART4 before IO proof.
     const bool io_prepared = _owner.prepare(nonce, qualification.io_firmware_crc);
-    if (!io_prepared && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT) {
+    if (!io_prepared && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK) {
         return false;
     }
     _qualification = qualification;
@@ -47,7 +47,7 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         _auto_retry_disarmed = false;
     }
     if (_restore_pending && !hal.util->get_soft_armed()) {
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
         // The native EarlyNative session has sole UART4 ownership; after
         // any fault it must NOT start an unserviced passive RX reader.
         // The previous F12 bench left an open FIFO that accumulated many
