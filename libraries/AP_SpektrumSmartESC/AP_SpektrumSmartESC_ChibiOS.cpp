@@ -189,6 +189,12 @@ bool AP_SpektrumSmartESC_ChibiOS::bench_arm_permitted() const
     // link behavior only. No ARM-before-link exception in this board,
     // independent of RC, stick, params and telemetry reports.
     return false;
+#elif AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+    // Unlike legacy ArmedBench, NO monitor-only ARM before a verified
+    // connected 0x21 peer and fresh, correlated ESC 0x80 STOP evidence.
+    // No stale throttle stick or unqualified RX permits ARM at startup.
+    // This uses the SAME gated predicate as the normal motor arm check.
+    return ready_to_arm();
 #elif AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
     WITH_SEMAPHORE(_lock);
     const uint32_t now_ms = AP_HAL::millis();
