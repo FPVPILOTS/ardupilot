@@ -12,6 +12,7 @@ on:
       - feature/spktsmart-recovery-safety-20261114
       - feature/spktsmart-ev3-rc-observer-20261114
       - feature/spktsmart-early-armedbench-throttlecut-20261114
+      - feature/spktsmart-f7-startup-recovery-20261114
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
@@ -100,6 +101,7 @@ jobs:
           test -s "$FW"
           strings build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane | grep -F 'SPK33 BOOT INIT%lums NOW%lums'
           strings build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane | grep -F 'SPK36 BAD%lu ID%02X SUB%02X B2%02X B3%02X'
+          strings build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane | grep -F 'SPK40 RET NE%u Q%u P%u'
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -110,7 +112,7 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: Pix6C-SPKT-ArmedBench-ArmTest
-          path: build/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/bin/arduplane.apj
+          name: Pix6C-SPKT-F7-StartupRecovery
+          path: build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane.apj
           if-no-files-found: error
           retention-days: 14
