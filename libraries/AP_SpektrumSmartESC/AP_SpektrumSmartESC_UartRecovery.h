@@ -33,6 +33,23 @@ public:
                retries < 2 && framing_only;
     }
 
+    // An isolated NE during DISARMED ESC hot-plug is not a valid frame.
+    // It can be considered for a *new* discovery lease only after line
+    // stabilization. Never treat mixed FE/NE, ORE or ownership failures
+    // as this recoverable class.
+    void record_noise_only(uint32_t now_ms)
+    {
+        _noise_only_events++;
+        _last_noise_ms = now_ms;
+    }
+
+    bool noise_eligible(uint32_t total_error_events, uint32_t now_ms) const
+    {
+        return _noise_only_events != 0 &&
+            total_error_events == _noise_only_events &&
+            uint32_t(now_ms - _last_noise_ms) >= QUIET_MS;
+    }
+
     void record_framing_only(uint32_t now_ms)
     {
         _framing_only_events++;
@@ -52,5 +69,7 @@ public:
 private:
     uint32_t _framing_only_events = 0;
     uint32_t _last_framing_ms = 0;
+    uint32_t _noise_only_events = 0;
+    uint32_t _last_noise_ms = 0;
     bool _seen = false;
 };
