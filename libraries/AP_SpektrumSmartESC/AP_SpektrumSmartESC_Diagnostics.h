@@ -7,6 +7,7 @@
 #include "AP_SpektrumSmartESC_Probe.h"
 #include "AP_SpektrumSmartESC_Reader.h"
 #include "AP_SpektrumSmartESC_Plane.h"
+#include "AP_SpektrumSmartESC_RCArm.h"
 #include "AP_SpektrumSmartESC_Lab.h"
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB
 #include "AP_SpektrumSmartESC_AutoSession.h"
@@ -95,6 +96,11 @@ private:
     uint32_t _native_early_boot_init_ms = 0;
     uint32_t _native_early_boot_last_ms = 0;
     uint32_t _native_rc_observe_ms = 0; // Read-only TX16S/RC3 check.
+#endif
+#if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+    // Independent of ArduPlane's forced-zero DISARMED SERVO3 output.
+    uint32_t _bench_rc3_low_since_ms = 0;
+    uint32_t _bench_rc3_last_ms = 0;
 #endif
     MotorEvidence _motor_evidence;
     bool update_waveform(uint32_t now_ms);
