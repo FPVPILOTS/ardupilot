@@ -64,34 +64,34 @@ int main()
     assert(!profile.qualification.esc_loss_behavior);
     assert(!profile.qualification.reverse_settings);
     assert(profile.esc_id == 0x40);
-    assert(profile.channels.zero == 768);
-    assert(profile.channels.full == 4608);
+    assert(profile.channels.zero == AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE);
+    assert(profile.channels.full == AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE);
     assert(profile.qualification.io_firmware_crc == 0x6DBBAD71U);
 
     uint16_t values[32] {};
     uint8_t packet[80] {};
-    values[0] = 768;
+    values[0] = AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE;
     uint8_t n = Channel::encode(Channel::Kind::Normal, 0x40, 0, 0,
                                 0x01, values, packet, sizeof(packet));
     assert(n == 16 && Motor::control_packet(packet, n));
 
-    values[0] = 4608;
+    values[0] = AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE;
     n = Channel::encode(Channel::Kind::Normal, 0x40, 0, 0,
                         0x01, values, packet, sizeof(packet));
     assert(n == 16 && Motor::control_packet(packet, n));
 
-    values[0] = 764;
+    values[0] = (AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE-4);
     n = Channel::encode(Channel::Kind::Normal, 0x40, 0, 0,
                         0x01, values, packet, sizeof(packet));
     assert(n == 16 && !Motor::control_packet(packet, n));
 
-    values[0] = 4612;
+    values[0] = (AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE+4);
     n = Channel::encode(Channel::Kind::Normal, 0x40, 0, 0,
                         0x01, values, packet, sizeof(packet));
     assert(n == 16 && !Motor::control_packet(packet, n));
 
-    values[0] = 768;
-    values[6] = 32768;
+    values[0] = AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE;
+    values[6] = 32AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE;
     n = Channel::encode(Channel::Kind::Normal, 0x40, 0, 0,
                         0x41, values, packet, sizeof(packet));
     assert(n == 18 && !Motor::control_packet(packet, n));
@@ -200,6 +200,6 @@ int main()
     // Actual virtual-ARM transition and retry safety are source-gated to
     // this separate compile variant; ordinary Motor tests remain unchanged.
     assert(profile.channels.reverse_verified == false);
-    assert(profile.channels.full == 4608);
+    assert(profile.channels.full == AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE);
     std::puts("ArmedBench bounded CH1-only whitelist tests passed (host; no hardware)");
 }
