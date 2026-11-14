@@ -11,6 +11,7 @@ on:
       - feature/spktsmart-revk-recovery-20261114
       - feature/spktsmart-recovery-safety-20261114
       - feature/spktsmart-ev3-rc-observer-20261114
+      - feature/spktsmart-early-armedbench-throttlecut-20261114
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
@@ -19,6 +20,7 @@ on:
       - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-armedbench-firmware.yml'
   pull_request:
     paths:
@@ -29,6 +31,7 @@ on:
       - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/**'
   workflow_dispatch:
 jobs:
   build-armedbench:
@@ -85,6 +88,25 @@ jobs:
           a = json.loads(p.read_text())
           assert int(a['board_id']) == 56
           print('EarlyNative board ID 56 PASS; build only, no flash')
+          PY
+      - name: Compile separate early armed-bench throttle-cut target (UNQUALIFIED)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          ./waf configure --board Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall
+          ./waf plane
+          FW=build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane.apj
+          test -s "$FW"
+          strings build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane | grep -F 'SPK33 BOOT INIT%lums NOW%lums'
+          strings build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane | grep -F 'SPK36 BAD%lu ID%02X SUB%02X B2%02X B3%02X'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("build/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/bin/arduplane.apj")
+          j=json.loads(p.read_text())
+          assert int(j["board_id"]) == 56
+          print("EarlyArmedBench Board ID 56 PASS; build only, NOT motor qualified")
           PY
       - uses: actions/upload-artifact@v4
         with:
