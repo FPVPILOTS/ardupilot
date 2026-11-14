@@ -146,6 +146,14 @@ const AP_Param::GroupInfo AP_MotorsHeli::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("COL_LAND_MIN", 32, AP_MotorsHeli, _collective_land_min_deg, AP_MOTORS_HELI_COLLECTIVE_LAND_MIN),
 
+    // @Param: SW_PWM_MODE
+    // @DisplayName: Helicopter Swash PWM Output Mapping
+    // @Description: 0 keeps legacy forced 1000-2000us swash endpoints. 1 preserves SERVOx_MIN/TRIM/MAX for each swash servo, allowing a non-1500us center. Verify manufacturer pulse widths and refresh rate before use.
+    // @Values: 0:Legacy,1:ConfiguredServoRange
+    // @User: Advanced
+    AP_GROUPINFO("SW_PWM_MODE", 33, AP_MotorsHeli, _swash_pwm_mode, 0),
+
+
     AP_GROUPEND
 };
 
@@ -519,8 +527,11 @@ void AP_MotorsHeli::reset_swash_servo(SRV_Channel::Aux_servo_function_t function
     // outputs are defined on a -500 to 500 range for swash servos
     SRV_Channels::set_range(function, 1000);
 
-    // swash servos always use full endpoints as restricting them would lead to scaling errors
-    SRV_Channels::set_output_min_max(function, 1000, 2000);
+    // Retain original endpoint forcing unless explicitly opted into
+    // channel-specific servo endpoints (e.g. 760us neutral servos).
+    if (_swash_pwm_mode == 0) {
+        SRV_Channels::set_output_min_max(function, 1000, 2000);
+    }
 }
 
 // update the throttle input filter
@@ -551,9 +562,14 @@ void AP_MotorsHeli::reset_flight_controls()
 // multiplied by 500 to get PWM output.
 void AP_MotorsHeli::rc_write_swash(uint8_t chan, float swash_in)
 {
-    uint16_t pwm = (uint16_t)(1500 + 500 * swash_in);
     SRV_Channel::Aux_servo_function_t function = SRV_Channels::get_motor_function(chan);
-    SRV_Channels::set_output_pwm_trimmed(function, pwm);
+    if (_swash_pwm_mode == 1) {
+        // Each output uses its own MIN/TRIM/MAX and reversal.
+        SRV_Channels::set_output_norm_trimmed(function, swash_in);
+    } else {
+        const uint16_t pwm = uint16_t(1500 + 500 * swash_in);
+        SRV_Channels::set_output_pwm_trimmed(function, pwm);
+    }
 }
 
 // update the collective input filter.  should be called at 100hz
