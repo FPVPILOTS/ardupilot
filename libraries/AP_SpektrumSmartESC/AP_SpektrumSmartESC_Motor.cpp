@@ -57,6 +57,53 @@ void AP_SpektrumSmartESC_Motor::fault(Fault reason)
     disable();
 }
 
+void AP_SpektrumSmartESC_Motor::reject_rx(RxReason reason, const uint8_t *p,
+                                          uint8_t n, Fault fault_kind)
+{
+    ++_status.rx_rejects;
+    _status.rx_last_reason = uint8_t(reason);
+    _status.rx_last_type = p != nullptr && n >= 2 ? p[1] : 0;
+    _status.rx_last_dest = p != nullptr && n >= 5 ? p[4] : 0;
+    _status.rx_last_len = n;
+    fault(fault_kind);
+}
+
+bool AP_SpektrumSmartESC_Motor::rediscover(uint32_t now_us, const uint8_t *p, uint8_t n)
+{
+    // No automatic motor-side reconnection following any armed request:
+    // do not re-enter RUNNING with stale authority, even if ESC rebooted.
+    if (_armed_seen || _last_demand_armed || _status.reverse ||
+        _status.throttle != _profile.zero) {
+        reject_rx(RxReason::RESTART_ARMED, p, n, Fault::ESC_LOSS);
+        return false;
+    }
+    // Bound repeated brownouts instead of retrying the motor handshake
+    // forever while the ESC or power rail may be unstable.
+    if (_status.rx_restarts >= 3U) {
+        reject_rx(RxReason::RESTART_LIMIT, p, n, Fault::ESC_LOSS);
+        return false;
+    }
+    _waiting_reply = false;
+    _have_telemetry = false;
+    _initial_idle = false;
+    _status.throttle = 0;
+    _status.direction = 0;
+    _status.reverse = false;
+    _status.state = State::DISCOVERY;
+    _last_peer = _last_rx = _last_tx = now_us;
+    _parser = AP_SpektrumSmartESC(_source, _target, 50, false);
+    // The same UART and IOMCU lease survive. No new TX immediately:
+    // start the standard 115200-baud receive-first discovery interval.
+    const bool native = !_port.simulated();
+    if (!_reader.start(true, true, _target, _uid, now_us, native,
+                       AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL && native)) {
+        reject_rx(RxReason::UNSUPPORTED, p, n);
+        return false;
+    }
+    ++_status.rx_restarts;
+    return true;
+}
+
 bool AP_SpektrumSmartESC_Motor::owned(uint32_t now_ms) const
 {
     const auto r = _owner.receipt();
@@ -137,6 +184,7 @@ bool AP_SpektrumSmartESC_Motor::start(const Qualification &q, bool disarmed, uin
     _target = target;
     _initial_idle = _transition = _neutral = _direction_changed = false;
     _armed_seen = false;
+    _last_demand_armed = false;
     _last_rx = _last_tx = now_us;
     _status.state = State::DISCOVERY;
     return true;
@@ -164,6 +212,7 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us,
     if (_status.state == State::DISABLED || _status.state == State::FAULT) {
         return;
     }
+    _last_demand_armed = requested.armed;
     // Only the isolated experimental ArmedBench image may acknowledge Plane
     // ARM while the ESC is still discovering. This is an observation-only
     // ARM edge: do not forward it to the motor until the pilot DISARMS and
@@ -477,19 +526,25 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     }
     uint8_t packet[80] {}, n = 0;
     if (!_parser.observed_frame(packet, sizeof(packet), n)) {
-        fault(Fault::PROTOCOL);
+        reject_rx(RxReason::UNREADABLE, nullptr, 0);
         return;
     }
-    // A real Avian sends unsolicited 0x21 every ~50ms after linking.
-    // Do not classify its correctly addressed handshake as a protocol
-    // failure, whether or not a 0x80 control reply is currently pending.
-    if (n == 14 && packet[1] == 0x21 && packet[3] == _target &&
-        packet[4] == _source) {
+    const auto action = AP_SpektrumSmartESC_RunningPolicy::classify(
+        packet, n, _source, _target);
+    if (action == AP_SpektrumSmartESC_RunningPolicy::Action::PEER_ALIVE) {
         _last_peer = acquisition_us;
         return;
     }
-    if (n != 22 || packet[1] != 0x80 || packet[3] != _source) {
-        fault(Fault::PROTOCOL);
+    if (action == AP_SpektrumSmartESC_RunningPolicy::Action::RESTART) {
+        IGNORE_RETURN(rediscover(acquisition_us, packet, n));
+        return;
+    }
+    if (action == AP_SpektrumSmartESC_RunningPolicy::Action::IGNORE_OPTIONAL) {
+        ++_status.rx_ignored;
+        return; // No authority, telemetry freshness or throttle effects.
+    }
+    if (action == AP_SpektrumSmartESC_RunningPolicy::Action::REJECT) {
+        reject_rx(RxReason::UNSUPPORTED, packet, n);
         return;
     }
     // A CRC-correct ESC sensor response may be acquired after the 15ms
@@ -509,7 +564,18 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     AP_SpektrumSmartESC::Telemetry decoded {};
     if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, decoded) ||
         decoded.valid == 0) {
-        fault(Fault::PROTOCOL);
+        reject_rx(RxReason::INVALID_SENSOR, packet, n);
+        return;
+    }
+    if (action == AP_SpektrumSmartESC_RunningPolicy::Action::SENSOR_RESTART) {
+        // The official Spektrum implementation uses DestID 0xFF to ask
+        // the master to retransmit handshake when the ESC lost its master.
+        // Only a *solicited*, valid telemetry response is eligible.
+        if (!reply_current) {
+            reject_rx(RxReason::UNSOLICITED_RESTART, packet, n);
+            return;
+        }
+        IGNORE_RETURN(rediscover(acquisition_us, packet, n));
         return;
     }
     if (!reply_current) {

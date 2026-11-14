@@ -4,6 +4,7 @@
 #include "AP_SpektrumSmartESC_ChannelData.h"
 #include "AP_SpektrumSmartESC_Commands.h"
 #include "AP_SpektrumSmartESC_Reader.h"
+#include "AP_SpektrumSmartESC_RunningPolicy.h"
 #include "AP_SpektrumSmartESC_Lab.h"
 #ifndef AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED
 #define AP_SPEKTRUM_SMART_ESC_MOTOR_TX_VALIDATED 0
@@ -26,6 +27,11 @@ public:
         NONE, QUALIFICATION, OWNERSHIP, DISARMED, RC_LOSS, CONTROL_LOSS,
         ESC_LOSS, UART, INVALID_DEMAND, GROUND, REVERSE_DENIED, STOP_EVIDENCE,
         PROTOCOL, TX_TIMEOUT, TURNAROUND
+    };
+    // For SPK34; numeric values remain stable for interpreting field logs.
+    enum class RxReason : uint8_t {
+        NONE, UNREADABLE, UNSUPPORTED, INVALID_SENSOR, RESTART_ARMED,
+        RESTART_LIMIT, UNSOLICITED_RESTART
     };
     struct Qualification {
         uint32_t io_firmware_crc = 0; // Explicit reviewed image CRC, never inferred from a capability version.
@@ -56,6 +62,8 @@ public:
         Fault fault = Fault::NONE;
         uint32_t tx_frames = 0, tx_bytes = 0, controls = 0, telemetry = 0;
         uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
+        uint32_t rx_restarts = 0, rx_ignored = 0, rx_rejects = 0;
+        uint8_t rx_last_reason = 0, rx_last_type = 0, rx_last_dest = 0, rx_last_len = 0;
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
         bool simulated = true, reverse = false;
         // ARM-before-link stays monitor-only until a full disarm/rearm.
@@ -126,6 +134,8 @@ public:
     static bool control_packet(const uint8_t *packet, uint8_t length);
 private:
     void fault(Fault reason);
+    void reject_rx(RxReason reason, const uint8_t *p, uint8_t n, Fault fault_kind = Fault::PROTOCOL);
+    bool rediscover(uint32_t now_us, const uint8_t *p, uint8_t n);
     bool owned(uint32_t now_ms) const;
     bool transmit(uint8_t length, uint32_t now_us, bool handshake);
     void control(const Demand &d, uint32_t now_us, uint32_t now_ms);
@@ -142,6 +152,7 @@ private:
     bool _initial_idle = false, _transition = false, _neutral = false, _have_telemetry = false;
     bool _direction_changed = false;
     bool _armed_seen = false;
+    bool _last_demand_armed = false;
     uint32_t _bench_retry_at_us = 0, _uid = 0;
     uint32_t _epoch = 0, _io_boot = 0, _tx_since = 0, _last_tx = 0, _last_rx = 0;
     uint32_t _reply_since = 0, _neutral_since = 0, _telemetry_since = 0;

@@ -8,6 +8,7 @@ on:
       - feature/spktsmart-boot-timing-fix-20261113
       - feature/spktsmart-aux7-internal-pullup-20261113
       - feature/spktsmart-native-early-poweron-20261114
+      - feature/spktsmart-srxl2-running-recovery-20261114
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
@@ -75,6 +76,8 @@ jobs:
           ./waf plane
           test -s build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane.apj
           strings build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane | grep -F 'SPK33 BOOT INIT%lums NOW%lums'
+          strings build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane | grep -F 'SPK34 WHY%u TYPE%02X DEST%02X LEN%u'
+          strings build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane | grep -F 'SPK35 RX OVER%lu REL%lu'
           python3 - <<'PY'
           import json
           from pathlib import Path

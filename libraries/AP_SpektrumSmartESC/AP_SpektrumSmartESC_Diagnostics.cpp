@@ -1325,6 +1325,22 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 SENSOR LATE%lu",
                     (unsigned long)s.late_sensors);
+                // Log exact first rejected frame after a F12, and bounded
+                // disarmed re-discovery evidence; do not infer ESC identity
+                // from a source-less 0x80 telemetry frame.
+                if (s.rx_rejects != 0 || s.rx_restarts != 0 || s.rx_ignored != 0) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK34 REJ%lu RS%lu IG%lu",
+                        (unsigned long)s.rx_rejects,
+                        (unsigned long)s.rx_restarts,
+                        (unsigned long)s.rx_ignored);
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK34 WHY%u TYPE%02X DEST%02X LEN%u",
+                        unsigned(s.rx_last_reason),
+                        unsigned(s.rx_last_type),
+                        unsigned(s.rx_last_dest),
+                        unsigned(s.rx_last_len));
+                }
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 CH1%u CH7%u REV%u RDY%u",
                     unsigned(s.throttle), unsigned(s.direction),
@@ -1391,6 +1407,10 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                             (unsigned long)hw.framing,
                             (unsigned long)hw.noise,
                             (unsigned long)hw.overruns);
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK35 RX OVER%lu REL%lu",
+                            (unsigned long)hw.overflow,
+                            (unsigned long)hw.release_errors);
                     }
                 }
                 // A pre-first-TC TURNAROUND can otherwise produce only

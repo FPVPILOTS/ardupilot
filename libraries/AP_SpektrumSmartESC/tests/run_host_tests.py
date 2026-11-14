@@ -30,10 +30,15 @@ def main():
     turn_executable = args.out.resolve() / 'test_spektrum_turnlab.exe'
     motor_executable = args.out.resolve() / 'test_spektrum_motor.exe'
     armed_bench_executable = args.out.resolve() / 'test_spektrum_armed_bench_packet.exe'
+    running_policy_executable = args.out.resolve() / 'test_spektrum_running_policy.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
         commands = [
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             str(library / 'tests/test_spektrum_running_policy.cpp'),
+             '-o', str(running_policy_executable)],
+            [str(running_policy_executable)],
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror', '-DSPKTSMART_STANDALONE_TEST',
              str(library / 'AP_SpektrumSmartESC.cpp'),
              str(library / 'AP_SpektrumSmartESC_ChannelData.cpp'),
