@@ -10,6 +10,7 @@ on:
       - feature/spktsmart-native-early-poweron-20261114
       - feature/spktsmart-revk-recovery-20261114
       - feature/spktsmart-recovery-safety-20261114
+      - feature/spktsmart-ev3-rc-observer-20261114
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
