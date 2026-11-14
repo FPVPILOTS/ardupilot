@@ -99,6 +99,14 @@ static void observe_arm_after_valid_peer()
     const uint8_t unrelated_n = AP_SpektrumSmartESC::encode(
         0x80, unrelated, sizeof(unrelated), frame, sizeof(frame));
     for (uint8_t i=0;i<unrelated_n;i++) m.feed(frame[i],61000U);
+    if (m.status().fault != Motor::Fault::NONE) {
+        std::fprintf(stderr,
+            "EARLY_DIAG foreign sensor fault=%u state=%u event=%u len=%u type=%02X dst=%02X tx=%u\n",
+            unsigned(m.status().fault), unsigned(m.status().state),
+            unsigned(m.status().protocol_event),
+            unsigned(m.status().protocol_length), unsigned(m.status().protocol_type),
+            unsigned(m.status().protocol_dest), unsigned(m.transmitting()));
+    }
     assert(m.status().fault == Motor::Fault::NONE);
     assert(m.status().telemetry == 0U);
     assert(m.status().unusable_sensor_frames == 1U);
