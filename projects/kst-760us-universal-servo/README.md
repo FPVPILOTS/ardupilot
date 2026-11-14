@@ -119,3 +119,17 @@ Manufacturer specification (April 2025): `https://www.kst-servo-shop.de/media/8d
 ### Additional checkpoint: pre-arm validation
 
 A helper now verifies `MIN < TRIM < MAX` for each output assigned to the first three swash motor functions when mode 1 is enabled. Invalid `H_SW_PWM_MODE` values are rejected. This does **not yet validate H4 additional swash channels or dual helicopter extra swashes**, nor does it verify actual physical PWM timing.
+
+
+## Engineering documentation index (2026-11-14)
+
+Follow these in order; all are tracked in this branch:
+
+1. [Requirements and roadmap](01-REQUIREMENTS-AND-ROADMAP.md) — mission, scope, priorities and phase gates
+2. [Traditional Heli parameter matrix](02-TRADHELI-PARAMETER-MATRIX.md) — full setup interactions and mid-collective distinction
+3. [Architecture and code audit](03-ARCHITECTURE-AND-CODE-AUDIT.md) — actual call path and unresolved code risks
+4. [Test and acceptance plan](04-TEST-AND-ACCEPTANCE-PLAN.md) — unit, SITL, electrical and mechanical evidence
+5. [WSL build runbook](05-WSL-BUILD-RUNBOOK.md) — commands for the D: drive workspace
+6. [Hardware and decision register](06-HARDWARE-AND-DECISION-REGISTER.md) — exact model evidence, blockers, and decisions
+
+**Current handoff:** synchronize the local clone, save `git status` and branch SHA, export known-good helicopter parameters, and perform the first SITL build. Do not flash development firmware before compile, tests and pulse timing checks. Documentation is a work-in-progress engineering baseline, not a certification of airworthiness.
