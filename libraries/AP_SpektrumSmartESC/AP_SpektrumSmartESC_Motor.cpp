@@ -506,7 +506,14 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     // DISARMED and after releasing the previous UART/IO ownership lease.
     if (n == 14 && packet[1] == 0x21 && packet[3] == _target &&
         packet[5] >= 1 && packet[5] <= 100 && packet[6] <= 1) {
-        if (packet[4] == 0x00) {
+        const uint32_t peer_uid = uint32_t(packet[8]) |
+            (uint32_t(packet[9]) << 8) | (uint32_t(packet[10]) << 16) |
+            (uint32_t(packet[11]) << 24);
+        // The source address alone is insufficient proof of the
+        // *same* ESC following a reset. A new UID needs a fresh 0x21
+        // discovery and must invalidate previously authorized throttle.
+        if (packet[4] == 0x00 ||
+            (packet[4] == _source && peer_uid != _reader.status().uid)) {
             ++_status.peer_restarts;
             record_protocol_event(ProtocolEvent::PEER_RESTART, packet, n);
             fault(Fault::ESC_LOSS);
@@ -565,6 +572,11 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     _have_telemetry = true;
     _telemetry_since = acquisition_us;
     _status.telemetry++;
+    // This snapshot is intentionally not a freshness/arming signal;
+    // the live telemetry() API still rejects post-fault/stale data.
+    _status.last_sensor_valid = decoded.valid;
+    _status.last_sensor_erpm = decoded.electrical_rpm;
+    _status.last_sensor_throttle_pct = decoded.throttle_pct;
 }
 
 bool AP_SpektrumSmartESC_Motor::telemetry(AP_SpektrumSmartESC::Telemetry &data, uint32_t now_us) const
