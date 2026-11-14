@@ -399,6 +399,9 @@ public:
     // -1..1 output with each channel's configured MIN/TRIM/MAX as endpoints and neutral
     static void set_output_norm_trimmed(SRV_Channel::Aux_servo_function_t function, float value);
 
+    // True when every output assigned to function has valid MIN < TRIM < MAX
+    static bool output_range_valid(SRV_Channel::Aux_servo_function_t function);
+
     // set and save the trim for a function channel to the output value
     static void set_trim_to_servo_out_for(SRV_Channel::Aux_servo_function_t function);
 
