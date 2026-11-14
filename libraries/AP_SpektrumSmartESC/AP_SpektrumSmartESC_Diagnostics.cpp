@@ -1366,6 +1366,26 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     _last_reader_log_ms = now;
                     const auto hs = _native_motor->handshake_status();
                     const auto startup = _native_motor->startup_diagnostics();
+                    const auto first_uart = _native_motor->uart_fault_snapshot();
+                    if (first_uart.captured) {
+                        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                            "SPK39 FIRST F7 T%lu RX%lu FL%u E%lu",
+                            (unsigned long)first_uart.time_ms,
+                            (unsigned long)first_uart.last_byte_ms,
+                            unsigned(first_uart.flags),
+                            (unsigned long)first_uart.error_count);
+                        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                            "SPK39 FE%lu NE%lu OR%lu OV%lu",
+                            (unsigned long)first_uart.framing,
+                            (unsigned long)first_uart.noise,
+                            (unsigned long)first_uart.overrun,
+                            (unsigned long)first_uart.overflow);
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK39 CR1%08lX CR3%08lX ISR%08lX",
+                            (unsigned long)first_uart.cr1,
+                            (unsigned long)first_uart.cr3,
+                            (unsigned long)first_uart.isr);
+                    }
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK27 RET FE%u P%u Q%u ARM%u",
                         unsigned(startup.fe_attempts),
