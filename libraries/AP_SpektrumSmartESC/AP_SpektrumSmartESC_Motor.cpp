@@ -464,10 +464,14 @@ void AP_SpektrumSmartESC_Motor::record_protocol_event(
     }
     _status.protocol_event = event;
     _status.protocol_length = length;
-    if (packet != nullptr && length >= 5) {
+    if (packet != nullptr && length >= 4) {
         _status.protocol_type = packet[1];
-        _status.protocol_src = packet[3];
-        _status.protocol_dest = packet[4];
+        // Rev K: 0x21 has SrcID at byte 3 and DestID at byte 4.
+        // 0x80 has NO SrcID; byte 3 is the RF telemetry destination.
+        // Never report a sensor payload byte as a supposed peer ID.
+        _status.protocol_src = packet[1] == 0x21 ? packet[3] : 0;
+        _status.protocol_dest = packet[1] == 0x80 ? packet[3] :
+            (length >= 5 ? packet[4] : 0);
     }
 }
 
