@@ -415,7 +415,7 @@ void AP_Vehicle::setup()
 
     BoardConfig.init();
 
-#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     // Dedicated non-flight native SRXL2 cold-start image. Setup the
     // SINGLE IOMCU-owned native motor transport *before* sensor/Plane
     // initialization, not after the ESC may have selected its boot mode.
@@ -575,7 +575,7 @@ void AP_Vehicle::setup()
     AP::arming().init();
 #endif
 
-#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     // The normal ArduPlane control producer now owns updates to the same
     // session. Never run a second init() or reuse the UART.
     spektrum_smart_esc.finish_native_early_boot();
@@ -782,7 +782,7 @@ void AP_Vehicle::scheduler_delay_callback()
 #endif
 
     const uint32_t tnow = AP_HAL::millis();
-#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     _singleton->spektrum_smart_esc.update_native_early_boot(tnow);
 #endif
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
