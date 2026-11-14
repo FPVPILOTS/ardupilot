@@ -63,6 +63,11 @@ public:
         uint8_t protocol_src = 0, protocol_dest = 0;
         uint32_t peer_restarts = 0, telemetry_rehandshake_requests = 0;
         uint32_t no_rf_telemetry = 0;
+        // Last *solicited CRC-valid* ESC measurement. Retained for fault
+        // forensics only; it is NOT fresh evidence or ARM authorization.
+        uint16_t last_sensor_valid = 0;
+        uint32_t last_sensor_erpm = 0;
+        float last_sensor_throttle_pct = 0;
         uint32_t tx_frames = 0, tx_bytes = 0, controls = 0, telemetry = 0;
         uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
