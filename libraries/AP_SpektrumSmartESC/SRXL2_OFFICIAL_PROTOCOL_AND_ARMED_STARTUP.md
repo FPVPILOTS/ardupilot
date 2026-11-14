@@ -178,3 +178,39 @@ and full-throttle values or physical motor cutoff during a power cycle.
 No flight firmware can be declared qualified without those real data.
 The safe validation setup leaves the three EDF phase wires individually
 insulated and disconnected and ArduPlane DISARMED.
+
+## 2026-11-14 — EV3 forensics + read-only RC3 input path
+
+The last real EarlyNative bench captured:
+`RP1 CD119 TLM118`, then `F12` with `SPK34 EV3 LEN22 T80 S00 D30`
+after roughly 4.384s since FC boot. The first 118 parsed ESC replies
+proved physical 0x21 / 0xCD / 0x80 communication, not that the candidate
+CH1=768 is a proven stop command. The final 0x80 had valid framing/CRC
+but its 16-byte payload failed strict `decode_esc()` or all fields
+were unavailable. The previously logged SPK34 event did **not** retain
+the payload's actual sensor ID (frame[4]).
+
+The isolated, unarmable EarlyNative diagnostic target now records the
+first such frame's sensor ID and secondary ID, plus first two sensor
+payload data bytes, in read-only `SPK36 BAD... ID... SUB... B2... B3...`
+reports. This separates other legitimate Spektrum telemetry sensors
+(including `NODATA=0x00` and `ESC=0x20`) from invalid ESC values.
+Only in EarlyNative, these validly framed but non-ESC or no-data sensor
+packets do not trigger immediate F12: they are NOT motor ACK, do not
+refresh ESC telemetry, and do not clear the 15ms control reply deadline.
+The independent 75ms last-good-ESC watchdog remains active.
+All motor-capable build targets preserve strict invalid-sensor F12
+behavior until production acceptance policy is separately qualified.
+
+A second read-only `SPK37 RC3... S3... F... RC... FS... ARM...`
+report samples actual ArduPilot RC input and final Servo3 output.
+It never forwards raw RC3 to UART4 or grants ARM. Observe this before
+planning transmitter-based motor operation. The actual bench log also
+contained `PreArm: Waiting for RC`, so receiver health is unproven.
+
+No firmware target in this branch can turn the EDF motor from the TX16S.
+An actual motor-connected experiment requires independent validation
+of RC failsafe, physical ESC stop, CH1 endpoints, control supervision,
+reverse polarity, arming rules and safe containment. The current
+EarlyNative firmware remains strictly unarmable; all motor phase
+wires remain disconnected and individually insulated during tests.
