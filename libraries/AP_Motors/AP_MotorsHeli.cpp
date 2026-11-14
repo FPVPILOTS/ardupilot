@@ -461,6 +461,25 @@ void AP_MotorsHeli::output_logic()
 // parameter_check - check if helicopter specific parameters are sensible
 bool AP_MotorsHeli::parameter_check(bool display_msg) const
 {
+    // Per-servo swash mapping requires sane endpoints on each primary
+    // swash servo. No arm with a missing or inverted output assignment.
+    if (_swash_pwm_mode != 0 && _swash_pwm_mode != 1) {
+        if (display_msg) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "PreArm: H_SW_PWM_MODE invalid");
+        }
+        return false;
+    }
+    if (_swash_pwm_mode == 1) {
+        for (uint8_t i = 0; i < 3; i++) {
+            if (!SRV_Channels::output_range_valid(SRV_Channels::get_motor_function(i))) {
+                if (display_msg) {
+                    gcs().send_text(MAV_SEVERITY_CRITICAL, "PreArm: Invalid swash SERVOx_MIN/TRIM/MAX");
+                }
+                return false;
+            }
+        }
+    }
+
     // returns false if RSC Mode is not set to a valid control mode
     if (_main_rotor._rsc_mode.get() <= (int8_t)ROTOR_CONTROL_MODE_DISABLED || _main_rotor._rsc_mode.get() > (int8_t)ROTOR_CONTROL_MODE_CLOSED_LOOP_POWER_OUTPUT) {
         if (display_msg) {
@@ -529,7 +548,7 @@ void AP_MotorsHeli::reset_swash_servo(SRV_Channel::Aux_servo_function_t function
 
     // Retain original endpoint forcing unless explicitly opted into
     // channel-specific servo endpoints (e.g. 760us neutral servos).
-    if (_swash_pwm_mode == 0) {
+    if (_swash_pwm_mode != 1) {
         SRV_Channels::set_output_min_max(function, 1000, 2000);
     }
 }
