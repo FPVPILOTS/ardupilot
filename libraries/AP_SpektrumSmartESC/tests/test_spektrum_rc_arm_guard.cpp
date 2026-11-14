@@ -24,7 +24,13 @@ int main()
 
     // No RX, misconfigured endpoints, implausible/default calibrations.
     assert(!Gate::idle(0,1000,2000,false));
-    assert(!Gate::idle(990,1000,2000,false));
+    // Real TX16S observed on 2026-11-14: 992us at idle is
+    // acceptable when RC3_MIN is calibrated to 1000us.
+    assert(Gate::idle(992,1000,2000,false));
+    assert(Gate::idle(990,1000,2000,false));
+    assert(!Gate::idle(950,1000,2000,false));
+    assert(Gate::idle(2011,1000,2000,true));
+    assert(!Gate::idle(2050,1000,2000,true));
     assert(!Gate::idle(2020,1000,2000,false));
     assert(!Gate::idle(1500,1500,1500,false));
     assert(!Gate::idle(1000,1000,1400,false));
