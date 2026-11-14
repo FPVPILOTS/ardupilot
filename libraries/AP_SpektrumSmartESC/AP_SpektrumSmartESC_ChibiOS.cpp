@@ -171,6 +171,13 @@ AP_SpektrumSmartESC_ChibiOS::startup_diagnostics() const
     return result;
 }
 
+AP_SpektrumSmartESC_ChibiOS::UARTFaultSnapshot
+AP_SpektrumSmartESC_ChibiOS::uart_fault_snapshot() const
+{
+    WITH_SEMAPHORE(_lock);
+    return _first_uart_fault;
+}
+
 bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
 {
     WITH_SEMAPHORE(_lock);
@@ -267,6 +274,28 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
 #endif
                 if (_motor.status().state == AP_SpektrumSmartESC_Motor::State::FAULT) {
                     const auto why = _motor.status().fault;
+                    if (why == AP_SpektrumSmartESC_Motor::Fault::UART &&
+                        !_first_uart_fault.captured) {
+                        // The peripheral is about to be disabled in
+                        // stop_locked(). Preserve its *first* F7 raw state
+                        // and the cumulative NE/FE/ORE evidence before that
+                        // happens, including PA0's live input-level bit.
+                        AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+                        if (_uart.receive_diagnostics(hw)) {
+                            _first_uart_fault.captured = true;
+                            _first_uart_fault.time_ms = AP_HAL::millis();
+                            _first_uart_fault.last_byte_ms = hw.last_uart_rx_ms;
+                            _first_uart_fault.error_count = _uart.receive_errors();
+                            _first_uart_fault.framing = hw.framing;
+                            _first_uart_fault.noise = hw.noise;
+                            _first_uart_fault.overrun = hw.overruns;
+                            _first_uart_fault.overflow = hw.overflow;
+                            _first_uart_fault.cr1 = hw.cr1;
+                            _first_uart_fault.cr3 = hw.cr3;
+                            _first_uart_fault.isr = hw.isr;
+                            _first_uart_fault.flags = uint8_t(hw.flags);
+                        }
+                    }
                     // Only NO ESC / stale solicited telemetry while never
                     // armed is eligible for deferred handshake retry.
                     // UART/ownership/protocol/RC/arming faults latch shut.
