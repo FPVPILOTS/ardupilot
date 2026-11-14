@@ -107,7 +107,7 @@ Manufacturer specification (April 2025): `https://www.kst-servo-shop.de/media/8d
 
 1. Confirm exact branch baseline and compile ArduCopter (Pixhawk 4), Plane, and Rover; add compile checks in CI.
 2. Unit tests exercising actual compiled C++ implementation: -1/0/+1 mapping, reversal, asymmetric and mixed ranges, invalid configurations and unchanged legacy output.
-3. Add pre-arm rejection for any assigned swash output whose `MIN < TRIM < MAX` is violated when mode 1 is active, and verify reassignment/reboot behavior.
+3. Initial pre-arm rejection is implemented for the first three swash outputs when mode 1 is active; still test invalid, missing, duplicate, H4 and dual swash assignments and restart behavior.
 4. Verify output timing and timer groups at 560Hz **on target Pixhawk 4**; high refresh must not inadvertently drive an ESC or another servo at an unsupported rate.
 5. SITL regression: H1/H3/H4 swashes, manual pass-through/center/max/min, stabilization, reversed servos, cyclic+collective simultaneous extremes, H_COL_* setup, linearization, failsafes and mixed 1500/760us channels.
 6. Observe waveform using an appropriate PWM capture tool, then verify mechanical clearance with rotor/ESC physically disabled.
@@ -115,3 +115,7 @@ Manufacturer specification (April 2025): `https://www.kst-servo-shop.de/media/8d
 8. Create hardware-specific candidate binaries only after steps above pass.
 
 **Important:** These are implementation changes in the development branch, not evidence of safe 560Hz operation, working servo motion or flight readiness.
+
+### Additional checkpoint: pre-arm validation
+
+A helper now verifies `MIN < TRIM < MAX` for each output assigned to the first three swash motor functions when mode 1 is enabled. Invalid `H_SW_PWM_MODE` values are rejected. This does **not yet validate H4 additional swash channels or dual helicopter extra swashes**, nor does it verify actual physical PWM timing.
