@@ -1568,6 +1568,20 @@ bool AP_SpektrumSmartESC_Diagnostics::armed_bench_arm_permitted() const
 {
 #if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL && \
     CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+#if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+    // DISARMED SERVO3 is clamped to zero by ArduPlane, regardless of stick.
+    // For this motor-capable commissioning image, require the REAL raw RC3
+    // stick to have remained low for 750ms (and be low *now*). The ARM
+    // switch alone must never authorize a raised throttle stick at startup.
+    const auto *rc3 = RC_Channels::rc_channel(2);
+    if (rc3 == nullptr ||
+        !AP_SpektrumSmartESC_RCArm::idle(rc3->get_radio_in(),
+            rc3->get_radio_min(), rc3->get_radio_max(), rc3->get_reverse()) ||
+        !AP_SpektrumSmartESC_RCArm::stable(_bench_rc3_low_since_ms,
+            _bench_rc3_last_ms, AP_HAL::millis())) {
+        return false;
+    }
+#endif
     return _motor_enable.get() == 1 && _motor_selected && !bench_blocked() &&
         _native_motor != nullptr && _native_motor->bench_arm_permitted();
 #else
@@ -1670,6 +1684,20 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
     s.reverse_permitted = reverse_permitted;
     AP_SpektrumSmartESC_Motor::Demand d;
     const uint32_t now = AP_HAL::millis();
+#if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+    // RC3 is only used for a *negative ARM prerequisite*. Never feed raw
+    // RC3 to digital CH1; the output still follows the final SERVO3 command.
+    const auto *rc3 = RC_Channels::rc_channel(2);
+    const bool rc3_low = rc3 != nullptr && rc_ok && !failsafe &&
+        AP_SpektrumSmartESC_RCArm::idle(rc3->get_radio_in(),
+            rc3->get_radio_min(), rc3->get_radio_max(), rc3->get_reverse());
+    if (!rc3_low || armed || hal.util->get_soft_armed()) {
+        _bench_rc3_low_since_ms = 0;
+    } else if (_bench_rc3_low_since_ms == 0) {
+        _bench_rc3_low_since_ms = now != 0 ? now : 1;
+    }
+    _bench_rc3_last_ms = now;
+#endif
 #if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     // RC input validation only. Never maps raw RC3 to the ESC wire,
     // bypasses disarm, or alters the final SERVO3 motor output.
@@ -1680,6 +1708,13 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
             unsigned(RC_Channels::get_radio_in(2)), unsigned(s.pwm),
             unsigned(s.function), unsigned(rc_ok),
             unsigned(failsafe), unsigned(armed));
+#if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+            "SPK38 RC3LOW%u HOLD%lums",
+            unsigned(rc3_low),
+            (unsigned long)(_bench_rc3_low_since_ms != 0 ?
+                now - _bench_rc3_low_since_ms : 0U));
+#endif
     }
 #endif
     if (!armed) {
