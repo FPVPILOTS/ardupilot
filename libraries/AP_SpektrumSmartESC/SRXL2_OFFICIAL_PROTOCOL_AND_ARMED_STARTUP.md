@@ -108,3 +108,42 @@ not an authenticated heartbeat after each motor command.
 - Test independent supply disconnect, disarm, RC/telemetry loss,
   power brownout and no uncommanded throttle on recovery.
 - ArduPilot normal arming: no automatic arming and no PWM fallback.
+
+
+## 2026-11-14 — Rev K RUNNING recovery and telemetry routing
+
+This commissioning revision handles two overlooked protocol cases:
+- Rev K 7.2: a CRC-verified target ESC (0x40) spontaneously restarting
+  with 0x21 dest=0x00 means the existing link is no longer authoritative.
+  It is never treated as a heartbeat. A new session is allowed only
+  by the disarmed-only normal ESC-loss recovery path; an armed motor
+  session never restarts automatically.
+- Rev K 7.6: 0x80 byte 3 is the RF telemetry destination, not the ESC
+  identity. 0x00 permits non-RF 0x80 telemetry, subject to the SAME
+  existing physical-reply timing, single-ESC and decode gates.
+  0xFF requests a fresh handshake and invalidates previous link status.
+
+First fault details now appear in SPK34:
+EV1=failed observed frame, EV2=unexpected header/destination,
+EV3=invalid ESC telemetry, EV4=peer restart, EV5=telemetry rehandshake.
+The additional counters track ESC restarts, rehandshake requests and
+no-RF telemetry. No new type is treated as proof of a safe motor
+command, and malformed/wrong-destination packets are still rejected.
+
+Rev K 7.7.1 channel masks retain omitted channel state: CH1-only
+packets do NOT reset a previously set CH7 direction. We keep reverse
+disabled until Avian 130A Ver A polarity and neutral dwell are qualified.
+Rev K 7.7.2's failsafe packet type is already encoded/tested by the
+separate ChannelData codec. Actual Avian failsafe response has not yet
+been established, so no unconditional 0xCD failsafe or emergency
+throttle output is enabled in real hardware.
+
+400000 baud is specified by Spektrum but is not selected by this build:
+the current physical receive backend polls a 16-byte FIFO at 1kHz
+and has been bench validated at only 115200. Setting the negotiation
+bit without a verified faster receive path risks loss of ESC control.
+
+The separate EarlyNative board now reports motor_arming_ready() false
+unconditionally. A successful discovery and zero-throttle telemetry
+cannot authorize physical arming until a distinct, qualified production
+firmware is implemented. Hardware testing remains motor-phases OFF.
