@@ -60,6 +60,13 @@ void AP_SpektrumSmartESC_Motor::fault(Fault reason)
 void AP_SpektrumSmartESC_Motor::reject_rx(RxReason reason, const uint8_t *p,
                                           uint8_t n, Fault fault_kind)
 {
+    if (_status.rx_rejects == 0) {
+        _status.rx_rejected_captured = n < sizeof(_status.rx_rejected_frame) ?
+                                      n : sizeof(_status.rx_rejected_frame);
+        for (uint8_t i = 0; p != nullptr && i < _status.rx_rejected_captured; ++i) {
+            _status.rx_rejected_frame[i] = p[i];
+        }
+    }
     ++_status.rx_rejects;
     _status.rx_last_reason = uint8_t(reason);
     _status.rx_last_type = p != nullptr && n >= 2 ? p[1] : 0;
