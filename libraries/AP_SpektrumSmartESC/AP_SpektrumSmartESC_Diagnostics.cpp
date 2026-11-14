@@ -1337,6 +1337,15 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 SENSOR LATE%lu",
                     (unsigned long)s.late_sensors);
+                if (s.telemetry != 0) {
+                    // LAST is explicitly historical after a fault, never
+                    // live motor authorization or a calibrated endpoint.
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK35 LAST V%03X ERPM%lu THR%.1f",
+                        unsigned(s.last_sensor_valid),
+                        (unsigned long)s.last_sensor_erpm,
+                        double(s.last_sensor_throttle_pct));
+                }
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 CH1%u CH7%u REV%u RDY%u",
                     unsigned(s.throttle), unsigned(s.direction),
@@ -1361,6 +1370,12 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                         unsigned(hs.state),
                         (unsigned long)hs.tx_frames,
                         (unsigned long)hs.first_targeted_tc_ms);
+                    // BAUD is the peer's capability bit, not a physical
+                    // link-speed claim: the current UART4 runs at 115200.
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK35 BAUD PEER%u LINK%lu",
+                        unsigned(hs.baud_mask),
+                        (unsigned long)hs.negotiated_baud);
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK27 HS B%lu F%lu RP%u E%lu",
                         (unsigned long)hs.rx_bytes,
