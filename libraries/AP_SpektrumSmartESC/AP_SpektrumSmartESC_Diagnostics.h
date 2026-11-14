@@ -94,6 +94,7 @@ private:
     bool _native_early_boot_pumping = false;
     uint32_t _native_early_boot_init_ms = 0;
     uint32_t _native_early_boot_last_ms = 0;
+    uint32_t _native_rc_observe_ms = 0; // Read-only TX16S/RC3 check.
 #endif
     MotorEvidence _motor_evidence;
     bool update_waveform(uint32_t now_ms);
