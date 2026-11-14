@@ -1385,6 +1385,16 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                             (unsigned long)first_uart.cr1,
                             (unsigned long)first_uart.cr3,
                             (unsigned long)first_uart.isr);
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK40 C2%08lX MOD%08lX PUP%08lX",
+                            (unsigned long)first_uart.cr2,
+                            (unsigned long)first_uart.moder,
+                            (unsigned long)first_uart.pupdr);
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK40 AFR%08lX OTY%08lX IDR%08lX",
+                            (unsigned long)first_uart.afrl,
+                            (unsigned long)first_uart.otyper,
+                            (unsigned long)first_uart.idr);
                     }
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK27 RET FE%u P%u Q%u ARM%u",
@@ -1392,6 +1402,11 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                         unsigned(startup.retry_pending),
                         unsigned(startup.waiting_for_fe_quiet),
                         unsigned(startup.ever_armed));
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK40 RET NE%u Q%u P%u",
+                        unsigned(startup.ne_attempts),
+                        unsigned(startup.waiting_for_ne_quiet),
+                        unsigned(startup.retry_pending));
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK29 HS ST%u Q%lu FIRST%lums",
                         unsigned(hs.state),
