@@ -1354,6 +1354,30 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     _last_reader_log_ms = now;
                     const auto hs = _native_motor->handshake_status();
                     const auto startup = _native_motor->startup_diagnostics();
+                    if (s.rx_rejects != 0 && s.rx_rejected_captured != 0) {
+                        const uint8_t *b = s.rx_rejected_frame;
+                        // 22-byte CRC-valid frame (max) in three bounded
+                        // GCS texts. The first rejected packet is retained
+                        // even if a later status/error overwrites counters.
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK36 A %02X%02X%02X%02X%02X%02X%02X%02X",
+                            unsigned(b[0]), unsigned(b[1]),
+                            unsigned(b[2]), unsigned(b[3]),
+                            unsigned(b[4]), unsigned(b[5]),
+                            unsigned(b[6]), unsigned(b[7]));
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK36 B %02X%02X%02X%02X%02X%02X%02X%02X",
+                            unsigned(b[8]), unsigned(b[9]),
+                            unsigned(b[10]), unsigned(b[11]),
+                            unsigned(b[12]), unsigned(b[13]),
+                            unsigned(b[14]), unsigned(b[15]));
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK36 C %02X%02X%02X%02X%02X%02X L%u",
+                            unsigned(b[16]), unsigned(b[17]),
+                            unsigned(b[18]), unsigned(b[19]),
+                            unsigned(b[20]), unsigned(b[21]),
+                            unsigned(s.rx_rejected_captured));
+                    }
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK27 RET FE%u P%u Q%u ARM%u",
                         unsigned(startup.fe_attempts),
