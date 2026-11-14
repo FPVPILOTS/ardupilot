@@ -81,6 +81,33 @@ static void observe_arm_after_valid_peer()
     m.update(d,59000U,59U);
     assert(m.status().state == Motor::State::IDLE);
     assert(m.status().controls == 0);
+    // Other valid Spektrum 0x80 sensor types must not be ESC ACKs.
+    // This commissioning build observes them without declaring F12.
+    const uint8_t unrelated[] = {
+        0x30, 0x7F, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+    const uint8_t unrelated_n = AP_SpektrumSmartESC::encode(
+        0x80, unrelated, sizeof(unrelated), frame, sizeof(frame));
+    for (uint8_t i=0;i<unrelated_n;i++) m.feed(frame[i],59000U);
+    assert(m.status().fault == Motor::Fault::NONE);
+    assert(m.status().telemetry == 0U);
+    assert(m.status().unusable_sensor_frames == 1U);
+    assert(m.status().unusable_id == 0x7F);
+    assert(m.status().protocol_event == Motor::ProtocolEvent::UNUSABLE_SENSOR_OBSERVED);
+
+    // A CRC-good ESC 0x20 frame with all fields unavailable is equally
+    // NOT valid stopped evidence and must not grant nonzero motor power.
+    uint8_t empty_esc[17] {};
+    empty_esc[0] = 0x30; empty_esc[1] = 0x20;
+    for (uint8_t i=2;i<17;i++) empty_esc[i] = 0xFF;
+    const uint8_t empty_n = AP_SpektrumSmartESC::encode(
+        0x80, empty_esc, sizeof(empty_esc), frame, sizeof(frame));
+    for (uint8_t i=0;i<empty_n;i++) m.feed(frame[i],59500U);
+    assert(m.status().fault == Motor::Fault::NONE);
+    assert(m.status().telemetry == 0U);
+    assert(m.status().unusable_sensor_frames == 2U);
+    assert(!m.ready_to_arm(60,60000));
     d.armed = d.rc_ok = d.control_ok = true;
     o.r.acquired_ms = d.acquired_ms = 60U;
     m.update(d,60000U,60U);
@@ -98,5 +125,5 @@ int main()
                   "Must exercise actual EarlyNative compile-time guard");
     observe_arm_before_peer();
     observe_arm_after_valid_peer();
-    std::puts("2 EarlyNative forced-ARM safety tests passed (host only)");
+    std::puts("EarlyNative forced-ARM and unusable sensor no-ACK tests passed (host only)");
 }
