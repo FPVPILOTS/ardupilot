@@ -47,8 +47,19 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         _auto_retry_disarmed = false;
     }
     if (_restore_pending && !hal.util->get_soft_armed()) {
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+        // Keep the dedicated one-ESC bus inactive after a latched native
+        // fault. Re-opening receive-only UART4 while MOTOR is selected
+        // creates an unconsumed ring: Diagnostics::update() intentionally
+        // does not run the passive consumer. It can accumulate thousands
+        // of misleading software overflows after the original F12.
+        // A later disarmed, IO-proven retry reacquires UART4 explicitly.
+        _uart.end();
+        _receiver.suspend();
+#else
         _uart.begin(115200);
         _receiver.resume();
+#endif
         _restore_pending = false;
     }
     // Power-on ordering: if FC booted first and ESC did not reply within
