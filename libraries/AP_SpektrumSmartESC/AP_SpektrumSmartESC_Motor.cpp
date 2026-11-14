@@ -73,7 +73,7 @@ bool AP_SpektrumSmartESC_Motor::rediscover(uint32_t now_us, const uint8_t *p, ui
     // No automatic motor-side reconnection following any armed request:
     // do not re-enter RUNNING with stale authority, even if ESC rebooted.
     if (_armed_seen || _last_demand_armed || _status.reverse ||
-        _status.throttle != _profile.zero) {
+        (_status.controls != 0 && _status.throttle != _profile.zero)) {
         reject_rx(RxReason::RESTART_ARMED, p, n, Fault::ESC_LOSS);
         return false;
     }
@@ -536,7 +536,7 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
         return;
     }
     if (action == AP_SpektrumSmartESC_RunningPolicy::Action::RESTART) {
-        IGNORE_RETURN(rediscover(acquisition_us, packet, n));
+        (void)rediscover(acquisition_us, packet, n);
         return;
     }
     if (action == AP_SpektrumSmartESC_RunningPolicy::Action::IGNORE_OPTIONAL) {
@@ -575,7 +575,7 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
             reject_rx(RxReason::UNSOLICITED_RESTART, packet, n);
             return;
         }
-        IGNORE_RETURN(rediscover(acquisition_us, packet, n));
+        (void)rediscover(acquisition_us, packet, n);
         return;
     }
     if (!reply_current) {
