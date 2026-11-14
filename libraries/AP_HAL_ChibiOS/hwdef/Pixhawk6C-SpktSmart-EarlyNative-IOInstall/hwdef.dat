@@ -3,5 +3,6 @@
 # UART4 AUX7 PA0 open-drain with weak pull-up, and 115200 baud at startup.
 # NEVER ARM this target; actual motor phases must be disconnected/insulated.
 include ../Pixhawk6C-SpktSmart-ArmedBench-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
 define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-EarlyNative"
 define AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT 1
