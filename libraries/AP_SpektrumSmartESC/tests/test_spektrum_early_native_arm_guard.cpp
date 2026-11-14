@@ -81,6 +81,15 @@ static void observe_arm_after_valid_peer()
     m.update(d,59000U,59U);
     assert(m.status().state == Motor::State::IDLE);
     assert(m.status().controls == 0);
+    // A real UART4 is half duplex: never inject 0x80 while a 0xCD/0x21
+    // packet is still pending TC. The previous synthetic test omitted
+    // this turn and correctly tripped the motor's RX-during-TX latch.
+    if (m.transmitting()) {
+        p.complete = true;
+        o.r.acquired_ms = d.acquired_ms = 60U;
+        m.update(d,60000U,60U);
+    }
+    assert(!m.transmitting());
     // Other valid Spektrum 0x80 sensor types must not be ESC ACKs.
     // This commissioning build observes them without declaring F12.
     const uint8_t unrelated[] = {
@@ -89,7 +98,7 @@ static void observe_arm_after_valid_peer()
     };
     const uint8_t unrelated_n = AP_SpektrumSmartESC::encode(
         0x80, unrelated, sizeof(unrelated), frame, sizeof(frame));
-    for (uint8_t i=0;i<unrelated_n;i++) m.feed(frame[i],59000U);
+    for (uint8_t i=0;i<unrelated_n;i++) m.feed(frame[i],61000U);
     assert(m.status().fault == Motor::Fault::NONE);
     assert(m.status().telemetry == 0U);
     assert(m.status().unusable_sensor_frames == 1U);
@@ -103,17 +112,19 @@ static void observe_arm_after_valid_peer()
     for (uint8_t i=2;i<17;i++) empty_esc[i] = 0xFF;
     const uint8_t empty_n = AP_SpektrumSmartESC::encode(
         0x80, empty_esc, sizeof(empty_esc), frame, sizeof(frame));
-    for (uint8_t i=0;i<empty_n;i++) m.feed(frame[i],59500U);
+    for (uint8_t i=0;i<empty_n;i++) m.feed(frame[i],61500U);
     assert(m.status().fault == Motor::Fault::NONE);
     assert(m.status().telemetry == 0U);
     assert(m.status().unusable_sensor_frames == 2U);
     assert(!m.ready_to_arm(60,60000));
+    const unsigned before_arm = p.transmissions;
     d.armed = d.rc_ok = d.control_ok = true;
-    o.r.acquired_ms = d.acquired_ms = 60U;
-    m.update(d,60000U,60U);
+    o.r.acquired_ms = d.acquired_ms = 62U;
+    m.update(d,62000U,62U);
     assert(m.status().fault == Motor::Fault::DISARMED);
     assert(m.status().state == Motor::State::FAULT);
-    assert(m.status().controls == 0);
+    // A forced ARM cannot initiate another digital control packet.
+    assert(p.transmissions == before_arm);
     assert(!p.held);
 }
 
