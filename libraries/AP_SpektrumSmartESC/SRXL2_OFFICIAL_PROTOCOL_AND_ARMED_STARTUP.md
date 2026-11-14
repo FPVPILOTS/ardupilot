@@ -147,3 +147,34 @@ The separate EarlyNative board now reports motor_arming_ready() false
 unconditionally. A successful discovery and zero-throttle telemetry
 cannot authorize physical arming until a distinct, qualified production
 firmware is implemented. Hardware testing remains motor-phases OFF.
+
+## 2026-11-14 — native safety and calibration observability
+
+The dedicated EarlyNative startup remains non-armable and 115200 baud.
+It now leaves UART4 disabled and PA0 disconnected after a terminal native
+fault, rather than starting a passive receiver that the native-only path
+does not service. A new DISARMED automatic connection still performs a new
+IO-inhibit lease and a new authenticated 0x21 handshake before control.
+
+After linking, the peer's *full* CRC-verified handshake UID is compared
+against the UID accepted by the original reader, including if the same
+0x40/0x30 IDs remain present. A changed UID revokes the old session;
+there is no transfer of armed demand or direction to the new ESC boot.
+
+Read-only SPK35 evidence now reports the last *solicited* CRC-checked
+0x80 ESC sensor's valid mask, electrical RPM (NOT mechanical shaft RPM),
+and reported throttle percent, even after a fault. This historical sample
+cannot grant ARM or certify an endpoint. SPK35 also reports the peer's
+400000 capability bit and the negotiated baud that was actually selected
+(115200 only on the current polled RX hardware).
+
+Host tests exercise changes to the identity/UID, RC-loss latching, stale
+telemetry after fault, CH1/CH7 channel-mask semantics, failsafe packet
+encoding and peer 400k support with a still-115200 local controller.
+They are simulations and cannot establish Avian 130A Ver A motor polarity,
+ESC self-failsafe behavior, live 400k receive reliability, safe CH1 idle
+and full-throttle values or physical motor cutoff during a power cycle.
+
+No flight firmware can be declared qualified without those real data.
+The safe validation setup leaves the three EDF phase wires individually
+insulated and disconnected and ArduPlane DISARMED.
