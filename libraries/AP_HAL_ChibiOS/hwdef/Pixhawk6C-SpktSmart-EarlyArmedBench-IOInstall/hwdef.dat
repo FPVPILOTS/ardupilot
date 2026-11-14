@@ -6,7 +6,7 @@
 # The same ARM switch cuts motor demand on DISARM; no throttle bypass.
 # ARM cannot be accepted before an authentic 0x21 and fresh, correlated
 # stopped / zero-throttle 0x80 measurement plus IO-owner and RC proof.
-# CH1 is limited to experimental 768..4608; NOT calibrated Avian endpoints.
+# CH1 is limited to experimental 10912..13532; NOT calibrated Avian endpoints.
 # CH7 reverse is OFF; no PWM fallback; no unverified 400k baud.
 # IOMCU MAIN3 special inhibit CRC 0x6DBBAD71 remains compulsory.
 include ../Pixhawk6C-SpktSmart-ArmedBench-IOInstall/hwdef.dat
