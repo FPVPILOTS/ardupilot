@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include "AP_SpektrumSmartESC_Motor.h"
+#include "AP_SpektrumSmartESC_BenchRange.h"
 
 // Actual vehicle motor integration: independent of the one-shot TurnLab.
 // The installed special IOMCU CRC is known (0x6DBBAD71) but does NOT
@@ -19,15 +20,16 @@ struct AP_SpektrumSmartESC_ProductionProfile {
         // EXPLICIT NON-FLIGHT commissioning image, selected only through
         // both its dedicated board build and the persistent SPKT_MOTOR=1
         // operator parameter. CH1 is restricted to a reference candidate
-        // 768..4608, with CH7 absent. These are NOT certified ESC endpoints,
+        // 10912..13532, with CH7 absent. These are NOT certified ESC endpoints,
         // so do not relabel the unverified source flags below as true.
         // Instead, ARM readiness is earned from actual IO inhibit ownership,
-        // completed CH1=768 UART transmission and fresh physical 0x80
+        // completed CH1=10912 UART transmission and fresh physical 0x80
         // zero-throttle/zero-eRPM replies, alongside normal RC/failsafe gates.
         return esc_id == 0x40 &&
             qualification.io_firmware_crc == 0x6DBBAD71U &&
             channels.throttle_channel == 0 &&
-            channels.zero == 768U && channels.full == 4608U &&
+            channels.zero == AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE &&
+            channels.full == AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE &&
             !channels.reverse_verified && !qualification.reverse_settings &&
             !channels.handshake_only_bench;
 #else
@@ -65,8 +67,10 @@ inline AP_SpektrumSmartESC_ProductionProfile spektrum_production_profile()
     p.esc_id = 0x40;
     p.channels.throttle_verified = false;
     p.channels.throttle_channel = 0;
-    p.channels.zero = 768;      // Observed idle candidate, NOT certified.
-    p.channels.full = 4608;     // Experimental test maximum, NOT 6% proven RPM.
+    p.channels.zero = AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE;
+    p.channels.full = AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE;
+    // These are official Spektrum transmitter-range example positions.
+    // They are NOT proven Avian physical neutral/6% RPM values.
     p.channels.reverse_verified = false; // CH7 not qualified.
     p.channels.reverse_channel = 6;
     p.qualification.io_firmware_crc = 0x6DBBAD71U;
