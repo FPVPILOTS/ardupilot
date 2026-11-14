@@ -30,6 +30,7 @@ def main():
     turn_executable = args.out.resolve() / 'test_spektrum_turnlab.exe'
     motor_executable = args.out.resolve() / 'test_spektrum_motor.exe'
     armed_bench_executable = args.out.resolve() / 'test_spektrum_armed_bench_packet.exe'
+    early_native_arm_executable = args.out.resolve() / 'test_spektrum_early_native_arm_guard.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -129,6 +130,18 @@ def main():
              str(library / 'tests/test_spektrum_armed_bench_packet.cpp'),
              '-o', str(armed_bench_executable)],
             [str(armed_bench_executable)],
+            # The actual EarlyNative compile-time gate must refuse forced
+            # ARM both before and after a valid 0x21 peer handshake.
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             '-DAP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL=1',
+             '-DAP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT=1',
+             str(library / 'AP_SpektrumSmartESC.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Reader.cpp'),
+             str(library / 'AP_SpektrumSmartESC_ChannelData.cpp'),
+             str(library / 'AP_SpektrumSmartESC_Motor.cpp'),
+             str(library / 'tests/test_spektrum_early_native_arm_guard.cpp'),
+             '-o', str(early_native_arm_executable)],
+            [str(early_native_arm_executable)],
         ]
         if args.arm_cxx:
             commands.append([
