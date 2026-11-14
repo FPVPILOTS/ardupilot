@@ -133,6 +133,7 @@ def main():
             # The actual EarlyNative compile-time gate must refuse forced
             # ARM both before and after a valid 0x21 peer handshake.
             [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             '-I', str(library.parent),
              '-DAP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL=1',
              '-DAP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT=1',
              str(library / 'AP_SpektrumSmartESC.cpp'),
