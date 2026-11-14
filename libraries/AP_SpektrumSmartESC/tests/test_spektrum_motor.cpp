@@ -783,6 +783,71 @@ TEST(SpektrumMotor, WrongSensorReplyIsNotSuccessfulControlAck)
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::PROTOCOL);
 }
 
+
+TEST(SpektrumMotor, RevKSpontaneousPeerRebootFailsClosed)
+{
+    Fixture f; f.discover();
+    const uint8_t data[] = {0x40,0x00,10,0,0,0x78,0x56,0x34,0x12};
+    uint8_t packet[80] {};
+    const auto n = Engine::encode(0x21,data,sizeof(data),packet,sizeof(packet));
+    f.feed(packet,n,61000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+    EXPECT_EQ(f.motor.status().protocol_event,Motor::ProtocolEvent::PEER_RESTART);
+    EXPECT_EQ(f.motor.status().protocol_type,0x21);
+    EXPECT_EQ(f.motor.status().protocol_src,0x40);
+    EXPECT_EQ(f.motor.status().protocol_dest,0x00);
+    EXPECT_EQ(f.motor.status().peer_restarts,1U);
+    EXPECT_FALSE(f.motor.ready_to_arm(61,61000));
+    f.tick(70000);
+    EXPECT_EQ(f.motor.status().controls,0U);
+}
+
+TEST(SpektrumMotor, RevKNoRFTelemetryIsAcceptedWhenSolicited)
+{
+    Fixture f; f.discover(); f.d.armed=false;
+    f.tick(70000); f.port.complete=true; f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0]=0; payload[1]=0x20;
+    uint8_t packet[80] {};
+    const auto n = Engine::encode(0x80,payload,sizeof(payload),packet,sizeof(packet));
+    f.feed(packet,n,73000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().telemetry,1U);
+    EXPECT_EQ(f.motor.status().no_rf_telemetry,1U);
+    EXPECT_EQ(f.motor.status().protocol_event,Motor::ProtocolEvent::NONE);
+}
+
+TEST(SpektrumMotor, RevKTelemetryFFRequestsSafeNewHandshake)
+{
+    Fixture f; f.discover(); f.d.armed=false;
+    f.tick(70000); f.port.complete=true; f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0]=0xFF; payload[1]=0x20;
+    uint8_t packet[80] {};
+    const auto n = Engine::encode(0x80,payload,sizeof(payload),packet,sizeof(packet));
+    f.feed(packet,n,73000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::ESC_LOSS);
+    EXPECT_EQ(f.motor.status().protocol_event,Motor::ProtocolEvent::TELEMETRY_REHANDSHAKE);
+    EXPECT_EQ(f.motor.status().telemetry_rehandshake_requests,1U);
+    EXPECT_EQ(f.motor.status().controls,1U);
+    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+}
+
+TEST(SpektrumMotor, RevKUnknownTelemetryDestinationFailsClosed)
+{
+    Fixture f; f.discover(); f.d.armed=false;
+    f.tick(70000); f.port.complete=true; f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0]=0x52; payload[1]=0x20;
+    uint8_t packet[80] {};
+    const auto n = Engine::encode(0x80,payload,sizeof(payload),packet,sizeof(packet));
+    f.feed(packet,n,73000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::PROTOCOL);
+    EXPECT_EQ(f.motor.status().protocol_event,Motor::ProtocolEvent::UNEXPECTED_FRAME);
+    EXPECT_EQ(f.motor.status().protocol_type,0x80);
+    EXPECT_EQ(f.motor.status().protocol_dest,0x52);
+}
+
 #ifdef SPKTSMART_STANDALONE_TEST
 int main()
 {
@@ -804,7 +869,11 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("38 prepared master/command safety tests passed (mock transport only)");
+    RevKSpontaneousPeerRebootFailsClosed();
+    RevKNoRFTelemetryIsAcceptedWhenSolicited();
+    RevKTelemetryFFRequestsSafeNewHandshake();
+    RevKUnknownTelemetryDestinationFailsClosed();
+    std::puts("42 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
