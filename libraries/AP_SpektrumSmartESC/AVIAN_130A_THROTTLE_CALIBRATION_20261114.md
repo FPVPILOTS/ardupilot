@@ -30,7 +30,7 @@ implementation.
 For digital SRXL2 the command generator must know independently
 verified zero/full values, correctly map the final SERVO3 Plane
 throttle, maintain CH1 only and never send reverse CH7 unless
-qualified. The existing profile's CH1=768..4608 window is a
+qualified. The existing profile's CH1=10912..13532 window is a
 **small unqualified protocol lab candidate**, not "full throttle".
 SRXL2 Rev K published example gives 10912 for -100% and 32768 for
 midpoint; this sample does NOT prove the exact Avian 130A stop/full
@@ -47,7 +47,7 @@ Build: Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall
   monitor-only ARM before the ESC has actually linked and reported
   valid recent zero throttle / stopped eRPM**.
 - Dedicated safety latch permits only experimental 0..6% CH1
-  source values 768..4608, CH7 omitted, never PWM fallback.
+  source values 10912..13532, CH7 omitted, never PWM fallback.
 - A CRC-valid foreign 0x80 sensor is ignored for control ACK:
   the last-good ESC telemetry watchdog still faults. Record SPK36.
 - Not for flight. It is **not ready to flash or spin** until
