@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "AP_SpektrumSmartESC_Motor.h"
+#include "AP_SpektrumSmartESC_BenchRange.h"
 #include <math.h>
 
 bool AP_SpektrumSmartESC_Motor::control_packet(const uint8_t *p, uint8_t n)
@@ -18,8 +19,10 @@ bool AP_SpektrumSmartESC_Motor::control_packet(const uint8_t *p, uint8_t n)
     // The FULL production whitelist is deliberately not available here.
     // These limits do not assert that the real ESC accepts these endpoints.
     const uint16_t throttle = uint16_t(p[12]) | (uint16_t(p[13]) << 8);
-    return n == 16 && p[8] == 0x01 && throttle >= 768U &&
-        throttle <= 4608U && AP_SpektrumSmartESC::crc16(p, n) == 0;
+    return n == 16 && p[8] == 0x01 &&
+        throttle >= AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE &&
+        throttle <= AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE &&
+        AP_SpektrumSmartESC::crc16(p, n) == 0;
 #else
     // Ordinary source-qualified production profile: CH1 and CH7 ONLY.
     return n == 18 && p[8] == 0x41 && (p[14] & 3U) == 0 &&
@@ -89,7 +92,8 @@ bool AP_SpektrumSmartESC_Motor::start(const Qualification &q, bool disarmed, uin
         q.io_firmware_crc == 0x6DBBAD71U && !_profile.reverse_verified &&
         !q.reverse_settings && !_profile.handshake_only_bench &&
         _profile.throttle_channel == 0 &&
-        _profile.zero == 768U && _profile.full == 4608U;
+        _profile.zero == AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE &&
+        _profile.full == AP_SpektrumSmartESC_BenchRange::SIX_PERCENT_CANDIDATE;
     if ((!_port.simulated() && (!physical_control_available() ||
          (!_profile.reverse_verified && !forward_only_bench) ||
          (!q.reverse_settings && !forward_only_bench))) ||
