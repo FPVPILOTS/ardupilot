@@ -456,6 +456,21 @@ void AP_SpektrumSmartESC_Motor::control(const Demand &d, uint32_t now_us, uint32
     transmit(n, now_us, false);
 }
 
+void AP_SpektrumSmartESC_Motor::record_protocol_event(
+    ProtocolEvent event, const uint8_t *packet, uint8_t length)
+{
+    if (_status.protocol_event != ProtocolEvent::NONE) {
+        return;
+    }
+    _status.protocol_event = event;
+    _status.protocol_length = length;
+    if (packet != nullptr && length >= 5) {
+        _status.protocol_type = packet[1];
+        _status.protocol_src = packet[3];
+        _status.protocol_dest = packet[4];
+    }
+}
+
 void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
 {
     if (_status.state == State::DISABLED || _status.state == State::FAULT) {
@@ -477,20 +492,44 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     }
     uint8_t packet[80] {}, n = 0;
     if (!_parser.observed_frame(packet, sizeof(packet), n)) {
+        record_protocol_event(ProtocolEvent::DECODE_FRAME, nullptr, 0);
         fault(Fault::PROTOCOL);
         return;
     }
-    // A real Avian sends unsolicited 0x21 every ~50ms after linking.
-    // Do not classify its correctly addressed handshake as a protocol
-    // failure, whether or not a 0x80 control reply is currently pending.
+    // SRXL2 Rev K: a peer may reboot and send a dest=0x00 startup 0x21.
+    // Never continue an armed or nonzero motor session across a new boot.
+    // The existing ChibiOS driver may start a *new* handshake only while
+    // DISARMED and after releasing the previous UART/IO ownership lease.
     if (n == 14 && packet[1] == 0x21 && packet[3] == _target &&
-        packet[4] == _source) {
-        _last_peer = acquisition_us;
-        return;
+        packet[5] >= 1 && packet[5] <= 100 && packet[6] <= 1) {
+        if (packet[4] == 0x00) {
+            ++_status.peer_restarts;
+            record_protocol_event(ProtocolEvent::PEER_RESTART, packet, n);
+            fault(Fault::ESC_LOSS);
+            return;
+        }
+        if (packet[4] == _source) {
+            _last_peer = acquisition_us;
+            return;
+        }
     }
-    if (n != 22 || packet[1] != 0x80 || packet[3] != _source) {
+    // Rev K 7.6: 0x80 byte 3 is RF telemetry destination, not ESC
+    // identity. 0x00 means do not forward over RF. 0xFF is a request
+    // for a fresh handshake; never count it as current sensor evidence.
+    if (n != 22 || packet[1] != 0x80 ||
+        (packet[3] != _source && packet[3] != 0x00 && packet[3] != 0xFF)) {
+        record_protocol_event(ProtocolEvent::UNEXPECTED_FRAME, packet, n);
         fault(Fault::PROTOCOL);
         return;
+    }
+    if (packet[3] == 0xFF) {
+        ++_status.telemetry_rehandshake_requests;
+        record_protocol_event(ProtocolEvent::TELEMETRY_REHANDSHAKE, packet, n);
+        fault(Fault::ESC_LOSS);
+        return;
+    }
+    if (packet[3] == 0x00) {
+        ++_status.no_rf_telemetry;
     }
     // A CRC-correct ESC sensor response may be acquired after the 15ms
     // transaction window (or after the previous reply was already consumed).
@@ -509,6 +548,7 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
     AP_SpektrumSmartESC::Telemetry decoded {};
     if (!AP_SpektrumSmartESC::decode_esc(packet + 4, 16, decoded) ||
         decoded.valid == 0) {
+        record_protocol_event(ProtocolEvent::INVALID_ESC_TELEMETRY, packet, n);
         fault(Fault::PROTOCOL);
         return;
     }
