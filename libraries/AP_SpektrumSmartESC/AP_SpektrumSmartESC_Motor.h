@@ -51,9 +51,18 @@ public:
         bool reverse_permitted = false, ground_authorized = false, stopped = false;
         uint32_t acquired_ms = 0, ground_ms = 0, stopped_ms = 0;
     };
+    enum class ProtocolEvent : uint8_t {
+        NONE, DECODE_FRAME, UNEXPECTED_FRAME, INVALID_ESC_TELEMETRY,
+        PEER_RESTART, TELEMETRY_REHANDSHAKE
+    };
     struct Status {
         State state = State::DISABLED;
         Fault fault = Fault::NONE;
+        ProtocolEvent protocol_event = ProtocolEvent::NONE;
+        uint8_t protocol_length = 0, protocol_type = 0;
+        uint8_t protocol_src = 0, protocol_dest = 0;
+        uint32_t peer_restarts = 0, telemetry_rehandshake_requests = 0;
+        uint32_t no_rf_telemetry = 0;
         uint32_t tx_frames = 0, tx_bytes = 0, controls = 0, telemetry = 0;
         uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
@@ -126,6 +135,7 @@ public:
     static bool control_packet(const uint8_t *packet, uint8_t length);
 private:
     void fault(Fault reason);
+    void record_protocol_event(ProtocolEvent event, const uint8_t *packet, uint8_t length);
     bool owned(uint32_t now_ms) const;
     bool transmit(uint8_t length, uint32_t now_us, bool handshake);
     void control(const Demand &d, uint32_t now_us, uint32_t now_ms);
