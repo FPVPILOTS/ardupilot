@@ -84,6 +84,25 @@ TEST(SpektrumUartRecovery, NativeStartupFEPredicateNeverRetriesActiveMotor)
     EXPECT_FALSE(Gate::allow_native_fe_startup_retry(false, false, 0, 0, 0, false));
 }
 
+TEST(SpektrumUartRecovery, IsolatedNoiseNeedsFiveHundredMs)
+{
+    AP_SpektrumSmartESC_UartRecovery gate;
+    gate.record_noise_only(9478);
+    gate.record_noise_only(9478);
+    EXPECT_FALSE(gate.noise_eligible(2, 9977));
+    EXPECT_TRUE(gate.noise_eligible(2, 9978));
+    EXPECT_TRUE(gate.noise_eligible(2, 10978));
+}
+
+TEST(SpektrumUartRecovery, MixedOrUnaccountedNoiseNeverQualifies)
+{
+    AP_SpektrumSmartESC_UartRecovery gate;
+    gate.record_noise_only(9000);
+    EXPECT_FALSE(gate.noise_eligible(2, 10000)); // ORE, FE or unclassified event.
+    gate.record_framing_only(9010);
+    EXPECT_FALSE(gate.noise_eligible(2, 10000)); // Mixed FE + NE cannot reconnect.
+}
+
 TEST(SpektrumUartRecovery, TimestampWrapAround)
 {
     AP_SpektrumSmartESC_UartRecovery gate;
@@ -102,8 +121,10 @@ int main()
     RecoveredCounterRetainedForLiveBaseline();
     NativePortModeFourIsPassiveMonitoring();
     NativeStartupFEPredicateNeverRetriesActiveMotor();
+    IsolatedNoiseNeedsFiveHundredMs();
+    MixedOrUnaccountedNoiseNeverQualifies();
     TimestampWrapAround();
-    std::puts("8 UART recovery policy tests passed");
+    std::puts("10 UART recovery policy tests passed");
 }
 #else
 AP_GTEST_MAIN()
