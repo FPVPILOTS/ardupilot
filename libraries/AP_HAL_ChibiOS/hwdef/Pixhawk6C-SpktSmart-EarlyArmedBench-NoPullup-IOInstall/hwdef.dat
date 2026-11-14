@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A/B EXPERIMENT ONLY -- motor phases DISCONNECTED, DISARMED, no flight.
+# Change exactly one electrical variable from the proven F7 recovery build:
+# remove the *internal* STM32 PA0 weak pull-up in UART4 AF8 open-drain RX/TX
+# and in the disconnected GPIO input phase.
+# This relies on an independently verified external idle-high bias.
+# With no external pull-up, one-wire open drain may remain floating and
+# handshake TX cannot produce a valid digital HIGH level.
+# Do not modify arming, motor, UART, baud, IOMCU or protocol checks.
+include ../Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-NoPU-AB"
+undef AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 0
