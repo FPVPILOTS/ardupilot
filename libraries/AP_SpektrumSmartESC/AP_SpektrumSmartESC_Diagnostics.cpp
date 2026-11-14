@@ -1555,7 +1555,11 @@ bool AP_SpektrumSmartESC_Diagnostics::armed_bench_arm_permitted() const
 
 bool AP_SpektrumSmartESC_Diagnostics::motor_arming_ready() const
 {
-#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // This commissioning firmware is strictly unarmable, even after
+    // healthy 0x21 + 0xCD / 0x80 exchange and zero-RPM evidence.
+    return false;
+#elif CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
     return AP_SpektrumSmartESC_Motor::physical_control_available() && _native_motor != nullptr &&
         _native_motor->ready_to_arm();
 #else
