@@ -183,7 +183,6 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us,
     // explicitly ARMS again after genuine zero/stop telemetry is available.
     // In particular, a late-handshake link cannot launch the EDF on a stale
     // or raised throttle stick.
-    Demand neutral {};
     const Demand *effective = &requested;
 #if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
     // Unlike legacy ArmedBench, this motor-capable early-start variant
@@ -196,6 +195,7 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us,
         return;
     }
 #elif AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+    Demand neutral {};
     if (requested.armed && !_armed_seen && !_status.bench_monitor &&
         !ready_to_arm(now_ms, now_us)) {
         _status.bench_monitor = true;
