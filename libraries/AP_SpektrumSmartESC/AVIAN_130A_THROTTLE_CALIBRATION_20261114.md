@@ -81,3 +81,34 @@ Sources:
 - https://www.spektrumrc.com/on/demandware.static/-/Sites-horizon-master/default/dwb627f043/Manuals/Avian-Manual-EN.pdf
 - https://github.com/SpektrumRC/SRXL2/blob/master/Docs/SRXL2%20Specification.pdf
 - https://github.com/ArduPilot/ardupilot_wiki/blob/master/common/source/docs/common-esc-calibration.rst
+
+## 2026-11-14 — independent TX16S switch/idle arming interlock
+
+EarlyArmedBench adds an independent, compile-time-locked RC3 check
+before it grants *any* normal Plane ARM permission: raw receiver
+throttle must be within 45us of its calibrated minimum (or maximum
+when the RC channel is reversed) for 750 consecutive milliseconds.
+Input calibration must be plausible (800..2200us and at least 500us
+span), and a fresh RC sample must have been processed within 100ms.
+A high stick, absent receiver value, stale RC, reboot, failed arming
+check, or throttle raised during the hold resets the prerequisite.
+
+This prevents a dangerous false-positive: while DISARMED, ArduPlane
+forces final SERVO3 demand to zero even if the real TX16S stick is at
+maximum. A zero SERVO3 command alone therefore never establishes that
+the operator has moved the transmitter to low throttle.
+
+Logs:
+- SPK37 RC3.. S3.. F.. RC.. FS.. ARM.. for raw vs final output.
+- SPK38 RC3LOW.. HOLD..ms on the motor-test-specific image.
+- SPK36 BAD.. ID.. SUB.. for the first CRC-correct foreign or
+  unusable 0x80 sensor that must not authorize any motor demand.
+- SPK28 ARM... RDY.. and SPK27 for native motor session.
+
+The operator's arm switch still cannot be claimed to be a physical
+emergency motor cut. A receiver command to DISARM *does not prove*
+immediate ESC motor shutdown if signal loss/last-value hold is
+unqualified. Before any rotor is attached, independently test
+the actual ESC loss-of-command behavior with an isolated test load
+and a separate physical battery cutoff. This source does NOT certify
+a safe motor spin with installed Viper 90mm EDF impeller.
