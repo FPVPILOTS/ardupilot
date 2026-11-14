@@ -575,7 +575,7 @@ void AP_SpektrumSmartESC_Motor::feed(uint8_t byte, uint32_t acquisition_us)
             _status.unusable_b3 = packet[7];
         }
         ++_status.unusable_sensor_frames;
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT || AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
         // The early native link can OBSERVE other
         // CRC-correct 0x80 sensor types. Spektrum telemetry has many
         // sensor IDs besides ESC 0x20 (including 0x00 NODATA).
