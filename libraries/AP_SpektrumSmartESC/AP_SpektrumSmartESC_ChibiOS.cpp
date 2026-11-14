@@ -31,7 +31,8 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     _auto_retry_disarmed = !io_prepared;
     _retry_at_ms = io_prepared ? 0U : now_ms + 100U;
     _retry_requires_framing_quiet = false;
-    _startup_framing_retries = 0;
+    _retry_requires_noise_quiet = false;
+    _startup_framing_retries = _startup_noise_retries = 0;
     _ever_armed = false;
     return true;
 }
@@ -74,12 +75,19 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         // reconnect is allowed only if *all* UART errors were framing-only
         // and at least 500ms have elapsed since the last such error.
         // Do not clear the counters or bypass normal UART owner acquisition.
-        const bool quiet = !_retry_requires_framing_quiet ||
-            _uart.framing_only_fault(true);
-        _retry_requires_framing_quiet = false;
+        const bool quiet =
+            (!_retry_requires_framing_quiet || _uart.framing_only_fault(true)) &&
+            (!_retry_requires_noise_quiet || _uart.noise_only_fault(true)) &&
+            _uart.line_high_held(AP_SpektrumSmartESC_UartRecovery::QUIET_MS);
         if (!quiet) {
-            return; // Other error or continuing FE: latch, no retry.
+            // No UART reconfiguration or TX while the line is unstable.
+            // Passive DISARMED checks may continue for a late-powered ESC.
+            _retry_at_ms = now_ms + 500U;
+            _auto_retry_disarmed = true;
+            return;
         }
+        _retry_requires_framing_quiet = false;
+        _retry_requires_noise_quiet = false;
         const uint32_t nonce = (_uid ^ now_ms) | 1U;
         if (_owner.prepare(nonce, _qualification.io_firmware_crc)) {
             _pending_ms = now_ms;
@@ -165,8 +173,10 @@ AP_SpektrumSmartESC_ChibiOS::startup_diagnostics() const
     WITH_SEMAPHORE(_lock);
     StartupDiagnostics result {};
     result.fe_attempts = _startup_framing_retries;
+    result.ne_attempts = _startup_noise_retries;
     result.retry_pending = _auto_retry_disarmed;
     result.waiting_for_fe_quiet = _retry_requires_framing_quiet;
+    result.waiting_for_ne_quiet = _retry_requires_noise_quiet;
     result.ever_armed = _ever_armed;
     return result;
 }
@@ -281,19 +291,27 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                         // and the cumulative NE/FE/ORE evidence before that
                         // happens, including PA0's live input-level bit.
                         AP_HAL::UARTDriver::ReceiveDiagnostics hw {};
+                        DiagnosticRX::FirstUARTError raw {};
+                        const bool preclear = _uart.first_error_snapshot(raw);
                         if (_uart.receive_diagnostics(hw)) {
                             _first_uart_fault.captured = true;
-                            _first_uart_fault.time_ms = AP_HAL::millis();
-                            _first_uart_fault.last_byte_ms = hw.last_uart_rx_ms;
+                            _first_uart_fault.time_ms = preclear ? raw.time_ms : AP_HAL::millis();
+                            _first_uart_fault.last_byte_ms = preclear ? raw.last_byte_ms : hw.last_uart_rx_ms;
                             _first_uart_fault.error_count = _uart.receive_errors();
                             _first_uart_fault.framing = hw.framing;
                             _first_uart_fault.noise = hw.noise;
                             _first_uart_fault.overrun = hw.overruns;
                             _first_uart_fault.overflow = hw.overflow;
-                            _first_uart_fault.cr1 = hw.cr1;
-                            _first_uart_fault.cr3 = hw.cr3;
-                            _first_uart_fault.isr = hw.isr;
-                            _first_uart_fault.flags = uint8_t(hw.flags);
+                            _first_uart_fault.cr1 = preclear ? raw.cr1 : hw.cr1;
+                            _first_uart_fault.cr2 = preclear ? raw.cr2 : 0;
+                            _first_uart_fault.cr3 = preclear ? raw.cr3 : hw.cr3;
+                            _first_uart_fault.isr = preclear ? raw.isr : hw.isr;
+                            _first_uart_fault.moder = raw.moder;
+                            _first_uart_fault.pupdr = raw.pupdr;
+                            _first_uart_fault.afrl = raw.afrl;
+                            _first_uart_fault.otyper = raw.otyper;
+                            _first_uart_fault.idr = raw.idr;
+                            _first_uart_fault.flags = preclear ? raw.flags : uint8_t(hw.flags);
                         }
                     }
                     // Only NO ESC / stale solicited telemetry while never
@@ -314,9 +332,24 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                             _ever_armed, hal.util->get_soft_armed() || _demand.armed,
                             s.tx_frames, s.controls, _startup_framing_retries,
                             _uart.framing_only_fault(false));
+                    // A hot-plug NE-only fault also permits at most two
+                    // DISARMED discovery retries after a proven quiet PA0.
+                    // Never rearm, send CH1 or erase genuine UART error history.
+                    const bool initial_noise =
+                        why == AP_SpektrumSmartESC_Motor::Fault::UART &&
+                        _demand.magnitude == 0 && !_demand.reverse &&
+                        AP_SpektrumSmartESC_UartRecovery::allow_native_fe_startup_retry(
+                            _ever_armed, hal.util->get_soft_armed() || _demand.armed,
+                            s.tx_frames, s.controls, _startup_noise_retries,
+                            _uart.noise_only_fault(false));
                     if (initial_fe) {
                         _startup_framing_retries++;
                         _retry_requires_framing_quiet = true;
+                        _retry_at_ms = AP_HAL::millis() + 1000U;
+                        _auto_retry_disarmed = true;
+                    } else if (initial_noise) {
+                        _startup_noise_retries++;
+                        _retry_requires_noise_quiet = true;
                         _retry_at_ms = AP_HAL::millis() + 1000U;
                         _auto_retry_disarmed = true;
                     } else if (disarmed && why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS) {
