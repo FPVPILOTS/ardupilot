@@ -31,6 +31,7 @@ def main():
     motor_executable = args.out.resolve() / 'test_spektrum_motor.exe'
     armed_bench_executable = args.out.resolve() / 'test_spektrum_armed_bench_packet.exe'
     early_native_arm_executable = args.out.resolve() / 'test_spektrum_early_native_arm_guard.exe'
+    early_armed_rc_executable = args.out.resolve() / 'test_spektrum_rc_arm_guard.exe'
     sources = [str(library / 'AP_SpektrumSmartESC.cpp'), str(library / 'tests/test_spektrum_smart.cpp'),
                str(library / 'AP_SpektrumSmartESC_Handshake.cpp')]
     with (args.out / 'tests.log').open('w', encoding='utf-8') as log:
@@ -143,6 +144,10 @@ def main():
              str(library / 'tests/test_spektrum_early_native_arm_guard.cpp'),
              '-o', str(early_native_arm_executable)],
             [str(early_native_arm_executable)],
+            [args.cxx, '-std=c++11', '-Wall', '-Wextra', '-Werror',
+             str(library / 'tests/test_spektrum_rc_arm_guard.cpp'),
+             '-o', str(early_armed_rc_executable)],
+            [str(early_armed_rc_executable)],
         ]
         if args.arm_cxx:
             commands.append([
