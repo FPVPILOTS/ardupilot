@@ -87,6 +87,14 @@ private:
     bool bench_blocked() const { return AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB || _bench.arming_blocked(_enable.get()) || _probe.get() != 0 || _handshake.get() != 0; }
     bool motor_arming_ready() const;
     AP_SpektrumSmartESC_ChibiOS *_native_motor = nullptr;
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // Native early boot exists also when HANDSHAKE_LAB and AUTO_LAB are
+    // disabled. Keep these fields OUTSIDE their nested #if blocks.
+    bool _native_early_boot_active = false;
+    bool _native_early_boot_pumping = false;
+    uint32_t _native_early_boot_init_ms = 0;
+    uint32_t _native_early_boot_last_ms = 0;
+#endif
     MotorEvidence _motor_evidence;
     bool update_waveform(uint32_t now_ms);
     AP_Int8 _waveform;
@@ -128,12 +136,6 @@ private:
     uint32_t _auto_fast_grants = 0, _auto_fast_denied = 0;
     bool _auto_started = false;
     bool _auto_leased = false, _auto_inflight = false;
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
-    bool _native_early_boot_active = false;
-    bool _native_early_boot_pumping = false;
-    uint32_t _native_early_boot_init_ms = 0;
-    uint32_t _native_early_boot_last_ms = 0;
-#endif
 #if AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     bool _early_app_boot_active = false;
     bool _early_app_boot_pumping = false;
