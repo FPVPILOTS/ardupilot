@@ -25,7 +25,9 @@ public:
     // cannot cause ARM or a 0xCD command without real peer/telemetry proof.
     struct StartupDiagnostics {
         uint8_t fe_attempts = 0;
-        bool retry_pending = false, waiting_for_fe_quiet = false, ever_armed = false;
+        uint8_t ne_attempts = 0;
+        bool retry_pending = false, waiting_for_fe_quiet = false;
+        bool waiting_for_ne_quiet = false, ever_armed = false;
     };
     StartupDiagnostics startup_diagnostics() const;
     // Historical snapshot taken BEFORE the driver tears UART4 down.
@@ -37,7 +39,8 @@ public:
         uint32_t last_byte_ms = 0;
         uint32_t error_count = 0;
         uint32_t framing = 0, noise = 0, overrun = 0, overflow = 0;
-        uint32_t cr1 = 0, cr3 = 0, isr = 0;
+        uint32_t cr1 = 0, cr2 = 0, cr3 = 0, isr = 0;
+        uint32_t moder = 0, pupdr = 0, afrl = 0, otyper = 0, idr = 0;
         uint8_t flags = 0;
     };
     UARTFaultSnapshot uart_fault_snapshot() const;
@@ -69,7 +72,8 @@ private:
     // At most two disarmed, no-control, pure-FE startup retries.
     // Not a generic UART recovery; never used during or after ARM.
     bool _retry_requires_framing_quiet = false;
-    uint8_t _startup_framing_retries = 0;
+    bool _retry_requires_noise_quiet = false;
+    uint8_t _startup_framing_retries = 0, _startup_noise_retries = 0;
     UARTFaultSnapshot _first_uart_fault;
 };
 #endif
