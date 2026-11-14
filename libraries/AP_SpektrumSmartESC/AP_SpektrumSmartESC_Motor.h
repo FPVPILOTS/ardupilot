@@ -64,6 +64,10 @@ public:
         uint32_t late_sensors = 0; // Valid but outside active 0xCD reply window; never authorizes ARM.
         uint32_t rx_restarts = 0, rx_ignored = 0, rx_rejects = 0;
         uint8_t rx_last_reason = 0, rx_last_type = 0, rx_last_dest = 0, rx_last_len = 0;
+        // First rejected complete frame, for post-fault forensic readout.
+        // Never authorizes a packet or represents sender identity.
+        uint8_t rx_rejected_frame[22] {};
+        uint8_t rx_rejected_captured = 0;
         uint16_t throttle = 0, direction = 0; // Last TC-completed control, not desired values.
         bool simulated = true, reverse = false;
         // ARM-before-link stays monitor-only until a full disarm/rearm.
