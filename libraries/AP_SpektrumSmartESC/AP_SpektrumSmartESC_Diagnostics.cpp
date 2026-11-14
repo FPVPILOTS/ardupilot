@@ -124,7 +124,7 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
 
 void AP_SpektrumSmartESC_Diagnostics::init()
 {
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     _native_early_boot_init_ms = AP_HAL::millis();
     _native_early_boot_active = true;
 #endif
@@ -913,7 +913,7 @@ void AP_SpektrumSmartESC_Diagnostics::finish_early_boot()
 #endif
 #endif
 
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
 void AP_SpektrumSmartESC_Diagnostics::update_native_early_boot(uint32_t now_ms)
 {
     if (!_native_early_boot_active || _native_early_boot_pumping ||
@@ -1303,7 +1303,7 @@ void AP_SpektrumSmartESC_Diagnostics::update()
         if (uint32_t(now - _last_log_ms) >= 1000U) {
             _last_log_ms = now;
             if (_native_motor != nullptr) {
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
                 // Absolute time since FC MCU boot, unlike FIRST50ms which
                 // is only relative to the handshake-reader session.
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
@@ -1670,7 +1670,7 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
     s.reverse_permitted = reverse_permitted;
     AP_SpektrumSmartESC_Motor::Demand d;
     const uint32_t now = AP_HAL::millis();
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     // RC input validation only. Never maps raw RC3 to the ESC wire,
     // bypasses disarm, or alters the final SERVO3 motor output.
     if (uint32_t(now - _native_rc_observe_ms) >= 1000U) {
