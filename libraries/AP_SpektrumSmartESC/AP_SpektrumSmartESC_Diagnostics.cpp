@@ -1322,6 +1322,18 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                     "SPK28 ARM MON%u RET%u RDY%u",
                     unsigned(s.bench_monitor), unsigned(s.bench_link_retries),
                     unsigned(motor_arming_ready()));
+                if (s.protocol_event != AP_SpektrumSmartESC_Motor::ProtocolEvent::NONE) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                        "SPK34 EV%u LEN%u T%02X S%02X D%02X",
+                        unsigned(s.protocol_event), unsigned(s.protocol_length),
+                        unsigned(s.protocol_type), unsigned(s.protocol_src),
+                        unsigned(s.protocol_dest));
+                    GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                        "SPK34 RESTART%lu RH%lu NORF%lu",
+                        (unsigned long)s.peer_restarts,
+                        (unsigned long)s.telemetry_rehandshake_requests,
+                        (unsigned long)s.no_rf_telemetry);
+                }
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 SENSOR LATE%lu",
                     (unsigned long)s.late_sensors);
