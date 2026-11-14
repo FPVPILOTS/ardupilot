@@ -28,6 +28,19 @@ public:
         bool retry_pending = false, waiting_for_fe_quiet = false, ever_armed = false;
     };
     StartupDiagnostics startup_diagnostics() const;
+    // Historical snapshot taken BEFORE the driver tears UART4 down.
+    // Without this, the normal SPK29 5-second log sees CR1/ISR=0 and
+    // cannot explain an immediate F7 during power-on.
+    struct UARTFaultSnapshot {
+        bool captured = false;
+        uint32_t time_ms = 0;
+        uint32_t last_byte_ms = 0;
+        uint32_t error_count = 0;
+        uint32_t framing = 0, noise = 0, overrun = 0, overflow = 0;
+        uint32_t cr1 = 0, cr3 = 0, isr = 0;
+        uint8_t flags = 0;
+    };
+    UARTFaultSnapshot uart_fault_snapshot() const;
     bool ready_to_arm() const;
     // Explicit non-flight bench ARM monitor: a live, zero-demand discovery
     // lease; never grants native motor output or bypasses normal checks.
@@ -57,5 +70,6 @@ private:
     // Not a generic UART recovery; never used during or after ARM.
     bool _retry_requires_framing_quiet = false;
     uint8_t _startup_framing_retries = 0;
+    UARTFaultSnapshot _first_uart_fault;
 };
 #endif
