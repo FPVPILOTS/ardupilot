@@ -1728,6 +1728,15 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
             unsigned(rc3_low),
             (unsigned long)(_bench_rc3_low_since_ms != 0 ?
                 now - _bench_rc3_low_since_ms : 0U));
+        if (rc3 != nullptr) {
+            // Explain an apparent low-stick rejection. Specifically
+            // RC3=992 is only low when RC3_MIN was calibrated near 992.
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                "SPK38 MIN%u MAX%u REV%u",
+                unsigned(rc3->get_radio_min()),
+                unsigned(rc3->get_radio_max()),
+                unsigned(rc3->get_reverse()));
+        }
 #endif
     }
 #endif
