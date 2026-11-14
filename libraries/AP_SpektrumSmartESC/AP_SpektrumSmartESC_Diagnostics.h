@@ -36,7 +36,7 @@ public:
     bool waveform_requested() const { return _waveform.get() != 0; }
     void init();
     void update();
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     // Opt-in non-flight native board: pump IO-proven 0x21 startup early,
     // preserving the *same* UART/Motor/Reader instance after vehicle setup.
     void update_native_early_boot(uint32_t now_ms);
@@ -87,7 +87,7 @@ private:
     bool bench_blocked() const { return AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB || _bench.arming_blocked(_enable.get()) || _probe.get() != 0 || _handshake.get() != 0; }
     bool motor_arming_ready() const;
     AP_SpektrumSmartESC_ChibiOS *_native_motor = nullptr;
-#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
     // Native early boot exists also when HANDSHAKE_LAB and AUTO_LAB are
     // disabled. Keep these fields OUTSIDE their nested #if blocks.
     bool _native_early_boot_active = false;
