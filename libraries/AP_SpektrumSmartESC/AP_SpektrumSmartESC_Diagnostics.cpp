@@ -1337,6 +1337,13 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 SENSOR LATE%lu",
                     (unsigned long)s.late_sensors);
+                if (s.unusable_sensor_frames != 0) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                        "SPK36 BAD%lu ID%02X SUB%02X B2%02X B3%02X",
+                        (unsigned long)s.unusable_sensor_frames,
+                        unsigned(s.unusable_id), unsigned(s.unusable_secondary),
+                        unsigned(s.unusable_b2), unsigned(s.unusable_b3));
+                }
                 if (s.telemetry != 0) {
                     // LAST is explicitly historical after a fault, never
                     // live motor authorization or a calibrated endpoint.
@@ -1663,6 +1670,18 @@ void AP_SpektrumSmartESC_Diagnostics::plane_control(bool armed, bool rc_ok, bool
     s.reverse_permitted = reverse_permitted;
     AP_SpektrumSmartESC_Motor::Demand d;
     const uint32_t now = AP_HAL::millis();
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // RC input validation only. Never maps raw RC3 to the ESC wire,
+    // bypasses disarm, or alters the final SERVO3 motor output.
+    if (uint32_t(now - _native_rc_observe_ms) >= 1000U) {
+        _native_rc_observe_ms = now;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+            "SPK37 RC3%u S3%u F%u RC%u FS%u ARM%u",
+            unsigned(RC_Channels::get_radio_in(2)), unsigned(s.pwm),
+            unsigned(s.function), unsigned(rc_ok),
+            unsigned(failsafe), unsigned(armed));
+    }
+#endif
     if (!armed) {
         // ArduPlane suppresses or forces SERVO3 while disarmed; it is NOT a
         // raw throttle source or an ESC-idle calibration. Request only zero
