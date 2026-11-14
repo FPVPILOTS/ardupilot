@@ -47,8 +47,19 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         _auto_retry_disarmed = false;
     }
     if (_restore_pending && !hal.util->get_soft_armed()) {
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+        // The native EarlyNative session has sole UART4 ownership; after
+        // any fault it must NOT start an unserviced passive RX reader.
+        // The previous F12 bench left an open FIFO that accumulated many
+        // thousands of diagnostic overflow errors after control stopped.
+        // Keep PA0 safely detached until disarmed retry owns a fresh IO
+        // lease and starts the normal native handshake again.
+        _uart.end();
+        _receiver.suspend();
+#else
         _uart.begin(115200);
         _receiver.resume();
+#endif
         _restore_pending = false;
     }
     // Power-on ordering: if FC booted first and ESC did not reply within
