@@ -36,6 +36,12 @@ public:
     bool waveform_requested() const { return _waveform.get() != 0; }
     void init();
     void update();
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // Opt-in non-flight native board: pump IO-proven 0x21 startup early,
+    // preserving the *same* UART/Motor/Reader instance after vehicle setup.
+    void update_native_early_boot(uint32_t now_ms);
+    void finish_native_early_boot();
+#endif
 #if AP_SPEKTRUM_SMART_ESC_AUTO_HANDSHAKE_LAB && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     // EarlyApp lab only: service the existing 0x21-only session during the
     // vehicle setup delay callback, then relinquish to the normal task.
@@ -122,6 +128,12 @@ private:
     uint32_t _auto_fast_grants = 0, _auto_fast_denied = 0;
     bool _auto_started = false;
     bool _auto_leased = false, _auto_inflight = false;
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    bool _native_early_boot_active = false;
+    bool _native_early_boot_pumping = false;
+    uint32_t _native_early_boot_init_ms = 0;
+    uint32_t _native_early_boot_last_ms = 0;
+#endif
 #if AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     bool _early_app_boot_active = false;
     bool _early_app_boot_pumping = false;

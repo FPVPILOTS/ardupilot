@@ -7,6 +7,7 @@ on:
       - feature/spktsmart-auto-poweron-20261113
       - feature/spktsmart-boot-timing-fix-20261113
       - feature/spktsmart-aux7-internal-pullup-20261113
+      - feature/spktsmart-native-early-poweron-20261114
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
@@ -14,6 +15,7 @@ on:
       - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp'
       - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-armedbench-firmware.yml'
   pull_request:
     paths:
@@ -23,6 +25,7 @@ on:
       - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp'
       - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
   workflow_dispatch:
 jobs:
   build-armedbench:
@@ -62,6 +65,23 @@ jobs:
           a=json.loads(p.read_text())
           assert int(a['board_id']) == 56, f"Wrong board: {a.get('board_id')}"
           print('Pixhawk6C firmware board_id=56. Build only; no flash.')
+          PY
+      - name: Build isolated EarlyNative power-on variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          ./waf configure --board Pixhawk6C-SpktSmart-EarlyNative-IOInstall
+          ./waf plane
+          test -s build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane.apj
+          strings build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane | grep -F 'SPK33 BOOT INIT%lums NOW%lums'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('build/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/bin/arduplane.apj')
+          a = json.loads(p.read_text())
+          assert int(a['board_id']) == 56
+          print('EarlyNative board ID 56 PASS; build only, no flash')
           PY
       - uses: actions/upload-artifact@v4
         with:

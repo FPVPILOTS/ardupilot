@@ -124,6 +124,10 @@ const AP_Param::GroupInfo AP_SpektrumSmartESC_Diagnostics::var_info[] = {
 
 void AP_SpektrumSmartESC_Diagnostics::init()
 {
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    _native_early_boot_init_ms = AP_HAL::millis();
+    _native_early_boot_active = true;
+#endif
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
     _hs_ack.set(0);
     _hs_authorization.cancel();
@@ -909,6 +913,31 @@ void AP_SpektrumSmartESC_Diagnostics::finish_early_boot()
 #endif
 #endif
 
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+void AP_SpektrumSmartESC_Diagnostics::update_native_early_boot(uint32_t now_ms)
+{
+    if (!_native_early_boot_active || _native_early_boot_pumping ||
+        _native_motor == nullptr || hal.util->get_soft_armed() ||
+        (_native_early_boot_last_ms != 0 && now_ms - _native_early_boot_last_ms < 2U)) {
+        return;
+    }
+    _native_early_boot_pumping = true;
+    _native_early_boot_last_ms = now_ms;
+    // No RC or armed demand is permitted during boot. The same disarmed
+    // native coordinator survives setup; no competing temporary UART
+    // owner, blind control frame, or restart at the end of setup.
+    AP_SpektrumSmartESC_Motor::Demand neutral {};
+    neutral.acquired_ms = now_ms;
+    _native_motor->update(neutral, AP_HAL::micros(), now_ms);
+    _native_early_boot_pumping = false;
+}
+
+void AP_SpektrumSmartESC_Diagnostics::finish_native_early_boot()
+{
+    _native_early_boot_active = false;
+}
+#endif
+
 bool AP_SpektrumSmartESC_Diagnostics::update_reader(uint32_t now_ms)
 {
     auto *port = hal.diagnostic_rx_uart();
@@ -1274,6 +1303,14 @@ void AP_SpektrumSmartESC_Diagnostics::update()
         if (uint32_t(now - _last_log_ms) >= 1000U) {
             _last_log_ms = now;
             if (_native_motor != nullptr) {
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+                // Absolute time since FC MCU boot, unlike FIRST50ms which
+                // is only relative to the handshake-reader session.
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                    "SPK33 BOOT INIT%lums NOW%lums",
+                    (unsigned long)_native_early_boot_init_ms,
+                    (unsigned long)now);
+#endif
                 const auto s = _native_motor->status();
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                     "SPK27 M S%u F%u TX%lu CD%lu TLM%lu",

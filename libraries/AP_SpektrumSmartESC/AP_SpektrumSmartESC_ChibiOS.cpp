@@ -13,16 +13,23 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
         qualification.io_firmware_crc == 0x6DBBAD71U &&
         !qualification.reverse_settings;
     if (!AP_SpektrumSmartESC_Motor::physical_control_available() || hal.util->get_soft_armed() ||
-        _active || _pending || (!source_qualified && !bounded_bench) ||
-        !_owner.prepare(nonce, qualification.io_firmware_crc)) {
+        _active || _pending || (!source_qualified && !bounded_bench)) {
+        return false;
+    }
+    // The special IOMCU may not have published its inhibit readback
+    // immediately after BoardConfig. In EarlyNative ONLY, defer the lease
+    // and retry while fully DISARMED. Never touch UART4 before IO proof.
+    const bool io_prepared = _owner.prepare(nonce, qualification.io_firmware_crc);
+    if (!io_prepared && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT) {
         return false;
     }
     _qualification = qualification;
     _target = target;
     _uid = uid;
     _pending_ms = now_ms;
-    _pending = true;
-    _auto_retry_disarmed = false;
+    _pending = io_prepared;
+    _auto_retry_disarmed = !io_prepared;
+    _retry_at_ms = io_prepared ? 0U : now_ms + 100U;
     _retry_requires_framing_quiet = false;
     _startup_framing_retries = 0;
     _ever_armed = false;
@@ -166,7 +173,12 @@ bool AP_SpektrumSmartESC_ChibiOS::ready_to_arm() const
 
 bool AP_SpektrumSmartESC_ChibiOS::bench_arm_permitted() const
 {
-#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+#if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // The EarlyNative commissioning image validates automatic 0x21/0x80
+    // link behavior only. No ARM-before-link exception in this board,
+    // independent of RC, stick, params and telemetry reports.
+    return false;
+#elif AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
     WITH_SEMAPHORE(_lock);
     const uint32_t now_ms = AP_HAL::millis();
     const auto state = _motor.status().state;

@@ -415,6 +415,19 @@ void AP_Vehicle::setup()
 
     BoardConfig.init();
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // Dedicated non-flight native SRXL2 cold-start image. Setup the
+    // SINGLE IOMCU-owned native motor transport *before* sensor/Plane
+    // initialization, not after the ESC may have selected its boot mode.
+    // This does not execute ARM or nonzero motor demand.
+    spektrum_smart_esc.init();
+    const uint32_t native_boot_start_ms = AP_HAL::millis();
+    while (uint32_t(AP_HAL::millis() - native_boot_start_ms) < 180U) {
+        spektrum_smart_esc.update_native_early_boot(AP_HAL::millis());
+        hal.scheduler->delay(2);
+    }
+#endif
+
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     // Isolated non-armable 0x21-only commissioning image. Parameters, GCS,
     // serial manager and board/IO setup have finished. Begin observing the
@@ -544,7 +557,7 @@ void AP_Vehicle::setup()
     filters.init();
 #endif
 
-#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && !AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && !AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
     spektrum_smart_esc.init();
 #endif
 
@@ -560,6 +573,12 @@ void AP_Vehicle::setup()
 
 #if AP_ARMING_ENABLED
     AP::arming().init();
+#endif
+
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    // The normal ArduPlane control producer now owns updates to the same
+    // session. Never run a second init() or reuse the UART.
+    spektrum_smart_esc.finish_native_early_boot();
 #endif
 
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
@@ -763,6 +782,9 @@ void AP_Vehicle::scheduler_delay_callback()
 #endif
 
     const uint32_t tnow = AP_HAL::millis();
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+    _singleton->spektrum_smart_esc.update_native_early_boot(tnow);
+#endif
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
     // Called only on long boot delays, before the regular scheduler starts.
     // No motor, reverse or arbitrary SRXL2 control is enabled by this pump.
