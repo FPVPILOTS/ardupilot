@@ -185,7 +185,17 @@ void AP_SpektrumSmartESC_Motor::update(const Demand &requested, uint32_t now_us,
     // or raised throttle stick.
     Demand neutral {};
     const Demand *effective = &requested;
-#if AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
+#if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+    // Unlike legacy ArmedBench, this motor-capable early-start variant
+    // NEVER converts an unqualified ARM edge into a hidden monitor-only
+    // state. ArduPlane must approve the actual zero/stop/RC3 prerequisites
+    // first. A race after ARM checks latches closed instead of queuing
+    // any nonzero motor frame.
+    if (requested.armed && !_armed_seen && !ready_to_arm(now_ms, now_us)) {
+        fault(Fault::CONTROL_LOSS);
+        return;
+    }
+#elif AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL
     if (requested.armed && !_armed_seen && !_status.bench_monitor &&
         !ready_to_arm(now_ms, now_us)) {
         _status.bench_monitor = true;
