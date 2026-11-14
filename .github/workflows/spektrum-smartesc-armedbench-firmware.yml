@@ -8,6 +8,7 @@ on:
       - feature/spktsmart-boot-timing-fix-20261113
       - feature/spktsmart-aux7-internal-pullup-20261113
       - feature/spktsmart-native-early-poweron-20261114
+      - feature/spktsmart-revk-recovery-20261114
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
