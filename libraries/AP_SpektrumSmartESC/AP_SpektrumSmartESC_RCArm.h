@@ -18,7 +18,12 @@ public:
         // a raised transmitter throttle may NEVER qualify a motor arm.
         if (minimum < 800 || maximum > 2200 ||
             maximum <= minimum || (maximum - minimum) < 500 ||
-            pwm < minimum || pwm > maximum) {
+            // Radio edge jitter may fall a few microseconds beyond
+            // calibrated min/max (e.g. RC3=992 for MIN=1000).
+            // Reject anything farther away than the IDLE margin;
+            // low-stick eligibility is still checked independently.
+            int32_t(pwm) < int32_t(minimum) - IDLE_MARGIN_US ||
+            int32_t(pwm) > int32_t(maximum) + IDLE_MARGIN_US) {
             return false;
         }
         const uint16_t idle_pwm = reversed ? maximum : minimum;
