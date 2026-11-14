@@ -345,6 +345,22 @@ void SRV_Channels::set_output_norm_trimmed(SRV_Channel::Aux_servo_function_t fun
     }
 }
 
+bool SRV_Channels::output_range_valid(SRV_Channel::Aux_servo_function_t function)
+{
+    bool assigned = false;
+    for (uint8_t i = 0; i < NUM_SERVO_CHANNELS; i++) {
+        const SRV_Channel &c = channels[i];
+        if (c.get_function() != function) {
+            continue;
+        }
+        assigned = true;
+        if (!(c.get_output_min() < c.get_trim() && c.get_trim() < c.get_output_max())) {
+            return false;
+        }
+    }
+    return assigned;
+}
+
 /*
   set and save the trim value to current output for all channels matching
   the given function type
