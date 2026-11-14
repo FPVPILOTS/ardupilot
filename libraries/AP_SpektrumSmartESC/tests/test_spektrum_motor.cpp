@@ -848,6 +848,107 @@ TEST(SpektrumMotor, RevKUnknownTelemetryDestinationFailsClosed)
     EXPECT_EQ(f.motor.status().protocol_dest,0x52);
 }
 
+
+TEST(SpektrumMotor, ChangedPeerUIDRevokesOldMotorSession)
+{
+    Fixture f; f.discover();
+    // Same 0x40 address and 0x31 destination, but a NEW ESC UID.
+    // It must not extend the previous authenticated peer lifetime.
+    const uint8_t hs[] = {0x40,0x31,1,0,0,0x11,0x22,0x33,0x44};
+    uint8_t frame[80] {};
+    const auto n = Engine::encode(0x21,hs,sizeof(hs),frame,sizeof(frame));
+    const auto previous_tx = f.port.starts;
+    f.feed(frame,n,61000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::ESC_LOSS);
+    EXPECT_EQ(f.motor.status().protocol_event, Motor::ProtocolEvent::PEER_RESTART);
+    EXPECT_EQ(f.motor.status().peer_restarts, 1U);
+    EXPECT_EQ(f.port.starts,previous_tx);
+    EXPECT_FALSE(f.motor.ready_to_arm(61,61000));
+
+    // A new session must explicitly start DISARMED and see another real
+    // handshake. Previously commanded throttle cannot be resumed.
+    EXPECT_FALSE(f.motor.start(qualification(),false,0x40,0x1234,100000,100));
+    EXPECT_TRUE(f.motor.start(qualification(),true,0x40,0x1234,101000,101));
+    f.d.armed = false;
+    f.d.magnitude = 0.5f; // old command is never valid on a new link
+    f.tick(102000);
+    EXPECT_EQ(f.motor.status().state,Motor::State::DISCOVERY);
+    EXPECT_EQ(f.motor.status().controls,0U);
+}
+
+TEST(SpektrumMotor, RCLossFailsafeNeverTransmitsAfterFault)
+{
+    Fixture f; f.discover(); f.cycle(70000);
+    const unsigned before = f.port.starts;
+    f.d.failsafe = true;
+    f.tick(83000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::CONTROL_LOSS);
+    EXPECT_FALSE(f.motor.ready_to_arm(83,83000));
+    f.tick(95000);
+    EXPECT_EQ(f.port.starts,before); // no unqualified digital failsafe TX
+}
+
+TEST(SpektrumMotor, ChannelMaskDoesNotImplicitlyResetDirection)
+{
+    uint16_t values[32] {};
+    values[0]=768; values[6]=32768;
+    uint8_t frame[80] {};
+    auto n=Codec::encode(Codec::Kind::Normal,0x40,0,0,0x41,values,frame,sizeof(frame));
+    Engine::Channels channels {};
+    EXPECT_TRUE(Engine::decode_channels(frame,n,channels));
+    EXPECT_EQ(channels.mask,0x41U);
+    EXPECT_EQ(channels.values[6],32768);
+    n=Codec::encode(Codec::Kind::Normal,0x40,0,0,0x01,values,frame,sizeof(frame));
+    EXPECT_TRUE(Engine::decode_channels(frame,n,channels));
+    EXPECT_EQ(channels.mask,1U);
+    // A missing CH7 does NOT mean the ESC returned to forward direction.
+    EXPECT_EQ(channels.values[6],0);
+    n=Codec::encode(Codec::Kind::Failsafe,0x40,0,0,0x01,values,frame,sizeof(frame));
+    EXPECT_TRUE(Engine::decode_channels(frame,n,channels));
+    EXPECT_TRUE(channels.failsafe);
+    EXPECT_EQ(channels.mask,1U);
+}
+
+TEST(SpektrumMotor, Peer400kCapabilityDoesNotChangeUnqualifiedUART)
+{
+    AP_SpektrumSmartESC_Reader reader;
+    EXPECT_TRUE(reader.start(true,true,0x40,0x12345678U,0,true,true));
+    uint8_t packet[80] {};
+    EXPECT_EQ(reader.prepare(50000,packet,sizeof(packet)),14U);
+    EXPECT_TRUE(reader.sent(51000));
+    // Official Rev K: peer can advertise 400k support (bit 0).
+    const uint8_t reply[] = {0x40,0x30,10,1,0,0x78,0x56,0x34,0x12};
+    auto n=Engine::encode(0x21,reply,sizeof(reply),packet,sizeof(packet));
+    for (uint8_t i=0;i<n;i++) reader.feed(packet[i],53000);
+    EXPECT_EQ(reader.status().baud_mask,1);
+    EXPECT_EQ(reader.prepare(55000,packet,sizeof(packet)),14U);
+    EXPECT_EQ(packet[6],0); // local port capability is still 115200 only
+    EXPECT_TRUE(reader.sent(56000));
+    EXPECT_EQ(reader.status().negotiated_baud,115200U);
+}
+
+TEST(SpektrumMotor, LastSensorSnapshotIsNotLiveAfterFault)
+{
+    Fixture f; f.discover();
+    f.d.armed=false;
+    f.tick(70000);f.port.complete=true;f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0]=0x31; payload[1]=0x20;
+    payload[15]=20; // Spektrum sensor reports 10%, NOT verified zero
+    uint8_t frame[80] {};
+    auto n=Engine::encode(0x80,payload,sizeof(payload),frame,sizeof(frame));
+    f.feed(frame,n,73000);
+    EXPECT_EQ(f.motor.status().telemetry,1U);
+    EXPECT_EQ(f.motor.status().last_sensor_throttle_pct,10.0f);
+    EXPECT_TRUE((f.motor.status().last_sensor_valid & Engine::THROTTLE)!=0);
+    f.d.failsafe=true;f.tick(74000);
+    EXPECT_EQ(f.motor.status().fault,Motor::Fault::CONTROL_LOSS);
+    EXPECT_EQ(f.motor.status().last_sensor_throttle_pct,10.0f);
+    Engine::Telemetry t {};
+    EXPECT_FALSE(f.motor.telemetry(t,75000)); // stale forensic record only
+    EXPECT_FALSE(f.motor.ready_to_arm(75,75000));
+}
+
 #ifdef SPKTSMART_STANDALONE_TEST
 int main()
 {
@@ -873,7 +974,12 @@ int main()
     RevKNoRFTelemetryIsAcceptedWhenSolicited();
     RevKTelemetryFFRequestsSafeNewHandshake();
     RevKUnknownTelemetryDestinationFailsClosed();
-    std::puts("42 prepared master/command safety tests passed (mock transport only)");
+    ChangedPeerUIDRevokesOldMotorSession();
+    RCLossFailsafeNeverTransmitsAfterFault();
+    ChannelMaskDoesNotImplicitlyResetDirection();
+    Peer400kCapabilityDoesNotChangeUnqualifiedUART();
+    LastSensorSnapshotIsNotLiveAfterFault();
+    std::puts("47 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
