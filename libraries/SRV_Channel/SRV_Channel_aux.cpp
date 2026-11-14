@@ -310,6 +310,42 @@ SRV_Channels::set_output_pwm_trimmed(SRV_Channel::Aux_servo_function_t function,
 }
 
 /*
+  Set a normalised servo command, with zero at SERVOx_TRIM and -1/+1 at
+  SERVOx_MIN/MAX respectively. Applied per output channel, preserving
+  reversal and allowing narrow-pulse and asymmetric servo travel.
+  Unlike set_output_norm(), this does not assume MIN/MAX midpoint is TRIM.
+ */
+void SRV_Channels::set_output_norm_trimmed(SRV_Channel::Aux_servo_function_t function, float value)
+{
+    if (!function_assigned(function)) {
+        return;
+    }
+    const float command = constrain_float(value, -1.0f, 1.0f);
+    for (uint8_t i = 0; i < NUM_SERVO_CHANNELS; i++) {
+        SRV_Channel &c = channels[i];
+        if (c.function.get() != function) {
+            continue;
+        }
+
+        const int16_t minimum = c.get_output_min();
+        const int16_t maximum = c.get_output_max();
+        const int16_t trim = c.get_trim();
+        // Invalid configuration: hold the clamped neutral instead of
+        // calculating travel with inverted/negative endpoints.
+        if (minimum >= maximum || trim < minimum || trim > maximum) {
+            c.set_output_pwm(constrain_int16(trim, minimum, maximum));
+            c.output_ch();
+            continue;
+        }
+        const float scaled = c.get_reversed() ? -command : command;
+        const float span = scaled < 0 ? float(trim - minimum) : float(maximum - trim);
+        const int16_t pwm = int16_t(trim + scaled * span);
+        c.set_output_pwm(constrain_int16(pwm, minimum, maximum));
+        c.output_ch();
+    }
+}
+
+/*
   set and save the trim value to current output for all channels matching
   the given function type
  */
