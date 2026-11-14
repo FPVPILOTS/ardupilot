@@ -1596,6 +1596,20 @@ bool AP_SpektrumSmartESC_Diagnostics::motor_arming_ready() const
     // healthy 0x21 + 0xCD / 0x80 exchange and zero-RPM evidence.
     return false;
 #elif CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+#if AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH
+    // IMPORTANT: AP_Arming::spektrum_bench_checks() is conditional on
+    // arming_blocked(), which calls motor_arming_ready(). The idle-stick
+    // check MUST exist HERE as well as armed_bench_arm_permitted();
+    // otherwise a healthy ESC would bypass the RC3 low-stick gate.
+    const auto *rc3 = RC_Channels::rc_channel(2);
+    if (rc3 == nullptr ||
+        !AP_SpektrumSmartESC_RCArm::idle(rc3->get_radio_in(),
+            rc3->get_radio_min(), rc3->get_radio_max(), rc3->get_reverse()) ||
+        !AP_SpektrumSmartESC_RCArm::stable(_bench_rc3_low_since_ms,
+            _bench_rc3_last_ms, AP_HAL::millis())) {
+        return false;
+    }
+#endif
     return AP_SpektrumSmartESC_Motor::physical_control_available() && _native_motor != nullptr &&
         _native_motor->ready_to_arm();
 #else
