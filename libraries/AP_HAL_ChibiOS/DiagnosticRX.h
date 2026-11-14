@@ -55,6 +55,17 @@ public:
     // existing 500ms quiet-window policy. Other UART/mux/overflow/cleanup
     // errors remain latched. No armed or nonzero-motor recovery.
     bool framing_only_fault(bool require_quiet) const;
+    // Isolated NE startup glitches only: proof for guarded DISARMED retry.
+    bool noise_only_fault(bool require_quiet) const;
+    bool line_high_held(uint32_t duration_ms) const;
+    struct FirstUARTError {
+        bool captured = false;
+        uint32_t time_ms = 0, last_byte_ms = 0;
+        uint32_t cr1 = 0, cr2 = 0, cr3 = 0, isr = 0;
+        uint32_t moder = 0, pupdr = 0, afrl = 0, otyper = 0, idr = 0;
+        uint8_t flags = 0;
+    };
+    bool first_error_snapshot(FirstUARTError &out) const;
 protected:
     void _begin(uint32_t baud, uint16_t rx, uint16_t tx) override;
     void _end() override;
@@ -111,5 +122,8 @@ private:
     uint32_t _framing = 0, _noise = 0, _parity = 0, _overruns = 0, _overflow = 0;
     uint32_t _last_uart_rx_ms = 0; // Real UART FIFO timestamp, for PollLab guard only.
     uint32_t _release_errors = 0;
+    FirstUARTError _first_error;
+    uint32_t _line_high_since_ms = 0;
+    bool _line_high_seen = false;
 };
 #endif
