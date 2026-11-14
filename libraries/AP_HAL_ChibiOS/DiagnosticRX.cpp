@@ -94,6 +94,37 @@ uint32_t DiagnosticRX::receive_errors() const
     return errors;
 }
 
+bool DiagnosticRX::noise_only_fault(bool require_quiet) const
+{
+    chSysLock();
+    const bool noise_only = _noise != 0 && _errors == _noise &&
+        _framing == 0 && _parity == 0 && _overruns == 0 &&
+        _overflow == 0 && _release_errors == 0 &&
+        AP_SpektrumSmartESC_UartRecovery::passive_uart_mode(_probe_mode);
+    const bool quiet = !require_quiet ||
+        _uart_recovery.noise_eligible(_errors, AP_HAL::millis());
+    chSysUnlock();
+    return noise_only && quiet;
+}
+
+bool DiagnosticRX::line_high_held(uint32_t duration_ms) const
+{
+    chSysLock();
+    const bool stable = _line_high_seen &&
+        uint32_t(AP_HAL::millis() - _line_high_since_ms) >= duration_ms &&
+        palReadLine(PAL_LINE(GPIOA, 0));
+    chSysUnlock();
+    return stable;
+}
+
+bool DiagnosticRX::first_error_snapshot(FirstUARTError &out) const
+{
+    chSysLock();
+    out = _first_error;
+    chSysUnlock();
+    return out.captured;
+}
+
 bool DiagnosticRX::framing_only_fault(bool require_quiet) const
 {
     chSysLock();
@@ -180,7 +211,12 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
 void DiagnosticRX::safe_input()
 {
     // Disconnect peripheral from PA0 before disabling UART clock.
+#if AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
+    // Keep weak 3.3V idle bias even after stop for passive recovery checks.
+    palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_INPUT_PULLUP);
+#else
     palSetLineMode(PAL_LINE(GPIOA, 0), PAL_MODE_INPUT);
+#endif
     if (_initialized) {
         UART4->CR1 = 0;
         rccDisableUART4();
@@ -517,6 +553,15 @@ bool DiagnosticRX::diagnostic_transaction(const uint8_t *packet, uint8_t length,
 void DiagnosticRX::poll()
 {
     chSysLock();
+    // Observe PA0 even while the UART peripheral is detached. No output,
+    // new owner or automatic ARM; a reconnect needs 500ms continuous HIGH.
+    const bool line_high = palReadLine(PAL_LINE(GPIOA, 0));
+    if (!line_high) {
+        _line_high_seen = false;
+    } else if (!_line_high_seen) {
+        _line_high_seen = true;
+        _line_high_since_ms = AP_HAL::millis();
+    }
 #ifndef SPKTSMART_RX_REGISTER_TEST
     if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL ||
         AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) {
@@ -568,7 +613,32 @@ void DiagnosticRX::poll()
         }
         const uint32_t status = UART4->ISR;
         if (status & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE)) {
+            // FIRST snapshot is acquired while UART4 is live and *before*
+            // ICR clears NE/FE and motor fault() tears down the peripheral.
+            // Never overwrite this with zeroed registers from post-teardown.
+            if (!_first_error.captured) {
+                _first_error.captured = true;
+                _first_error.time_ms = AP_HAL::millis();
+                _first_error.last_byte_ms = _last_uart_rx_ms;
+                _first_error.cr1 = UART4->CR1;
+                _first_error.cr2 = UART4->CR2;
+                _first_error.cr3 = UART4->CR3;
+                _first_error.isr = status;
+                _first_error.moder = GPIOA->MODER;
+                _first_error.pupdr = GPIOA->PUPDR;
+                _first_error.afrl = GPIOA->AFRL;
+                _first_error.otyper = GPIOA->OTYPER;
+                _first_error.idr = GPIOA->IDR;
+                _first_error.flags = 1U | (line_high ? 2U : 0U) |
+                    (((GPIOA->PUPDR & 3U) == 1U) ? 16U : 0U) |
+                    (((GPIOA->MODER & 3U) == 2U &&
+                      (GPIOA->AFRL & 15U) == 8U &&
+                      (GPIOA->OTYPER & 1U)) ? 8U : 0U);
+            }
             _errors++;
+            if ((status & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE)) == USART_ISR_NE) {
+                _uart_recovery.record_noise_only(AP_HAL::millis());
+            }
             // Only an isolated framing error is eligible for delayed recovery.
             // Never classify noise, parity, overrun or combined flags as safe.
             if ((status & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE)) == USART_ISR_FE) {
