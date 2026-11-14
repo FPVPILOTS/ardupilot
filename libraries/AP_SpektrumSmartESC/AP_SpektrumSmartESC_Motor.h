@@ -53,7 +53,8 @@ public:
     };
     enum class ProtocolEvent : uint8_t {
         NONE, DECODE_FRAME, UNEXPECTED_FRAME, INVALID_ESC_TELEMETRY,
-        PEER_RESTART, TELEMETRY_REHANDSHAKE
+        PEER_RESTART, TELEMETRY_REHANDSHAKE,
+        UNUSABLE_SENSOR_OBSERVED
     };
     struct Status {
         State state = State::DISABLED;
@@ -63,6 +64,11 @@ public:
         uint8_t protocol_src = 0, protocol_dest = 0;
         uint32_t peer_restarts = 0, telemetry_rehandshake_requests = 0;
         uint32_t no_rf_telemetry = 0;
+        // First CRC-valid 0x80 envelope that is not usable ESC telemetry.
+        // A non-ESC sensor or an all-absent 0x20 sensor is not an ACK.
+        uint32_t unusable_sensor_frames = 0;
+        uint8_t unusable_id = 0, unusable_secondary = 0;
+        uint8_t unusable_b2 = 0, unusable_b3 = 0;
         // Last *solicited CRC-valid* ESC measurement. Retained for fault
         // forensics only; it is NOT fresh evidence or ARM authorization.
         uint16_t last_sensor_valid = 0;
