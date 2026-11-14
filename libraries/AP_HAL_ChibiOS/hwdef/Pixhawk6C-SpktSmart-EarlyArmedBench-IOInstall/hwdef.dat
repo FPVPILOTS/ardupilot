@@ -1,0 +1,15 @@
+# EXPERIMENTAL NON-FLIGHT EarlyArmedBench (Avian 130A Ver A).
+# Starts native SRXL2 0x21 immediately after BoardConfig, preserving the
+# original single UART4/IO owner for subsequent CH1 0xCD controls.
+# DO NOT CONNECT EDF MOTOR PHASES before independent safety qualification.
+# Requires SPKT_MOTOR=1 saved and NORMAL ArduPlane ARM/ThrottleCut RC switch.
+# The same ARM switch cuts motor demand on DISARM; no throttle bypass.
+# ARM cannot be accepted before an authentic 0x21 and fresh, correlated
+# stopped / zero-throttle 0x80 measurement plus IO-owner and RC proof.
+# CH1 is limited to experimental 768..4608; NOT calibrated Avian endpoints.
+# CH7 reverse is OFF; no PWM fallback; no unverified 400k baud.
+# IOMCU MAIN3 special inhibit CRC 0x6DBBAD71 remains compulsory.
+include ../Pixhawk6C-SpktSmart-ArmedBench-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-EarlyArmed"
+define AP_SPEKTRUM_SMART_ESC_EARLY_ARMED_BENCH 1
