@@ -783,6 +783,75 @@ TEST(SpektrumMotor, WrongSensorReplyIsNotSuccessfulControlAck)
     EXPECT_EQ(f.motor.status().fault,Motor::Fault::PROTOCOL);
 }
 
+
+TEST(SpektrumMotor, DisarmedESCStartupAnnouncementReentersDiscoverySafely)
+{
+    Fixture f; f.discover();
+    f.d.armed = false;
+    f.tick(65000); // Retain a fresh, unarmed neutral demand.
+    const uint8_t payload[] = {0x40,0,10,0,4,0x78,0x56,0x34,0x12};
+    uint8_t packet[80] {};
+    const uint8_t n = Engine::encode(0x21,payload,sizeof(payload),packet,sizeof(packet));
+    const unsigned before_tx = f.port.starts;
+    f.feed(packet,n,66000);
+    EXPECT_EQ(f.motor.status().state, Motor::State::DISCOVERY);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().rx_restarts, 1U);
+    EXPECT_FALSE(f.motor.ready_to_arm(66,66000));
+    EXPECT_EQ(f.port.starts, before_tx); // RX never directly grants TX.
+    f.tick(117000); // First bounded, disarmed discovery request.
+    EXPECT_TRUE(f.port.starts > before_tx);
+    EXPECT_EQ(f.port.sent[1], 0x21);
+    EXPECT_EQ(f.motor.status().controls, 0U);
+}
+
+TEST(SpektrumMotor, SolicitedTelemetryWithoutRFEndpointIsAccepted)
+{
+    Fixture f; f.discover();
+    f.d.armed = false;
+    f.tick(70000); f.port.complete = true; f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0] = 0x00; payload[1] = 0x20;
+    uint8_t packet[80] {};
+    const uint8_t n = Engine::encode(0x80,payload,sizeof(payload),packet,sizeof(packet));
+    f.feed(packet,n,73000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().telemetry, 1U);
+    EXPECT_EQ(f.motor.status().rx_restarts, 0U);
+}
+
+TEST(SpektrumMotor, SolicitedFFTelemetryRequestsDisarmedRediscovery)
+{
+    Fixture f; f.discover();
+    f.d.armed = false;
+    f.tick(70000); f.port.complete = true; f.tick(72000);
+    uint8_t payload[17] {};
+    payload[0] = 0xFF; payload[1] = 0x20;
+    uint8_t packet[80] {};
+    const uint8_t n = Engine::encode(0x80,payload,sizeof(payload),packet,sizeof(packet));
+    f.feed(packet,n,73000);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::NONE);
+    EXPECT_EQ(f.motor.status().state, Motor::State::DISCOVERY);
+    EXPECT_EQ(f.motor.status().rx_restarts, 1U);
+    EXPECT_FALSE(f.motor.ready_to_arm(73,73000));
+    EXPECT_EQ(f.motor.status().telemetry, 0U);
+}
+
+TEST(SpektrumMotor, ArmedRestartRequestCannotRearmOrTransmitControl)
+{
+    Fixture f; f.discover();
+    f.tick(65000); // Observe actual armed demand after link.
+    const uint8_t payload[] = {0x40,0,10,0,4,0x78,0x56,0x34,0x12};
+    uint8_t packet[80] {};
+    const uint8_t n = Engine::encode(0x21,payload,sizeof(payload),packet,sizeof(packet));
+    f.feed(packet,n,66000);
+    EXPECT_EQ(f.motor.status().state, Motor::State::FAULT);
+    EXPECT_EQ(f.motor.status().fault, Motor::Fault::ESC_LOSS);
+    EXPECT_EQ(f.motor.status().rx_last_reason,
+              uint8_t(Motor::RxReason::RESTART_ARMED));
+    EXPECT_EQ(f.motor.status().rx_restarts, 0U);
+}
+
 #ifdef SPKTSMART_STANDALONE_TEST
 int main()
 {
@@ -804,7 +873,11 @@ int main()
     ForwardThrustDoesNotRequireGroundButReverseDoes();
     ProductionSourceCannotAccidentallyArm(); NativeArmRequiresActualReportedZeroAndStoppedRPM();
     SensorCannotImpersonateAuthenticatedPeer(); WrongSensorReplyIsNotSuccessfulControlAck();
-    std::puts("38 prepared master/command safety tests passed (mock transport only)");
+    DisarmedESCStartupAnnouncementReentersDiscoverySafely();
+    SolicitedTelemetryWithoutRFEndpointIsAccepted();
+    SolicitedFFTelemetryRequestsDisarmedRediscovery();
+    ArmedRestartRequestCannotRearmOrTransmitControl();
+    std::puts("42 prepared master/command safety tests passed (mock transport only)");
 }
 #else
 AP_GTEST_MAIN()
