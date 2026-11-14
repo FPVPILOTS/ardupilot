@@ -91,7 +91,7 @@ int main()
     assert(n == 16 && !Motor::control_packet(packet, n));
 
     values[0] = AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE;
-    values[6] = 32AP_SpektrumSmartESC_BenchRange::ZERO_CANDIDATE;
+    values[6] = 32768;
     n = Channel::encode(Channel::Kind::Normal, 0x40, 0, 0,
                         0x41, values, packet, sizeof(packet));
     assert(n == 18 && !Motor::control_packet(packet, n));
