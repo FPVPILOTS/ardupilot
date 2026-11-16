@@ -1490,6 +1490,30 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                             unsigned(hw.probe_levels),
                             (unsigned long)hw.probe_transitions,
                             unsigned(hw.probe_mode));
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+                        // ALL times below are Pixhawk MCU uptime, not ESC
+                        // power-up timestamps. These are read-only and
+                        // cannot grant ARM or create any transmission.
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK44 EARLY BEGIN%lums END%lums",
+                            (unsigned long)hw.early_rx_begin_ms,
+                            (unsigned long)hw.early_rx_end_ms);
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK44 RX FIRST%lums BYTES%lu",
+                            (unsigned long)hw.early_rx_first_ms,
+                            (unsigned long)hw.early_rx_bytes);
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK45 TX FIRSTTC%lums LIMIT200",
+                            (unsigned long)hw.first_handshake_tc_ms);
+                        const bool rx_before_200 =
+                            hw.early_rx_begin_ms != 0 && hw.early_rx_begin_ms < 200U;
+                        const bool tx_before_200 =
+                            hw.first_handshake_tc_ms != 0 && hw.first_handshake_tc_ms < 200U;
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK45 GOAL RX%u TX%u (200ms)",
+                            unsigned(rx_before_200),
+                            unsigned(tx_before_200));
+#endif
 #endif
                         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                             "SPK27 U FE%lu NE%lu ORE%lu",
