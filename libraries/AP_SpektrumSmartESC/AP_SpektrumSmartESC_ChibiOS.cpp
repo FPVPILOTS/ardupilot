@@ -4,6 +4,9 @@
 #ifndef AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS
 #define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 0
 #endif
+#ifndef AP_SPEKTRUM_SMART_ESC_FAST_DISARMED_RETRY
+#define AP_SPEKTRUM_SMART_ESC_FAST_DISARMED_RETRY 0
+#endif
 extern const AP_HAL::HAL &hal;
 
 bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualification &qualification,
@@ -146,6 +149,15 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
             stop_locked();
             return;
         }
+        // Hardware-acquired native reader startup, measured against Pixhawk
+        // boot time. Time of acquisition != first UART TX or peer reply.
+        if (_discovery_sessions == 0) {
+            _first_discovery_ms = now_ms;
+        }
+        if (_discovery_sessions != UINT16_MAX) {
+            ++_discovery_sessions;
+        }
+        _last_discovery_ms = now_ms;
         if (!_thread_started) {
             _thread_started = hal.scheduler->thread_create(
                 FUNCTOR_BIND_MEMBER(&AP_SpektrumSmartESC_ChibiOS::worker, void),
@@ -197,6 +209,10 @@ AP_SpektrumSmartESC_ChibiOS::startup_diagnostics() const
     result.ever_armed = _ever_armed;
     result.boot_delay_pending = _boot_delay_pending;
     result.boot_discovery_after_ms = AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS;
+    result.first_discovery_ms = _first_discovery_ms;
+    result.last_discovery_ms = _last_discovery_ms;
+    result.discovery_sessions = _discovery_sessions;
+    result.silent_restarts = _silent_restarts;
     return result;
 }
 
@@ -373,7 +389,28 @@ void AP_SpektrumSmartESC_ChibiOS::worker()
                         _auto_retry_disarmed = true;
                     } else if (disarmed && why == AP_SpektrumSmartESC_Motor::Fault::ESC_LOSS) {
                         _retry_requires_framing_quiet = false;
-                        _retry_at_ms = AP_HAL::millis() + 4000U;
+                        // In the opt-in AutoBoot board, an electrically clean
+                        // but SILENT disarmed first connection may occur
+                        // because the ESC booted before the FC. Restart its
+                        // bounded native 0x21 discovery after 1 second rather
+                        // than a fixed 4-second pause. The existing 500ms
+                        // continuously-HIGH GPIO and IO-inhibit proof are
+                        // STILL required before every restart.
+                        //
+                        // Real ESC data, prior 0xCD control, any ARM, UART,
+                        // wrong peer, CRC or ownership fault do NOT qualify
+                        // for the accelerated path.
+                        const bool silent_boot =
+                            AP_SPEKTRUM_SMART_ESC_FAST_DISARMED_RETRY &&
+                            s.tx_frames != 0 && s.controls == 0 &&
+                            s.telemetry == 0 && !_demand.reverse &&
+                            _demand.magnitude == 0 &&
+                            _motor.reader_status().rx_bytes == 0 &&
+                            _uart.receive_errors() == 0;
+                        if (silent_boot && _silent_restarts < UINT8_MAX) {
+                            ++_silent_restarts;
+                        }
+                        _retry_at_ms = AP_HAL::millis() + (silent_boot ? 1000U : 4000U);
                         _auto_retry_disarmed = true;
                     }
                     stop_locked();
