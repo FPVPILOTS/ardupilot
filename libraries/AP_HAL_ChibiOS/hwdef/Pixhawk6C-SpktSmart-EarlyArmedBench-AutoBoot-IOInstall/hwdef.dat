@@ -1,0 +1,18 @@
+# EXPERIMENTAL DISARMED AUTOBOOT SRXL2 TEST - NOT FLIGHT FIRMWARE.
+# Connect ONE battery to Pixhawk power module and Avian 130A, both cold.
+# Motor PHASE WIRES DISCONNECTED; never arm during this transport test.
+#
+# Inherit known PA0 AF8 open-drain UART4 and WEAK INTERNAL 3.3V PULLUP,
+# board ID 56, special IO inhibit companion, normal 115200-baud SRXL2
+# handshake with explicit 50ms receive-first period.
+# Start IMMEDIATELY after BoardConfig / verified IOMCU ownership; NEVER
+# wait a fixed 7 seconds or require unplugging/replugging either device.
+# Automatic 1s re-discovery only after a strictly silent disarmed start,
+# with normal >=500ms bus HIGH guard and all existing UART/owner gates.
+# No automatic ARM, nonzero motor demand, reverse, CH1 bypass or failsafe change.
+include ../Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-AutoBoot"
+define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 0
+define AP_SPEKTRUM_SMART_ESC_FAST_DISARMED_RETRY 1
+define AP_SPEKTRUM_SMART_ESC_RX_DIAG 1
