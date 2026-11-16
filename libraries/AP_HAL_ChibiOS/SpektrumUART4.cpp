@@ -15,7 +15,7 @@ SpektrumUART4 *SpektrumUART4::_active;
 
 // No IRQ is allocated in the shipped, unverified build. The handler's logic
 // below is still compiled and type-checked with the actual H743 headers.
-#if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) && !defined(SPKTSMART_UART4_REGISTER_TEST)
+#if (AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB || AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB) && !defined(SPKTSMART_UART4_REGISTER_TEST)
 OSAL_IRQ_HANDLER(STM32_UART4_HANDLER);
 OSAL_IRQ_HANDLER(STM32_UART4_HANDLER)
 {
@@ -38,7 +38,7 @@ bool SpektrumUART4::owned() const
 bool SpektrumUART4::acquire()
 {
     // This constant check also guards initialization, not just TDR writes.
-    if (!(AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB) ||
+    if (!(AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED || AP_SPEKTRUM_SMART_ESC_ARMED_BENCH_EXPERIMENTAL || AP_SPEKTRUM_SMART_ESC_LAB_ONLY || AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB || AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB) ||
         !hal.scheduler->in_main_thread()) {
         return false;
     }
@@ -217,7 +217,12 @@ bool SpektrumUART4::collision() const
 
 bool SpektrumUART4::begin_tx(const uint8_t *data, uint8_t length)
 {
-    const bool allowed = AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ?
+    // Early200 is a STRICT whitelisted 0x21-only commissioning image.
+    // Prioritize this whitelist even though the parent board compiles
+    // ArmedBench support: 0xCD, throttle and reverse can NEVER use UART4.
+    const bool allowed = AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB ?
+        AP_SpektrumSmartESC_Reader::handshake_packet(data, length) :
+        AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ?
         (AP_SpektrumSmartESC_Reader::handshake_packet(data, length) ||
          (AP_SPEKTRUM_SMART_ESC_POLL_LAB &&
           AP_SpektrumSmartESC_PollLab::exact_packet(data, length))
