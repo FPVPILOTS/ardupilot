@@ -3,6 +3,9 @@
 #ifndef AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP
 #define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 0
 #endif
+#ifndef AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+#define AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB 0
+#endif
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Reader.h>
 #include <AP_SpektrumSmartESC/AP_SpektrumSmartESC_Motor.h>
 
