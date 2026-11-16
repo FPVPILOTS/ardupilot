@@ -173,6 +173,13 @@ void SpektrumUART4::irq_handler()
         port._done = sent && released;
         if (port._done) {
             port._rx._handshake_completed++;
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+            if (port._rx._first_handshake_tc_ms == 0) {
+                // Hardware TC: first verified finished handshake TX,
+                // NOT first queued byte and NOT proof ESC received it.
+                port._rx._first_handshake_tc_ms = AP_HAL::millis();
+            }
+#endif
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
             if (port._rx._turn_lease.running()) {
                 port._done = port._rx._turn_lease.complete(AP_HAL::millis(), true);
