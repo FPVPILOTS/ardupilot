@@ -28,6 +28,8 @@ public:
         uint8_t ne_attempts = 0;
         bool retry_pending = false, waiting_for_fe_quiet = false;
         bool waiting_for_ne_quiet = false, ever_armed = false;
+        bool boot_delay_pending = false;
+        uint32_t boot_discovery_after_ms = 0;
     };
     StartupDiagnostics startup_diagnostics() const;
     // Historical snapshot taken BEFORE the driver tears UART4 down.
@@ -69,6 +71,9 @@ private:
     bool _pending = false, _active = false;
     bool _thread_started = false, _restore_pending = false;
     bool _auto_retry_disarmed = false, _ever_armed = false;
+    // Only the opt-in delayed-commissioning board can defer its FIRST
+    // disarmed discovery start. No retry/ARM/interlock relaxation.
+    bool _boot_delay_pending = false;
     // At most two disarmed, no-control, pure-FE startup retries.
     // Not a generic UART recovery; never used during or after ARM.
     bool _retry_requires_framing_quiet = false;
