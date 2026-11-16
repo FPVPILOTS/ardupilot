@@ -299,6 +299,16 @@ static void main_loop()
     // The vehicle setup releases this listener before board GPIO setup.
     if (auto *early_spkt_rx = hal.diagnostic_rx_uart()) {
         early_spkt_rx->begin(115200);
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+        // Experimental nonflight board: 50ms receive-first window then
+        // one whitelisted 0x21, before the 200ms engineering deadline.
+        // The guarded driver itself refuses a busy/low/error bus; TX is
+        // never enabled by any generic ArduPilot or motor API here.
+        if (early_spkt_rx->is_initialized()) {
+            hal.scheduler->delay(50);
+            (void)static_cast<DiagnosticRX *>(early_spkt_rx)->early200_try_handshake();
+        }
+#endif
     }
 #endif
 
