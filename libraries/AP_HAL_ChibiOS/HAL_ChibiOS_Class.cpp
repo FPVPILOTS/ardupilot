@@ -291,6 +291,17 @@ static void main_loop()
 
     schedulerInstance.hal_initialized();
 
+#if HAL_SPEKTRUM_SMART_ESC_UART4_RX && AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+    // EARLY200 test only: capture ESC boot announcements before the
+    // parameter/BoardConfig phase. Strictly UART4 RECEIVE-only (TE=0),
+    // with dedicated AF8 open-drain + weak pull-up; absolutely no 0x21,
+    // motor command, ARM, or IOMCU ownership granted in this phase.
+    // The vehicle setup releases this listener before board GPIO setup.
+    if (auto *early_spkt_rx = hal.diagnostic_rx_uart()) {
+        early_spkt_rx->begin(115200);
+    }
+#endif
+
     g_callbacks->setup();
 
 #if HAL_ENABLE_SAVE_PERSISTENT_PARAMS
