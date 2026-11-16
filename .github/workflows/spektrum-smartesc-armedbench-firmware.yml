@@ -14,6 +14,7 @@ on:
       - feature/spktsmart-early-armedbench-throttlecut-20261114
       - feature/spktsmart-f7-startup-recovery-20261114
       - feature/spktsmart-pullup-delayed-rxdiag-20261116
+      - feature/spktsmart-autoboot-fastdiscovery-20261116
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
@@ -24,6 +25,7 @@ on:
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-DelayedRxDiag-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-armedbench-firmware.yml'
   pull_request:
     paths:
@@ -36,6 +38,7 @@ on:
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-DelayedRxDiag-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/**'
   workflow_dispatch:
 jobs:
   build-armedbench:
@@ -137,6 +140,36 @@ jobs:
           assert int(a['board_id']) == 56
           print("Delayed RX diagnostic board ID 56 PASS; no flash")
           PY
+      - name: Compile immediate AutoBoot SRXL2 RX-first image
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          BOARD=Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall
+          HWDEF=libraries/AP_HAL_ChibiOS/hwdef/$BOARD/hwdef.dat
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 0' "$HWDEF"
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_FAST_DISARMED_RETRY 1' "$HWDEF"
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 1' libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/hwdef.dat
+          ./waf configure --board "$BOARD"
+          ./waf plane
+          FW=build/$BOARD/bin/arduplane.apj
+          test -s "$FW"
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK42 BOOT WAIT%u AT%lums NOW%lums'
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK43 DISC FIRST%lums LAST%lums N%u R%u'
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK41 TX Q%lu TC%lu REST%lu FA%lu'
+          python3 - "$FW" <<'PY'
+          import json, sys
+          from pathlib import Path
+          a=json.loads(Path(sys.argv[1]).read_text())
+          assert int(a['board_id']) == 56
+          print("AutoBoot board ID 56 PASS; build only, no flash")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pix6C-SPKT-AutoBoot-FastDiscovery
+          path: build/Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/bin/arduplane.apj
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: Pix6C-SPKT-Pullup-DelayedRxDiag
