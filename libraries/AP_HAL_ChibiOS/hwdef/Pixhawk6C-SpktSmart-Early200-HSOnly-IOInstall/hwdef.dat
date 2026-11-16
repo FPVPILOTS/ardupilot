@@ -1,0 +1,17 @@
+# EXPERIMENTAL: 200ms SRXL2 0x21 HANDSHAKE ONLY; NON-FLIGHT.
+# A single shared battery starts Pixhawk 6C and Avian 130A.
+# DISARMED only, EDF motor PHASE WIRES disconnected and insulated.
+# Starts PA0 UART4 as RX-only at HAL initialization. After >=50ms
+# listen-first and an electrically idle HIGH bus, an EARLY lab may
+# transmit ONE CRC-correct whitelisted 0x21 FC0->ESC0 handshake.
+# Absolutely no motor frames (0xCD), reverse, ARM, PWM fallback or
+# native unqualified throttle path. The IOMCU remains mandatory for
+# any later motor-capable communication, and never authorizes ARM here.
+# Logs first actual UART TC and early receive-byte count.
+include ../Pixhawk6C-SpktSmart-EarlyNative-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-HS200"
+define AP_SPEKTRUM_SMART_ESC_EARLY200_RX 1
+define AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB 1
+define AP_SPEKTRUM_SMART_ESC_RX_DIAG 1
+define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 0
