@@ -1,0 +1,10 @@
+# Experimental, NON-FLIGHT, motor phases DISCONNECTED, DISARMED link commissioning.
+# This isolated target restores the normal EarlyArmedBench's weak PA0 internal pull-up
+# (AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP=1 inherited) and changes ONLY the
+# initial DISARMED discovery start time to 7000ms after Pixhawk MCU boot.
+# No new 0xCD, ARM bypass, missing peer/zero-RPM exception, or baud change.
+include ../Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-DelayRX"
+define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 7000
+define AP_SPEKTRUM_SMART_ESC_RX_DIAG 1
