@@ -155,6 +155,13 @@ void DiagnosticRX::early200_finish()
     }
     if (_initialized) {
         _end();
+    } else {
+        // SpektrumUART4::relinquish() itself leaves PA0 high impedance.
+        // Restore the dedicated weak 3.3V idle pull-up before normal
+        // board setup; a floating half-duplex wire is not acceptable.
+        chSysLock();
+        safe_input();
+        chSysUnlock();
     }
 }
 #endif
