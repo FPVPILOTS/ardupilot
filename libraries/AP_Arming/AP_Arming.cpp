@@ -1881,6 +1881,12 @@ bool AP_Arming::mandatory_checks(bool report)
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
 bool AP_Arming::spektrum_bench_checks(bool report) const
 {
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+    // The Early200 waveform experiment is NEVER armable, even when
+    // SPKT_MOTOR=0, ARMING_REQUIRE=0, or a forced arm is attempted.
+    check_failed(report, "SPKT 200ms handshake lab: ARM disabled");
+    return false;
+#endif
     const auto *vehicle = AP::vehicle();
     if (vehicle != nullptr && vehicle->spektrum_bench_active()) {
         // Only the separately built ArmedBench image may acknowledge a
