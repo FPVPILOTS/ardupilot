@@ -1415,6 +1415,12 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                         unsigned(startup.boot_delay_pending),
                         (unsigned long)startup.boot_discovery_after_ms,
                         (unsigned long)now);
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK43 DISC FIRST%lums LAST%lums N%u R%u",
+                        (unsigned long)startup.first_discovery_ms,
+                        (unsigned long)startup.last_discovery_ms,
+                        unsigned(startup.discovery_sessions),
+                        unsigned(startup.silent_restarts));
 #endif
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK29 HS ST%u Q%lu FIRST%lums",
