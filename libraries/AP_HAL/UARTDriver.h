@@ -98,6 +98,11 @@ public:
         uint32_t probe_transitions = 0, probe_duration_ms = 0;
         uint32_t handshake_tc_ms = 0, handshake_faults = 0;
         uint32_t last_uart_rx_ms = 0; // Last physical FIFO byte; required for SRXL2 TX gap check.
+        // Optional read-only Early200 diagnostics (all MCU uptime in ms).
+        // Only opt-in HAL backends populate these; ordinary UARTs leave zero.
+        uint32_t early_rx_begin_ms = 0, early_rx_end_ms = 0;
+        uint32_t early_rx_first_ms = 0, early_rx_bytes = 0;
+        uint32_t first_handshake_tc_ms = 0;
         uint32_t handshake_queued = 0, handshake_completed = 0, handshake_restored = 0;
         uint8_t handshake_flags = 0; // bit0:qualification, bit1:owned, bit2:TC, bit3:wave LAB, bit4:HS LAB, bit5:quiet RX, bit6:UART history eligible.
         uint8_t probe_mode = 0, probe_levels = 0; // Modes 0..4; levels bit0:low seen, bit1:high seen.
