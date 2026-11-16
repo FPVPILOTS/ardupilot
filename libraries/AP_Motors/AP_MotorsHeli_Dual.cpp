@@ -133,6 +133,12 @@ const AP_Param::GroupInfo AP_MotorsHeli_Dual::var_info[] = {
     // @Units: deg
     // @User: Advanced
     // @Increment: 1
+    // @Param: SW_PWM_MODE
+    // @DisplayName: Swash 1 PWM Endpoint Mapping
+    // @Description: 0 uses 1000-2000us endpoints and can overwrite SERVOx_MIN/MAX. 1 respects the servo MIN/TRIM/MAX and reversal assigned to swash 1. Use only with verified servo ranges; disconnect the motor when checking the swash. Requires restart.
+    // @Values: 0:Legacy1000-2000,1:ConfiguredServoRange
+    // @RebootRequired: True
+    // @User: Advanced
     AP_SUBGROUPINFO(_swashplate1, "SW_", 20, AP_MotorsHeli_Dual, AP_MotorsHeli_Swash),
 
     // @Param: SW2_TYPE
@@ -187,6 +193,12 @@ const AP_Param::GroupInfo AP_MotorsHeli_Dual::var_info[] = {
     // @Units: deg
     // @User: Advanced
     // @Increment: 1
+    // @Param: SW2_PWM_MODE
+    // @DisplayName: Swash 2 PWM Endpoint Mapping
+    // @Description: 0 uses 1000-2000us endpoints and can overwrite SERVOx_MIN/MAX. 1 respects the servo MIN/TRIM/MAX and reversal assigned to swash 2. Use only with verified servo ranges; disconnect the motor when checking the swash. Requires restart.
+    // @Values: 0:Legacy1000-2000,1:ConfiguredServoRange
+    // @RebootRequired: True
+    // @User: Advanced
     AP_SUBGROUPINFO(_swashplate2, "SW2_", 21, AP_MotorsHeli_Dual, AP_MotorsHeli_Swash),
 
     // @Param: DCP_TRIM
