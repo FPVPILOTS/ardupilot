@@ -1407,6 +1407,15 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                         unsigned(startup.ne_attempts),
                         unsigned(startup.waiting_for_ne_quiet),
                         unsigned(startup.retry_pending));
+#if AP_SPEKTRUM_SMART_ESC_RX_DIAG
+                    // A/B proof that first handshake was really delayed;
+                    // the timer is Pixhawk uptime, NOT ESC boot time.
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                        "SPK42 BOOT WAIT%u AT%lums NOW%lums",
+                        unsigned(startup.boot_delay_pending),
+                        (unsigned long)startup.boot_discovery_after_ms,
+                        (unsigned long)now);
+#endif
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                         "SPK29 HS ST%u Q%lu FIRST%lums",
                         unsigned(hs.state),
@@ -1455,6 +1464,27 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                             "SPK30 PA0 PU%u MODE%u",
                             unsigned((hw.flags & 16U) != 0),
                             unsigned((hw.flags & 8U) != 0));
+#if AP_SPEKTRUM_SMART_ESC_RX_DIAG
+                        // Physical UART TC and RX turnaround are not the
+                        // same as a valid ESC response. These are lifetime
+                        // counters, independent of the handshake parser.
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK41 TX Q%lu TC%lu REST%lu FA%lu",
+                            (unsigned long)hw.handshake_queued,
+                            (unsigned long)hw.handshake_completed,
+                            (unsigned long)hw.handshake_restored,
+                            (unsigned long)hw.handshake_faults);
+                        // H is instant PA0 level. Levels/edges are
+                        // 1-kHz GPIO samples, and include our OWN UART TX.
+                        // They do not prove the ESC drove the line or
+                        // replace scope-based waveform measurements.
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK41 PA0 H%u LV%u ED%lu PM%u",
+                            unsigned((hw.flags & 2U) != 0),
+                            unsigned(hw.probe_levels),
+                            (unsigned long)hw.probe_transitions,
+                            unsigned(hw.probe_mode));
+#endif
                         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                             "SPK27 U FE%lu NE%lu ORE%lu",
                             (unsigned long)hw.framing,
