@@ -1,14 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <AP_HAL/AP_HAL_Boards.h>
+#ifndef AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+#define AP_SPEKTRUM_SMART_ESC_EARLY200_RX 0
+#endif
 #ifndef AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
 #define AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB 0
-#endif
-#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
-#error "Early200 TX lab requires the unarmable EarlyNative firmware image"
-#endif
-#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB && !AP_SPEKTRUM_SMART_ESC_EARLY200_RX
-#error "Early200 TX lab requires the early receive-first transport"
 #endif
 #ifndef AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED
 #define AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED 0
@@ -18,6 +15,12 @@
 #endif
 #ifndef AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
 #define AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT 0
+#endif
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT
+#error "Early200 TX lab requires the unarmable EarlyNative firmware image"
+#endif
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB && !AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+#error "Early200 TX lab requires the early receive-first transport"
 #endif
 #if AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_BOOT && AP_SPEKTRUM_SMART_ESC_EARLY_APP_BOOT
 #error "Native and AutoLab SRXL2 early boot are mutually exclusive"
