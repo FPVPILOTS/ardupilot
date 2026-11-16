@@ -413,6 +413,17 @@ void AP_Vehicle::setup()
     stats.init();
 #endif
 
+#if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+    // EARLY200 listen-only capture ends BEFORE board GPIO/RC/IOMCU setup:
+    // never retain an alternate UART4 owner through BoardConfig. Native
+    // startup below reacquires this single port only after real IOMCU
+    // inhibit receipt. Early RX byte/timing counters survive this handoff.
+    if (auto *early_spkt_rx = hal.diagnostic_rx_uart()) {
+        if (early_spkt_rx->is_initialized()) {
+            early_spkt_rx->end();
+        }
+    }
+#endif
     BoardConfig.init();
 
 #if AP_SPEKTRUM_SMART_ESC_DIAGNOSTICS_ENABLED && AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK
