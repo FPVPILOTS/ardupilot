@@ -45,6 +45,16 @@ const AP_Param::GroupInfo AP_MotorsHeli_Swash::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("LIN_SVO", 3, AP_MotorsHeli_Swash, _linear_swash_servo, 0),
 
+    // KST mode must precede H3_ENABLE: disabling H3-only settings hides
+    // subsequent parameters from MAVLink enumeration.
+    // @Param: PWM_MODE
+    // @DisplayName: Swash Servo PWM Mapping
+    // @Description: 0 uses legacy 1000-2000us endpoints and can reset servo limits during setup. 1 uses the assigned swash servos' MIN/TRIM/MAX and reversal, including narrow-pulse KST servos. Set only after verifying correct servo type, pulse range, and direction without motor power. Requires restart.
+    // @Values: 0:Legacy,1:ConfiguredServoRange
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("PWM_MODE", 9, AP_MotorsHeli_Swash, _swash_pwm_mode, 0),
+
     // @Param: H3_ENABLE
     // @DisplayName: Enable Generic H3 Swashplate Settings
     // @Description: Automatically set when H3 generic swash type is selected. Do not set manually.
@@ -85,13 +95,7 @@ const AP_Param::GroupInfo AP_MotorsHeli_Swash::var_info[] = {
     // @Increment: 1
     AP_GROUPINFO("H3_PHANG", 8, AP_MotorsHeli_Swash, _phase_angle, 0),
 
-    // @Param: PWM_MODE
-    // @DisplayName: Swash Servo PWM Mapping
-    // @Description: 0 uses legacy 1000-2000us endpoints and can reset servo limits during setup. 1 uses the assigned swash servos' MIN/TRIM/MAX and reversal, including narrow-pulse KST servos. Set only after verifying correct servo type, pulse range, and direction without motor power. Requires restart.
-    // @Values: 0:Legacy,1:ConfiguredServoRange
-    // @User: Advanced
-    AP_GROUPINFO("PWM_MODE", 9, AP_MotorsHeli_Swash, _swash_pwm_mode, 0),
-   
+
     AP_GROUPEND
 };
 
