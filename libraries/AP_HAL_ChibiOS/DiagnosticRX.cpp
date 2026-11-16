@@ -75,6 +75,90 @@ void DiagnosticRX::_begin(uint32_t baud, uint16_t, uint16_t)
     register_poll();
 }
 
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+bool DiagnosticRX::early200_try_handshake()
+{
+    // Bench-only, receive-first, single 0x21 attempt.  This function runs
+    // on the HAL main thread BEFORE BoardConfig and never requests or
+    // simulates IOMCU motor authorization.
+    if (_early200_attempted || !hal.scheduler->in_main_thread() ||
+        hal.util->get_soft_armed()) {
+        return false;
+    }
+    const uint32_t now_ms = AP_HAL::millis();
+    chSysLock();
+    const bool bus_ready = _initialized && _early_rx_begin_ms != 0 &&
+        uint32_t(now_ms - _early_rx_begin_ms) >= 50U &&
+        _experimental_owner == nullptr && _head == _tail && _errors == 0 &&
+        palReadLine(PAL_LINE(GPIOA, 0)) &&
+        !(UART4->ISR & (USART_ISR_BUSY | USART_ISR_RXNE_RXFNE |
+                        USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE));
+    chSysUnlock();
+    // Record the attempt even if the peer is already speaking or the
+    // electrical bus is not idle.  Never discard ESC bytes to force TX.
+    _early200_attempted = true;
+    _early_tx_attempt_ms = now_ms;
+    if (!bus_ready) {
+        return false;
+    }
+    uint8_t board_id[16] {};
+    uint8_t len = sizeof(board_id);
+    if (!hal.util->get_system_id_unformatted(board_id, len) ||
+        len == 0 || len > sizeof(board_id)) {
+        return false; // Do not invent a live peer identity.
+    }
+    uint32_t uid = 2166136261U;
+    for (uint8_t i = 0; i < len; i++) {
+        uid = (uid ^ board_id[i]) * 16777619U;
+    }
+    // Exactly the same source/target/priority/UID as the native
+    // FC0->ESC0 115200-baud power-on discovery.
+    const uint8_t payload[] = {0x30, 0x40, 10, 0, 0,
+        uint8_t(uid), uint8_t(uid >> 8), uint8_t(uid >> 16), uint8_t(uid >> 24)};
+    const uint8_t n = AP_SpektrumSmartESC::encode(
+        0x21, payload, sizeof(payload), _early200_packet,
+        sizeof(_early200_packet));
+    if (n != sizeof(_early200_packet) ||
+        !AP_SpektrumSmartESC_Reader::handshake_packet(_early200_packet, n)) {
+        return false;
+    }
+
+    // Acquire the SAME guarded single-wire UART4 used by the later native
+    // session. No separate TX engine, no blind GPIO writes.
+    static SpektrumUART4 early200_port(*this);
+    _end(); // stop passive listener and release exclusive pin safely
+    if (!early200_port.acquire()) {
+        return false;
+    }
+    _early200_port = &early200_port;
+    if (!_early200_port->begin_tx(_early200_packet, n)) {
+        _early200_port->relinquish();
+        _early200_port = nullptr;
+        return false;
+    }
+    _early_tx_started = 1;
+    // The 1kHz RX timer and the UART TC interrupt finish TX and restore RX.
+    // The caller never waits for ESC and never produces motor demand.
+    return true;
+}
+
+void DiagnosticRX::early200_finish()
+{
+    // This is called before BoardConfig GPIO/RC/IOMCU setup. Even if the
+    // boot handshake is still in flight, safely abort and restore RX input.
+    if (_early200_port != nullptr) {
+        _early200_port->relinquish();
+        _early200_port = nullptr;
+    }
+    if (_early_rx_begin_ms != 0 && _early_rx_end_ms == 0) {
+        _early_rx_end_ms = AP_HAL::millis();
+    }
+    if (_initialized) {
+        _end();
+    }
+}
+#endif
+
 void DiagnosticRX::register_poll()
 {
     if (!_registered) {
@@ -180,6 +264,8 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
     status.early_rx_first_ms = _early_rx_first_ms;
     status.early_rx_bytes = _early_rx_bytes;
     status.first_handshake_tc_ms = _first_handshake_tc_ms;
+    status.early_tx_attempt_ms = _early_tx_attempt_ms;
+    status.early_tx_started = _early_tx_started;
     status.handshake_flags = AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED ? 1 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? 8 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ? 16 : 0;
@@ -241,7 +327,15 @@ void DiagnosticRX::_end()
 {
     chSysLock();
 #if AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+    // During the one-shot Early200 laboratory handoff, preserve the
+    // observation window through UART TC and the peer reply period.
+    // early200_finish() writes its real ending timestamp.
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+    if (!_early200_attempted &&
+        _early_rx_begin_ms != 0 && _early_rx_end_ms == 0) {
+#else
     if (_early_rx_begin_ms != 0 && _early_rx_end_ms == 0) {
+#endif
         _early_rx_end_ms = AP_HAL::millis();
     }
 #endif
