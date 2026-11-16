@@ -103,6 +103,8 @@ public:
         uint32_t early_rx_begin_ms = 0, early_rx_end_ms = 0;
         uint32_t early_rx_first_ms = 0, early_rx_bytes = 0;
         uint32_t first_handshake_tc_ms = 0;
+        uint32_t early_tx_attempt_ms = 0;
+        uint8_t early_tx_started = 0;
         uint32_t handshake_queued = 0, handshake_completed = 0, handshake_restored = 0;
         uint8_t handshake_flags = 0; // bit0:qualification, bit1:owned, bit2:TC, bit3:wave LAB, bit4:HS LAB, bit5:quiet RX, bit6:UART history eligible.
         uint8_t probe_mode = 0, probe_levels = 0; // Modes 0..4; levels bit0:low seen, bit1:high seen.
