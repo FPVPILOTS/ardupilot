@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "AP_SpektrumSmartESC_ChibiOS.h"
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS && defined(HAL_SPEKTRUM_SMART_ESC_UART4_RX)
+#ifndef AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS
+#define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 0
+#endif
 extern const AP_HAL::HAL &hal;
 
 bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualification &qualification,
@@ -19,7 +22,13 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     // The special IOMCU may not have published its inhibit readback
     // immediately after BoardConfig. In EarlyNative ONLY, defer the lease
     // and retry while fully DISARMED. Never touch UART4 before IO proof.
-    const bool io_prepared = _owner.prepare(nonce, qualification.io_firmware_crc);
+    // Opt-in A/B test: defer ONLY the initial DISARMED handshake until
+    // this absolute Pixhawk boot time. Do not even request the IO lease
+    // before the delay; the standard board is unchanged (macro == 0).
+    _boot_delay_pending = AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS != 0 &&
+        now_ms < AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS;
+    const bool io_prepared = !_boot_delay_pending &&
+        _owner.prepare(nonce, qualification.io_firmware_crc);
     if (!io_prepared && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK) {
         return false;
     }
@@ -29,7 +38,9 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     _pending_ms = now_ms;
     _pending = io_prepared;
     _auto_retry_disarmed = !io_prepared;
-    _retry_at_ms = io_prepared ? 0U : now_ms + 100U;
+    _retry_at_ms = _boot_delay_pending ?
+        AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS :
+        (io_prepared ? 0U : now_ms + 100U);
     _retry_requires_framing_quiet = false;
     _retry_requires_noise_quiet = false;
     _startup_framing_retries = _startup_noise_retries = 0;
@@ -75,10 +86,15 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         // reconnect is allowed only if *all* UART errors were framing-only
         // and at least 500ms have elapsed since the last such error.
         // Do not clear the counters or bypass normal UART owner acquisition.
-        const bool quiet =
-            (!_retry_requires_framing_quiet || _uart.framing_only_fault(true)) &&
-            (!_retry_requires_noise_quiet || _uart.noise_only_fault(true)) &&
-            _uart.line_high_held(AP_SpektrumSmartESC_UartRecovery::QUIET_MS);
+        // A first, deliberately delayed start has not yet opened UART4,
+        // so no timer RX poll or 500ms PA0 history can exist. Apply the
+        // EXACT initial-start checks (IO receipt + hardware owner + UART)
+        // after the delay. All subsequent fault retries still need the
+        // existing strict 500ms quiet line and FE/NE classification.
+        const bool quiet = _boot_delay_pending ||
+            ((!_retry_requires_framing_quiet || _uart.framing_only_fault(true)) &&
+             (!_retry_requires_noise_quiet || _uart.noise_only_fault(true)) &&
+             _uart.line_high_held(AP_SpektrumSmartESC_UartRecovery::QUIET_MS));
         if (!quiet) {
             // No UART reconfiguration or TX while the line is unstable.
             // Passive DISARMED checks may continue for a late-powered ESC.
@@ -90,6 +106,7 @@ void AP_SpektrumSmartESC_ChibiOS::update(const AP_SpektrumSmartESC_Motor::Demand
         _retry_requires_noise_quiet = false;
         const uint32_t nonce = (_uid ^ now_ms) | 1U;
         if (_owner.prepare(nonce, _qualification.io_firmware_crc)) {
+            _boot_delay_pending = false;
             _pending_ms = now_ms;
             _pending = true;
         } else {
@@ -178,6 +195,8 @@ AP_SpektrumSmartESC_ChibiOS::startup_diagnostics() const
     result.waiting_for_fe_quiet = _retry_requires_framing_quiet;
     result.waiting_for_ne_quiet = _retry_requires_noise_quiet;
     result.ever_armed = _ever_armed;
+    result.boot_delay_pending = _boot_delay_pending;
+    result.boot_discovery_after_ms = AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS;
     return result;
 }
 
