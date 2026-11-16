@@ -1505,6 +1505,12 @@ void AP_SpektrumSmartESC_Diagnostics::update()
                         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                             "SPK45 TX FIRSTTC%lums LIMIT200",
                             (unsigned long)hw.first_handshake_tc_ms);
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+                        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                            "SPK46 HS200 TRY%lums START%u",
+                            (unsigned long)hw.early_tx_attempt_ms,
+                            unsigned(hw.early_tx_started));
+#endif
                         const bool rx_before_200 =
                             hw.early_rx_begin_ms != 0 && hw.early_rx_begin_ms < 200U;
                         const bool tx_before_200 =
