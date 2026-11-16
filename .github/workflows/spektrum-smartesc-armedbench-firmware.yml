@@ -15,17 +15,22 @@ on:
       - feature/spktsmart-f7-startup-recovery-20261114
       - feature/spktsmart-pullup-delayed-rxdiag-20261116
       - feature/spktsmart-autoboot-fastdiscovery-20261116
+      - feature/spktsmart-early200-listen-20261116
     paths:
       - 'libraries/AP_SpektrumSmartESC/**'
       - 'libraries/AP_Arming/AP_Arming.cpp'
       - 'libraries/AP_Vehicle/AP_Vehicle.h'
       - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp'
       - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
+      - 'libraries/AP_HAL_ChibiOS/HAL_ChibiOS_Class.cpp'
+      - 'libraries/AP_HAL/UARTDriver.h'
+      - 'libraries/AP_Vehicle/AP_Vehicle.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-DelayedRxDiag-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-Early200-IOInstall/**'
       - '.github/workflows/spektrum-smartesc-armedbench-firmware.yml'
   pull_request:
     paths:
@@ -34,11 +39,15 @@ on:
       - 'libraries/AP_Vehicle/AP_Vehicle.h'
       - 'libraries/AP_HAL_ChibiOS/DiagnosticRX.cpp'
       - 'libraries/AP_HAL_ChibiOS/SpektrumUART4.cpp'
+      - 'libraries/AP_HAL_ChibiOS/HAL_ChibiOS_Class.cpp'
+      - 'libraries/AP_HAL/UARTDriver.h'
+      - 'libraries/AP_Vehicle/AP_Vehicle.cpp'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyNative-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-DelayedRxDiag-IOInstall/**'
       - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/**'
+      - 'libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-Early200-IOInstall/**'
   workflow_dispatch:
 jobs:
   build-armedbench:
@@ -140,6 +149,37 @@ jobs:
           assert int(a['board_id']) == 56
           print("Delayed RX diagnostic board ID 56 PASS; no flash")
           PY
+      - name: Build Early200 receive-first timing/IO-gated SRXL2 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          BOARD=Pixhawk6C-SpktSmart-EarlyArmedBench-Early200-IOInstall
+          HWDEF=libraries/AP_HAL_ChibiOS/hwdef/$BOARD/hwdef.dat
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_EARLY200_RX 1' "$HWDEF"
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS 0' libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/hwdef.dat
+          grep -Fq 'define AP_SPEKTRUM_SMART_ESC_AUX7_INTERNAL_PULLUP 1' libraries/AP_HAL_ChibiOS/hwdef/Pixhawk6C-SpktSmart-ArmedBench-IOInstall/hwdef.dat
+          ./waf configure --board "$BOARD"
+          ./waf plane
+          FW=build/$BOARD/bin/arduplane.apj
+          test -s "$FW"
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK44 EARLY BEGIN%lums END%lums'
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK44 RX FIRST%lums BYTES%lu'
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK45 TX FIRSTTC%lums LIMIT200'
+          strings build/$BOARD/bin/arduplane | grep -F 'SPK45 GOAL RX%u TX%u (200ms)'
+          python3 - "$FW" <<'PY'
+          import json, sys
+          with open(sys.argv[1]) as f:
+              fw=json.load(f)
+          assert int(fw['board_id']) == 56
+          print("Early200 board ID 56 PASS - no flash, no motor qualification")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pix6C-SPKT-Early200-PassiveRX
+          path: build/Pixhawk6C-SpktSmart-EarlyArmedBench-Early200-IOInstall/bin/arduplane.apj
+          if-no-files-found: error
+          retention-days: 14
       - name: Compile immediate AutoBoot SRXL2 RX-first image
         shell: bash
         run: |
