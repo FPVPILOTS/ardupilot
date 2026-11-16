@@ -87,7 +87,7 @@ const AP_Param::GroupInfo AP_MotorsHeli_Swash::var_info[] = {
 
     // @Param: PWM_MODE
     // @DisplayName: Swash Servo PWM Mapping
-    // @Description: 0 uses legacy 1000-2000us endpoints. 1 uses each assigned servo's MIN/TRIM/MAX and reversal. Verify pulse width and mechanical travel before use.
+    // @Description: 0 uses legacy 1000-2000us endpoints and can reset servo limits during setup. 1 uses the assigned swash servos' MIN/TRIM/MAX and reversal, including narrow-pulse KST servos. Set only after verifying correct servo type, pulse range, and direction without motor power. Requires restart.
     // @Values: 0:Legacy,1:ConfiguredServoRange
     // @User: Advanced
     AP_GROUPINFO("PWM_MODE", 9, AP_MotorsHeli_Swash, _swash_pwm_mode, 0),
