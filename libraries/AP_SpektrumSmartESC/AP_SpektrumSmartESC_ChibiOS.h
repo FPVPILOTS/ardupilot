@@ -30,6 +30,9 @@ public:
         bool waiting_for_ne_quiet = false, ever_armed = false;
         bool boot_delay_pending = false;
         uint32_t boot_discovery_after_ms = 0;
+        uint32_t first_discovery_ms = 0, last_discovery_ms = 0;
+        uint16_t discovery_sessions = 0;
+        uint8_t silent_restarts = 0;
     };
     StartupDiagnostics startup_diagnostics() const;
     // Historical snapshot taken BEFORE the driver tears UART4 down.
@@ -67,6 +70,9 @@ private:
     AP_SpektrumSmartESC_Motor::Qualification _qualification;
     uint32_t _uid = 0, _pending_ms = 0, _retry_at_ms = 0;
     uint32_t _telemetry_sequence = 0;
+    uint32_t _first_discovery_ms = 0, _last_discovery_ms = 0;
+    uint16_t _discovery_sessions = 0;
+    uint8_t _silent_restarts = 0;
     uint8_t _target = 0;
     bool _pending = false, _active = false;
     bool _thread_started = false, _restore_pending = false;
