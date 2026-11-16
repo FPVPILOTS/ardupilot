@@ -58,6 +58,12 @@ def main() -> int:
             "if (_swash_pwm_mode != 1)" in swash and
             "set_output_norm_trimmed(function, swash_in)" in swash,
             "Swash narrow-pulse mapping must be opt-in with legacy default retained")
+    require(swash.index('AP_GROUPINFO("PWM_MODE", 9,') <
+            swash.index('AP_GROUPINFO_FLAGS("H3_ENABLE", 4,'),
+            "PWM_MODE must precede H3_ENABLE or the MAVLink parameter list can hide it")
+    require("// @Param: SW_PWM_MODE" in heli_single and
+            "// @Param: SW2_PWM_MODE" in heli_dual,
+            "Swash PWM modes must have complete ground-station parameter descriptions")
     require("trim - minimum" in srv_output and "maximum - trim" in srv_output and
             "channel.get_reversed() ? -command : command" in srv_output and
             "channel.get_trim() < channel.get_output_max()" in srv_output,
