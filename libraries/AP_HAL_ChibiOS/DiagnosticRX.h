@@ -1,5 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+#ifndef AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+#define AP_SPEKTRUM_SMART_ESC_EARLY200_RX 0
+#endif
+#ifndef AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+#define AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB 0
+#endif
 #ifdef SPKTSMART_RX_REGISTER_TEST
 #include "tests/DiagnosticRX_test_hal.h"
 #else
