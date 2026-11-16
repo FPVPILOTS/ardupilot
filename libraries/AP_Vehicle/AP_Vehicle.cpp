@@ -20,6 +20,9 @@
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
 #include <AP_HAL_ChibiOS/sdcard.h>
 #include <AP_HAL_ChibiOS/hwdef/common/stm32_util.h>
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+#include <AP_HAL_ChibiOS/DiagnosticRX.h>
+#endif
 #endif
 #include <AP_DDS/AP_DDS_Client.h>
 #if HAL_WITH_IO_MCU
@@ -419,9 +422,16 @@ void AP_Vehicle::setup()
     // startup below reacquires this single port only after real IOMCU
     // inhibit receipt. Early RX byte/timing counters survive this handoff.
     if (auto *early_spkt_rx = hal.diagnostic_rx_uart()) {
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+        // End the once-only 0x21 lab and hand UART4 back, even if an
+        // IRQ already completed the transmission and RX is now active.
+        // No second bus owner survives into BoardConfig or motor setup.
+        static_cast<DiagnosticRX *>(early_spkt_rx)->early200_finish();
+#else
         if (early_spkt_rx->is_initialized()) {
             early_spkt_rx->end();
         }
+#endif
     }
 #endif
     BoardConfig.init();
