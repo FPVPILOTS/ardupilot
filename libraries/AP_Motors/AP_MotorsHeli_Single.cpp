@@ -127,6 +127,12 @@ const AP_Param::GroupInfo AP_MotorsHeli_Single::var_info[] = {
     // @Units: deg
     // @User: Advanced
     // @Increment: 1
+    // @Param: SW_PWM_MODE
+    // @DisplayName: Swash Servo PWM Endpoint Mapping
+    // @Description: Selects how main swash servo pulses are generated. 0 uses the legacy 1000-2000us servo limits and may overwrite SERVOx_MIN/MAX during heli setup. 1 respects the assigned swash servo's SERVOx_MIN, SERVOx_TRIM, SERVOx_MAX and reversal. For KST 760us neutral-point servos, configure the manufacturer-approved limits individually and verify outputs with the motor disconnected. Requires restart after changing.
+    // @Values: 0:Legacy1000-2000,1:ConfiguredServoRange
+    // @RebootRequired: True
+    // @User: Advanced
     AP_SUBGROUPINFO(_swashplate, "SW_", 20, AP_MotorsHeli_Single, AP_MotorsHeli_Swash),
 
     // @Param: COL2YAW
