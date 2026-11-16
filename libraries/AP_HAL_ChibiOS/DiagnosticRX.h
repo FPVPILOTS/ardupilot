@@ -31,6 +31,12 @@ class DiagnosticRX : public AP_HAL::UARTDriver {
 public:
     bool is_receive_only() const override { return _experimental_owner == nullptr; }
     bool is_initialized() override;
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+    // Dedicated NON-FLIGHT 0x21 ONLY boot experiment. Once per reboot.
+    // No motor command or arming path is callable from these APIs.
+    bool early200_try_handshake();
+    void early200_finish();
+#endif
     // Dedicated backend only: stopped-port GPIO input, optional weak RX pull.
     // No inversion, TX options, direction output or arbitrary pin selection.
     bool set_options(uint16_t options) override;
@@ -84,6 +90,10 @@ private:
     // never initialize a second independent driver for the reserved UART4.
     const void *_experimental_owner = nullptr;
     SpektrumUART4 *_handshake_port = nullptr;
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB
+    SpektrumUART4 *_early200_port = nullptr;
+    bool _early200_attempted = false;
+#endif
     uint32_t _handshake_faults = 0;
     uint32_t _handshake_queued = 0, _handshake_completed = 0, _handshake_restored = 0;
 #if AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB
