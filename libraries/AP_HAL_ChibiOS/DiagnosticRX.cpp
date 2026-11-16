@@ -65,6 +65,11 @@ void DiagnosticRX::_begin(uint32_t baud, uint16_t, uint16_t)
 #endif
     _head = _tail = 0;
     _initialized = true;
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+    if (_early_rx_begin_ms == 0) {
+        _early_rx_begin_ms = AP_HAL::millis(); // MCU uptime, NOT battery-edge time.
+    }
+#endif
     start_samples(4);
     chSysUnlock();
     register_poll();
@@ -170,6 +175,11 @@ bool DiagnosticRX::receive_diagnostics(ReceiveDiagnostics &status) const
     status.handshake_completed = _handshake_completed;
     status.handshake_restored = _handshake_restored;
     status.last_uart_rx_ms = _last_uart_rx_ms; // Acquired in poll() from physical UART FIFO.
+    status.early_rx_begin_ms = _early_rx_begin_ms;
+    status.early_rx_end_ms = _early_rx_end_ms;
+    status.early_rx_first_ms = _early_rx_first_ms;
+    status.early_rx_bytes = _early_rx_bytes;
+    status.first_handshake_tc_ms = _first_handshake_tc_ms;
     status.handshake_flags = AP_SPEKTRUM_SMART_ESC_HARDWARE_TX_VALIDATED ? 1 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_LAB_ONLY ? 8 : 0;
     status.handshake_flags |= AP_SPEKTRUM_SMART_ESC_HANDSHAKE_LAB ? 16 : 0;
@@ -230,6 +240,11 @@ void DiagnosticRX::safe_input()
 void DiagnosticRX::_end()
 {
     chSysLock();
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+    if (_early_rx_begin_ms != 0 && _early_rx_end_ms == 0) {
+        _early_rx_end_ms = AP_HAL::millis();
+    }
+#endif
     safe_input();
     chSysUnlock();
 }
@@ -656,6 +671,14 @@ void DiagnosticRX::poll()
         for (uint8_t i = 0; i < 16 && (UART4->ISR & USART_ISR_RXNE_RXFNE); i++) {
             const uint8_t value = UART4->RDR;
             _last_uart_rx_ms = now;
+#if AP_SPEKTRUM_SMART_ESC_EARLY200_RX
+            if (_early_rx_end_ms == 0) {
+                if (_early_rx_first_ms == 0) {
+                    _early_rx_first_ms = now;
+                }
+                ++_early_rx_bytes;
+            }
+#endif
             const uint16_t next = (_head + 1U) % SIZE;
             if (next == _tail) {
                 _errors++;
