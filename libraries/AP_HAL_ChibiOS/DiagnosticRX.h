@@ -121,6 +121,11 @@ private:
     AP_SpektrumSmartESC_UartRecovery _uart_recovery;
     uint32_t _framing = 0, _noise = 0, _parity = 0, _overruns = 0, _overflow = 0;
     uint32_t _last_uart_rx_ms = 0; // Real UART FIFO timestamp, for PollLab guard only.
+    // Preserve early RX-only evidence across intentional UART handover.
+    // Never clear to manufacture successful peer communication.
+    uint32_t _early_rx_begin_ms = 0, _early_rx_end_ms = 0;
+    uint32_t _early_rx_first_ms = 0, _early_rx_bytes = 0;
+    uint32_t _first_handshake_tc_ms = 0;
     uint32_t _release_errors = 0;
     FirstUARTError _first_error;
     uint32_t _line_high_since_ms = 0;
