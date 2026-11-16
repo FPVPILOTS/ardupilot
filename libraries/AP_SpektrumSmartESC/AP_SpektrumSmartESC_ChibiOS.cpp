@@ -28,8 +28,13 @@ bool AP_SpektrumSmartESC_ChibiOS::start(const AP_SpektrumSmartESC_Motor::Qualifi
     // Opt-in A/B test: defer ONLY the initial DISARMED handshake until
     // this absolute Pixhawk boot time. Do not even request the IO lease
     // before the delay; the standard board is unchanged (macro == 0).
-    _boot_delay_pending = AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS != 0 &&
-        now_ms < AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS;
+#if AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS > 0
+    _boot_delay_pending = now_ms < AP_SPEKTRUM_SMART_ESC_BOOT_DISCOVERY_AFTER_MS;
+#else
+    // The AutoBoot profile is compiled with a zero-delay gate.  Avoid
+    // the uint32_t < 0 compile-time warning promoted to an error by waf.
+    _boot_delay_pending = false;
+#endif
     const bool io_prepared = !_boot_delay_pending &&
         _owner.prepare(nonce, qualification.io_firmware_crc);
     if (!io_prepared && !AP_SPEKTRUM_SMART_ESC_NATIVE_EARLY_LINK) {
