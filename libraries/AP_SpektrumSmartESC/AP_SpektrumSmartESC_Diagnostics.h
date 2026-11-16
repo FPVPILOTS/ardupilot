@@ -62,7 +62,7 @@ public:
     void plane_control(bool armed, bool rc_ok, bool failsafe, bool reverse_available,
                        bool reverse_permitted, bool reverse_configured, bool reverse_selected);
     bool armed_bench_arm_permitted() const;
-    bool arming_blocked() const { return bench_blocked() || (_motor_enable.get() == 1 && !motor_arming_ready()) || (_motor_selected && !motor_arming_ready()); }
+    bool arming_blocked() const { return AP_SPEKTRUM_SMART_ESC_EARLY200_TX_LAB || bench_blocked() || (_motor_enable.get() == 1 && !motor_arming_ready()) || (_motor_selected && !motor_arming_ready()); }
     bool motor_selected() const { return _motor_enable.get() == 1 || _motor_selected; }
 private:
 #if AP_SPEKTRUM_SMART_ESC_TURN_LAB
