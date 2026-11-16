@@ -481,7 +481,13 @@ void RCOutput::set_freq(uint32_t chmask, uint16_t freq_hz)
         // greater than 400 doesn't give enough room at higher periods for
         // the down pulse. This still allows for high rate with oneshot and dshot.
         uint16_t group_freq = freq_hz;
-        if (group_freq > 400 && group.current_mode != MODE_PWM_BRUSHED) {
+        bool allow_kst_560hz = false;
+#if defined(IOMCU_FW)
+        allow_kst_560hz = freq_hz == 560 && group.ch_mask != 0 &&
+                          (group.ch_mask & ~0x0FU) == 0;
+#endif
+        if (group_freq > 400 && !allow_kst_560hz &&
+            group.current_mode != MODE_PWM_BRUSHED) {
             group_freq = 400;
         }
         if ((group.ch_mask & chmask) != 0) {
@@ -789,6 +795,13 @@ void RCOutput::push_local(void)
                     // safety is on, overwride pwm
                     period_us = 0;
                 }
+
+#if defined(IOMCU_FW)
+                if (group.rc_frequency == 560 && group.ch_mask != 0 &&
+                    (group.ch_mask & ~0x0FU) == 0 && period_us != 0) {
+                    period_us = MIN(960U, MAX(560U, period_us));
+                }
+#endif
 
                 if (group.current_mode == MODE_PWM_BRUSHED) {
                     if (period_us <= _esc_pwm_min) {

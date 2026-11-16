@@ -597,6 +597,11 @@ bool AP_MotorsHeli_Single::arming_checks(size_t buflen, char *buffer) const
         return false;
     }
 
+    if (!_swashplate.output_ranges_valid()) {
+        hal.util->snprintf(buffer, buflen, "Invalid swash SERVOx_MIN/TRIM/MAX or H_SW_PWM_MODE");
+        return false;
+    }
+
     // returns false if direct drive tailspeed is outside of range
     if ((_direct_drive_tailspeed < 0) || (_direct_drive_tailspeed > 100)) {
         hal.util->snprintf(buffer, buflen, "H_TAIL_SPEED out of range");

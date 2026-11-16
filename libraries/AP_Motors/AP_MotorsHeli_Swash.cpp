@@ -84,6 +84,13 @@ const AP_Param::GroupInfo AP_MotorsHeli_Swash::var_info[] = {
     // @User: Advanced
     // @Increment: 1
     AP_GROUPINFO("H3_PHANG", 8, AP_MotorsHeli_Swash, _phase_angle, 0),
+
+    // @Param: PWM_MODE
+    // @DisplayName: Swash Servo PWM Mapping
+    // @Description: 0 uses legacy 1000-2000us endpoints. 1 uses each assigned servo's MIN/TRIM/MAX and reversal. Verify pulse width and mechanical travel before use.
+    // @Values: 0:Legacy,1:ConfiguredServoRange
+    // @User: Advanced
+    AP_GROUPINFO("PWM_MODE", 9, AP_MotorsHeli_Swash, _swash_pwm_mode, 0),
    
     AP_GROUPEND
 };
@@ -204,8 +211,9 @@ void AP_MotorsHeli_Swash::add_servo_raw(uint8_t num, float roll, float pitch, fl
     // outputs are defined on a -500 to 500 range for swash servos
     SRV_Channels::set_range(function, 1000);
 
-    // swash servos always use full endpoints as restricting them would lead to scaling errors
-    SRV_Channels::set_output_min_max(function, 1000, 2000);
+    if (_swash_pwm_mode != 1) {
+        SRV_Channels::set_output_min_max(function, 1000, 2000);
+    }
 
 }
 
@@ -271,9 +279,30 @@ void AP_MotorsHeli_Swash::output()
 // multiplied by 500 to get PWM output.
 void AP_MotorsHeli_Swash::rc_write(uint8_t chan, float swash_in)
 {
-    uint16_t pwm = (uint16_t)(1500 + 500 * swash_in);
     SRV_Channel::Function function = SRV_Channels::get_motor_function(chan);
-    SRV_Channels::set_output_pwm_trimmed(function, pwm);
+    if (_swash_pwm_mode == 1) {
+        SRV_Channels::set_output_norm_trimmed(function, swash_in);
+    } else {
+        const uint16_t pwm = uint16_t(1500 + 500 * swash_in);
+        SRV_Channels::set_output_pwm_trimmed(function, pwm);
+    }
+}
+
+bool AP_MotorsHeli_Swash::output_ranges_valid() const
+{
+    if (_swash_pwm_mode != 0 && _swash_pwm_mode != 1) {
+        return false;
+    }
+    if (_swash_pwm_mode == 0) {
+        return true;
+    }
+    for (uint8_t i = 0; i < _max_num_servos; i++) {
+        if (_enabled[i] &&
+            !SRV_Channels::output_range_valid(SRV_Channels::get_motor_function(_motor_num[i]))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Get function output mask

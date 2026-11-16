@@ -565,6 +565,11 @@ bool AP_MotorsHeli_Dual::arming_checks(size_t buflen, char *buffer) const
         return false;
     }
 
+    if (!_swashplate1.output_ranges_valid() || !_swashplate2.output_ranges_valid()) {
+        hal.util->snprintf(buffer, buflen, "Invalid swash SERVOx_MIN/TRIM/MAX or H_SWx_PWM_MODE");
+        return false;
+    }
+
     // returns false if Phase Angle is outside of range for H3 swashplate 1
     if (_swashplate1.get_swash_type() == SWASHPLATE_TYPE_H3 && (_swashplate1.get_phase_angle() > 30 || _swashplate1.get_phase_angle() < -30)){
         hal.util->snprintf(buffer, buflen, "H_SW1_H3_PHANG out of range");

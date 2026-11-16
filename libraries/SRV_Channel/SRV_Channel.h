@@ -462,6 +462,8 @@ public:
 
     // set output for all channels matching the given function type, allow radio_trim to center servo
     static void set_output_pwm_trimmed(SRV_Channel::Function function, int16_t value);
+    static void set_output_norm_trimmed(SRV_Channel::Function function, float value);
+    static bool output_range_valid(SRV_Channel::Function function);
 
     // set and save the trim for a function channel to the output value
     static void set_trim_to_servo_out_for(SRV_Channel::Function function);

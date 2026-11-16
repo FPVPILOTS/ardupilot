@@ -884,6 +884,7 @@ void AP_IOMCU_FW::page_status_update(void)
 bool AP_IOMCU_FW::handle_code_read()
 {
     uint16_t *values = nullptr;
+    uint16_t pwm_info[4] = {};
 #define COPY_PAGE(_page_name)							\
 	do {									\
 		values = (uint16_t *)&_page_name;				\
@@ -915,6 +916,17 @@ bool AP_IOMCU_FW::handle_code_read()
 #endif
     case PAGE_STATUS:
         COPY_PAGE(reg_status);
+        break;
+    case PAGE_PWM_INFO: {
+        pwm_info[0] = reg_setup.pwm_rates;
+        pwm_info[1] = reg_setup.pwm_altrate;
+        pwm_info[2] = reg_setup.pwm_defaultrate;
+        pwm_info[3] = reg_setup.features;
+        COPY_PAGE(pwm_info);
+        break;
+    }
+    case PAGE_FAILSAFE_PWM:
+        COPY_PAGE(reg_failsafe_pwm);
         break;
     case PAGE_SERVOS:
         COPY_PAGE(reg_servo);

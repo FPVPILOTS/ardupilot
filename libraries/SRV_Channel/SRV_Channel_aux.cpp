@@ -388,6 +388,52 @@ SRV_Channels::set_output_pwm_trimmed(SRV_Channel::Function function, int16_t val
     }
 }
 
+void SRV_Channels::set_output_norm_trimmed(SRV_Channel::Function function, float value)
+{
+    if (!function_assigned(function)) {
+        return;
+    }
+    const float command = constrain_float(value, -1.0f, 1.0f);
+    for (uint8_t i = 0; i < NUM_SERVO_CHANNELS; i++) {
+        SRV_Channel &channel = channels[i];
+        if (channel.get_function() != function) {
+            continue;
+        }
+
+        const int16_t minimum = channel.get_output_min();
+        const int16_t maximum = channel.get_output_max();
+        const int16_t trim = channel.get_trim();
+        if (minimum >= maximum || trim < minimum || trim > maximum) {
+            channel.set_output_pwm(constrain_int16(trim, minimum, maximum));
+            channel.output_ch();
+            continue;
+        }
+
+        const float scaled = channel.get_reversed() ? -command : command;
+        const float span = scaled < 0 ? float(trim - minimum) : float(maximum - trim);
+        const int16_t pwm = int16_t(trim + scaled * span);
+        channel.set_output_pwm(constrain_int16(pwm, minimum, maximum));
+        channel.output_ch();
+    }
+}
+
+bool SRV_Channels::output_range_valid(SRV_Channel::Function function)
+{
+    bool assigned = false;
+    for (uint8_t i = 0; i < NUM_SERVO_CHANNELS; i++) {
+        const SRV_Channel &channel = channels[i];
+        if (channel.get_function() != function) {
+            continue;
+        }
+        assigned = true;
+        if (!(channel.get_output_min() < channel.get_trim() &&
+              channel.get_trim() < channel.get_output_max())) {
+            return false;
+        }
+    }
+    return assigned;
+}
+
 /*
   set and save the trim value to current output for all channels matching
   the given function type

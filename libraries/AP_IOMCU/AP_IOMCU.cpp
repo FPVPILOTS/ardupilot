@@ -18,6 +18,7 @@
 #include <AP_RCProtocol/AP_RCProtocol.h>
 #include <AP_InternalError/AP_InternalError.h>
 #include <AP_Logger/AP_Logger.h>
+#include <GCS_MAVLink/GCS.h>
 #include <AP_Arming/AP_Arming.h>
 #include <AP_BLHeli/AP_BLHeli.h>
 #include <ch.h>
@@ -501,6 +502,40 @@ void AP_IOMCU::read_status()
         read_status_errors = 0;
     }
     read_status_ok++;
+
+    static uint32_t last_kst_diagnostic_ms;
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - last_kst_diagnostic_ms >= 10000U) {
+        last_kst_diagnostic_ms = now_ms;
+        uint16_t pwm_info[4] = {};
+        uint16_t failsafe_pwm[IOMCU_MAX_RC_CHANNELS] = {};
+        if (read_registers(PAGE_PWM_INFO, 0, ARRAY_SIZE(pwm_info), pwm_info) &&
+            read_registers(PAGE_FAILSAFE_PWM, 0, ARRAY_SIZE(failsafe_pwm), failsafe_pwm)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "KST IO M%04X A%u D%u F%u",
+                          (unsigned)pwm_info[0], (unsigned)pwm_info[1],
+                          (unsigned)pwm_info[2], (unsigned)pwm_info[3]);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "KST FS %u,%u,%u,%u",
+                          (unsigned)failsafe_pwm[0], (unsigned)failsafe_pwm[1],
+                          (unsigned)failsafe_pwm[2], (unsigned)failsafe_pwm[3]);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "KST FS %u,%u,%u,%u",
+                          (unsigned)failsafe_pwm[4], (unsigned)failsafe_pwm[5],
+                          (unsigned)failsafe_pwm[6], (unsigned)failsafe_pwm[7]);
+            if (pwm_info[0] != 0x000F || pwm_info[1] != 560 ||
+                pwm_info[2] != 50 ||
+                (pwm_info[3] & (P_SETUP_FEATURES_ONESHOT | P_SETUP_FEATURES_BRUSHED))) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "KST PWM config mismatch");
+            }
+            for (uint8_t i = 0; i < ARRAY_SIZE(failsafe_pwm); i++) {
+                if (failsafe_pwm[i] != 0) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "KST IO failsafe PWM nonzero");
+                    break;
+                }
+            }
+        } else {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "KST IO diagnostic read failed");
+        }
+    }
 
     check_iomcu_reset();
 

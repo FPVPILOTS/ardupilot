@@ -287,10 +287,14 @@ const AP_Param::Info Copter::var_info[] = {
     GSCALAR(fs_crash_check, "FS_CRASH_CHECK",    1),
 
     // @Param: RC_SPEED
-    // @DisplayName: ESC Update Speed
-    // @Description: This is the speed in Hertz that your ESCs will receive updates
+    // @DisplayName: Fast PWM output frequency
+    // @Description: Fast output PWM rate. 560 Hz is supported only for KST heli servos on Pixhawk4 IOMCU MAIN1-4.
     // @Units: Hz
+#if FRAME_CONFIG == HELI_FRAME
+    // @Range: 50 560
+#else
     // @Range: 50 490
+#endif
     // @Increment: 1
     // @User: Advanced
     GSCALAR(rc_speed, "RC_SPEED",              RC_FAST_SPEED),

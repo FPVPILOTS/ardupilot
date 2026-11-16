@@ -39,6 +39,7 @@ public:
 
     // Get function output mask
     uint32_t get_output_mask() const;
+    bool output_ranges_valid() const;
 
 #if HAL_LOGGING_ENABLED
     // Write SWSH log for this instance of swashplate
@@ -93,6 +94,7 @@ private:
     AP_Int8  _swashplate_type;                   // Swash Type Setting
     AP_Int8  _swash_coll_dir;                    // Collective control direction, normal or reversed
     AP_Int8  _linear_swash_servo;                // linearize swashplate output
+    AP_Int8  _swash_pwm_mode;                    // 0 legacy endpoints, 1 configured per-servo range
     AP_Int8  enable;
     AP_Int16 _servo1_pos;                        // servo1 azimuth position on swashplate with front of heli being 0 deg
     AP_Int16 _servo2_pos;                        // servo2 azimuth position on swashplate with front of heli being 0 deg
