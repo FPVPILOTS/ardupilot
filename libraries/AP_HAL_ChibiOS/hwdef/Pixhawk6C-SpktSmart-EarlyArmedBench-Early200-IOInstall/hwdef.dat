@@ -1,0 +1,17 @@
+# Isolated EARLY200 SRXL2 timing experiment; NOT flight firmware.
+# One battery cold-starts Pixhawk 6C and Spektrum Avian 130A.
+# Disconnect/insulate EDF motor phase wires, leave DISARMED throughout.
+#
+# Enable only early RECEIVE on UART4 PA0 (AF8, 115200 8N1, open drain,
+# internal weak 3.3V pull-up). The early listener is released before
+# BoardConfig configures GPIO and IOMCU; it never drives TX, does not
+# run control, does not acquire IOMCU ownership and cannot authorize ARM.
+# Once BoardConfig and IO inhibit proof exist, use the existing native
+# AutoBoot handshake plus strictly disarmed bounded retries.
+#
+# 200ms is a measured PASS/FAIL engineering target, not an assumed
+# Avian 130A compatibility requirement or permission to bypass safety.
+include ../Pixhawk6C-SpktSmart-EarlyArmedBench-AutoBoot-IOInstall/hwdef.dat
+undef CHIBIOS_SHORT_BOARD_NAME
+define CHIBIOS_SHORT_BOARD_NAME "Pix6C-SPKT-Early200"
+define AP_SPEKTRUM_SMART_ESC_EARLY200_RX 1
