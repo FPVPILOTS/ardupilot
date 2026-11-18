@@ -40,3 +40,14 @@ Rotorflight and ArduPilot are open source. Reusing/translating portions of Rotor
 7. Upstream-focused PR(s) to ArduPilot developers; no guarantee of acceptance or stable release.
 
 **Never flash experimental firmware for flight before the documented checks have passed.**
+
+## Implementation progress (2026-11-18)
+
+- **Portable native C++11 parser** added: [Protocol.h](Protocol.h). Read-only, HAL-independent, frame/CRC/type verification, telemetry field decoding. It is not wired to UART or AP_ESC_Telem yet.
+- **C++ host regression test:** `Tools/hobbywing_v5/test_protocol.cpp`. Locally compiled and run; normal and ASAN/UBSAN host runs passed.
+- **Python decoder/tests:** `Tools/hobbywing_v5/`.
+- **Automated GitHub Actions test workflow:** `.github/workflows/hobbywing-v5-host-tests.yml`, to run both suites on changes. Remote workflow status must be checked separately.
+- **Important legacy fork compatibility warning:** [COMPATIBILITY.md](COMPATIBILITY.md) — fork's ESC telemetry APIs differ from upstream ArduPilot master. Resolve before attaching UART integration.
+- Remaining major deliverables: serial framing/ownership adapter, real ESC evidence, AP_ESC_Telem mapping, SITL tests, Pixhawk 4 firmware build and Mission Planner validation.
+
+Do not confuse passing synthetic host tests with verified hardware support or flight-ready firmware.
