@@ -1,0 +1,39 @@
+name: Hobbywing V5 host protocol tests
+
+on:
+  push:
+    branches:
+      - feature/hobbywing-platinum-v5-esc-telemetry-20261118
+    paths:
+      - "libraries/AP_HobbywingV5/**"
+      - "Tools/hobbywing_v5/**"
+      - ".github/workflows/hobbywing-v5-host-tests.yml"
+  pull_request:
+    paths:
+      - "libraries/AP_HobbywingV5/**"
+      - "Tools/hobbywing_v5/**"
+      - ".github/workflows/hobbywing-v5-host-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  protocol-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python 3 host tests
+        run: |
+          PYTHONPATH=Tools/hobbywing_v5 python3 -m unittest discover -s Tools/hobbywing_v5 -p 'test_*.py' -v
+      - name: C++11 host tests
+        run: |
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+            Tools/hobbywing_v5/test_protocol.cpp -o /tmp/test_hobbywing_v5
+          /tmp/test_hobbywing_v5
+      - name: Address/undefined behavior sanitizer tests
+        run: |
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            Tools/hobbywing_v5/test_protocol.cpp -o /tmp/test_hobbywing_v5_san
+          /tmp/test_hobbywing_v5_san
