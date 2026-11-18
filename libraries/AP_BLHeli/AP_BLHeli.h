@@ -34,6 +34,7 @@
 #include <Filter/LowPassFilter.h>
 #include <AP_MSP/msp_protocol.h>
 #include "blheli_4way_protocol.h"
+#include <AP_HobbywingV5/Stream.h>
 
 #define AP_BLHELI_MAX_ESCS 8
 
@@ -74,6 +75,7 @@ private:
     AP_Int8 output_type;
     AP_Int8 control_port;
     AP_Int8 motor_poles;
+    AP_Int8 hobbywing_v5; // 0: legacy BLHeli, 1: receive-only Platinum V5
     // mask of channels with bi-directional dshot enabled
     AP_Int32 channel_bidir_dshot_mask;
     
@@ -283,6 +285,10 @@ private:
     void blheli_process_command(void);
     void run_connection_test(uint8_t chan);
     void read_telemetry_packet(void);
+    void update_hobbywing_v5(void);
+    HobbywingV5::Stream hobbywing_v5_rx;
+    uint32_t hobbywing_last_report_ms;
+    uint32_t hobbywing_last_valid_ms;
     void log_bidir_telemetry(void);
 
     // protocol handler hook
