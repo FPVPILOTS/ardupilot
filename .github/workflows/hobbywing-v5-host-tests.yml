@@ -28,12 +28,17 @@ jobs:
           PYTHONPATH=Tools/hobbywing_v5 python3 -m unittest discover -s Tools/hobbywing_v5 -p 'test_*.py' -v
       - name: C++11 host tests
         run: |
-          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
-            Tools/hobbywing_v5/test_protocol.cpp -o /tmp/test_hobbywing_v5
-          /tmp/test_hobbywing_v5
+          for source in Tools/hobbywing_v5/test_*.cpp; do
+            output="/tmp/$(basename "${source%.cpp}")"
+            g++ -std=c++11 -Wall -Wextra -Werror -pedantic "$source" -o "$output"
+            "$output"
+          done
       - name: Address/undefined behavior sanitizer tests
         run: |
-          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
-            -fsanitize=address,undefined -fno-omit-frame-pointer \
-            Tools/hobbywing_v5/test_protocol.cpp -o /tmp/test_hobbywing_v5_san
-          /tmp/test_hobbywing_v5_san
+          for source in Tools/hobbywing_v5/test_*.cpp; do
+            output="/tmp/$(basename "${source%.cpp}")_san"
+            g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+              -fsanitize=address,undefined -fno-omit-frame-pointer \
+              "$source" -o "$output"
+            "$output"
+          done
