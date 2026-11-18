@@ -51,3 +51,9 @@ Rotorflight and ArduPilot are open source. Reusing/translating portions of Rotor
 - Remaining major deliverables: serial framing/ownership adapter, real ESC evidence, AP_ESC_Telem mapping, SITL tests, Pixhawk 4 firmware build and Mission Planner validation.
 
 Do not confuse passing synthetic host tests with verified hardware support or flight-ready firmware.
+
+## TELEM1 RX listener now staged (not yet hardware tested)
+
+See [TELEM1_RX_BRINGUP.md](TELEM1_RX_BRINGUP.md). A **default-off** experimental `SERVO_BLH_HWV5` mode has been added to this fork's `AP_BLHeli` serial16 receiver, using the 32-byte read-only V5 parser. The serial RX buffer was expanded to 128 bytes. Live raw capture and Pixhawk 4 build evidence are **still missing**. The 80A has not been proven to emit unsolicited telemetry; never infer a need for a write from an empty RX line.
+
+Host stream regression fixture: `Tools/hobbywing_v5/test_stream.cpp`. CI has been configured to run both C++ test executables but remote results are not yet verified. Do not fly on this branch.
