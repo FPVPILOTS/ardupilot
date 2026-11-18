@@ -139,6 +139,14 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @Bitmask: 0:Channel1,1:Channel2,2:Channel3,3:Channel4,4:Channel5,5:Channel6,6:Channel7,7:Channel8,8:Channel9,9:Channel10,10:Channel11,11:Channel12,12:Channel13,13:Channel14,14:Channel15,15:Channel16
     // @User: Advanced
     AP_GROUPINFO("RVMASK",  12, AP_BLHeli, channel_reversed_mask, 0),
+    
+    // @Param: HWV5
+    // @DisplayName: Hobbywing Platinum V5 receive-only ESC telemetry
+    // @Description: Experimental receive-only Hobbywing Platinum V5 serial telemetry on the ESC telemetry UART (SERIALx_PROTOCOL=16, 115200 baud). When enabled, disables BLHeli telemetry requests and parsing on this UART. Does not send data to the ESC. Bench testing only.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("HWV5", 13, AP_BLHeli, hobbywing_v5, 0),
+
 
     AP_GROUPEND
 };
@@ -1385,7 +1393,7 @@ void AP_BLHeli::init(void)
     // check if we have a combination of reversable and normal
     mixed_type = (mask != (mask & channel_reversible_mask.get())) && (channel_reversible_mask.get() != 0);
 
-    if (num_motors != 0 && telem_rate > 0) {
+    if (num_motors != 0 && (telem_rate > 0 || hobbywing_v5 != 0)) {
         AP_SerialManager *serial_manager = AP_SerialManager::get_singleton();
         if (serial_manager) {
             telem_uart = serial_manager->find_serial(AP_SerialManager::SerialProtocol_ESCTelemetry,0);
@@ -1494,11 +1502,81 @@ void AP_BLHeli::log_bidir_telemetry(void)
 }
 
 /*
+  Hobbywing Platinum V5 receive-only bench listener.
+  Called from the existing SRV_Channels::push telemetry hook to keep
+  SERIALx_PROTOCOL=16 exclusively owned by AP_BLHeli.
+  This function never writes to the ESC or requests DShot telemetry.
+ */
+void AP_BLHeli::update_hobbywing_v5(void)
+{
+#if HAL_WITH_ESC_TELEM
+    if (telem_uart == nullptr || num_motors == 0) {
+        return;
+    }
+    if (!telem_uart_started) {
+        // Accept entire 32-byte frames and bursts, not BLHeli's 10-byte packets.
+        telem_uart->begin(115200, 128, 16);
+        telem_uart_started = true;
+        hobbywing_v5_rx.reset();
+    }
+
+    // Bound processing time on the high-frequency servo push callback.
+    uint16_t budget = 128;
+    HobbywingV5::Sample sample{};
+    while (budget-- > 0 && telem_uart->available() > 0) {
+        const int16_t c = telem_uart->read();
+        if (c < 0) {
+            break;
+        }
+        if (!hobbywing_v5_rx.feed(uint8_t(c), sample)) {
+            continue;
+        }
+
+        hobbywing_last_valid_ms = AP_HAL::millis();
+        // One physical Hobbywing ESC; map to the existing motor output.
+        const uint8_t motor_idx = motor_map[0];
+        if (motor_idx >= chan_offset) {
+            const uint8_t esc_index = motor_idx - chan_offset;
+            TelemetryData telemetry{};
+            telemetry.temperature_cdeg = int16_t(sample.esc_temp_c * 100);
+            telemetry.voltage = sample.voltage_v;
+            telemetry.current = sample.current_a;
+            telemetry.motor_temp_cdeg = int16_t(sample.motor_temp_c * 100);
+            // No consumption mAh in the PL5 wire frame. Do not invent it.
+            update_telem_data(esc_index, telemetry,
+                AP_ESC_Telem_Backend::TelemetryType::VOLTAGE |
+                AP_ESC_Telem_Backend::TelemetryType::CURRENT |
+                AP_ESC_Telem_Backend::TelemetryType::TEMPERATURE);
+            // RPM is intentionally not published until eRPM vs mechanical
+            // motor RPM and motor pole count are independently validated.
+        }
+    }
+
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - hobbywing_last_report_ms >= 5000U) {
+        hobbywing_last_report_ms = now_ms;
+        gcs().send_text(MAV_SEVERITY_INFO,
+                        "HWV5 RX ok=%lu bad=%lu age=%lums",
+                        (unsigned long)hobbywing_v5_rx.valid_count(),
+                        (unsigned long)hobbywing_v5_rx.invalid_count(),
+                        (unsigned long)(hobbywing_last_valid_ms == 0 ? 0 :
+                            now_ms - hobbywing_last_valid_ms));
+    }
+#endif
+}
+
+/*
   update BLHeli telemetry handling
   This is called on push() in SRV_Channels
  */
 void AP_BLHeli::update_telemetry(void)
 {
+    // A dedicated receive-only branch owns SERIALx_PROTOCOL=16 while enabled.
+    // No BLHeli telemetry request, no UART writes, and no DShot requests.
+    if (hobbywing_v5 != 0) {
+        update_hobbywing_v5();
+        return;
+    }
 #ifdef HAL_WITH_BIDIR_DSHOT
     // we might only have bi-dir dshot
     if (channel_bidir_dshot_mask.get() != 0 && !telem_uart) {
