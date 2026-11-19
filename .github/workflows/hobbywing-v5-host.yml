@@ -1,0 +1,35 @@
+name: Hobbywing V5 isolated host tests
+on:
+  push:
+    branches: [feature/hobbywing-v5-pixhawk6c-upstream-20261119]
+    paths:
+      - 'libraries/AP_HobbywingV5/**'
+      - 'Tools/hobbywing_v5/**'
+      - 'libraries/AP_BLHeli/**'
+      - 'libraries/AP_SerialManager/**'
+      - '.github/workflows/hobbywing-v5-host.yml'
+  pull_request:
+    paths:
+      - 'libraries/AP_HobbywingV5/**'
+      - 'Tools/hobbywing_v5/**'
+      - 'libraries/AP_BLHeli/**'
+      - 'libraries/AP_SerialManager/**'
+  workflow_dispatch:
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python and C++11 decoder tests
+        run: bash Tools/hobbywing_v5/run_host_tests.sh
+      - name: UBSAN receive-only parser tests
+        run: |
+          for source in Tools/hobbywing_v5/test_*.cpp; do
+            output="/tmp/hwv5_$(basename "${source%.cpp}")_ubsan"
+            c++ -std=c++11 -O1 -g -Wall -Wextra -Werror -pedantic \
+              -fsanitize=undefined -fno-sanitize-recover=all "$source" -o "$output"
+            "$output"
+          done
