@@ -1784,16 +1784,16 @@ void AP_BLHeli::update_hobbywing_v5()
                           (unsigned long)(hobbywing_v5_last_sample.voltage_v * 10.0f + 0.5f),
                           (unsigned long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
                           (int)hobbywing_v5_last_sample.esc_temp_c);
+            // Use integer formatting to avoid float printf overhead on embedded targets.
+            const float current_pub_a = HobbywingV5::corrected_current(
+                hobbywing_v5_last_sample.current_a,
+                hobbywing_current_gain.get(),
+                hobbywing_current_offset.get(),
+                hobbywing_v5_last_sample.throttle_percent);
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "HWV5 CUR raw=%.1f pub=%.1f g=%.2f off=%.1f",
-                          (double)hobbywing_v5_last_sample.current_a,
-                          (double)HobbywingV5::corrected_current(
-                              hobbywing_v5_last_sample.current_a,
-                              hobbywing_current_gain.get(),
-                              hobbywing_current_offset.get(),
-                              hobbywing_v5_last_sample.throttle_percent),
-                          (double)hobbywing_current_gain.get(),
-                          (double)hobbywing_current_offset.get());
+                          "HWV5 CUR raw10=%ld pub10=%ld",
+                          (long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
+                          (long)(current_pub_a * 10.0f + 0.5f));
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                           "HWV5 mapped=SERVO%d RPMpub=%d",
                           (int)hobbywing_output.get(),
