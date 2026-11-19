@@ -178,13 +178,13 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWRPM", 15, AP_BLHeli, hobbywing_rpm, 0),
 
-    // @Param: HWCGAIN
+    // @Param: HWGAIN
     // @DisplayName: Hobbywing V5 ESC current gain
     // @Description: Multiplier applied only to published ESC current. Keep at 1 until calibrated with independent DC current measurement. Raw HWV5 I10 remains unchanged.
     // @Range: 0.1 10
     // @Increment: 0.01
     // @User: Advanced
-    AP_GROUPINFO("HWCGAIN", 16, AP_BLHeli, hobbywing_current_gain, 1.0f),
+    AP_GROUPINFO("HWGAIN", 16, AP_BLHeli, hobbywing_current_gain, 1.0f),
 
     // @Param: HWCOFF
     // @DisplayName: Hobbywing V5 ESC current offset
