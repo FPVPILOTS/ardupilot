@@ -1655,6 +1655,7 @@ void AP_BLHeli::update_hobbywing_v5()
             continue;
         }
         hobbywing_v5_timing.mark_valid(AP_HAL::micros());
+        hobbywing_v5_last_sample = sample;
         if (num_motors > 0) {
             const uint8_t esc_index = motor_map[0];
             TelemetryData telemetry{};
@@ -1689,6 +1690,21 @@ void AP_BLHeli::update_hobbywing_v5()
                       (unsigned long)hobbywing_v5_timing.frequency_hz_x10(),
                       (unsigned long)hobbywing_v5_timing.interval_us(),
                       (unsigned long)hobbywing_v5_timing.max_interval_us());
+        if (hobbywing_v5_timing.has_sample()) {
+            // Engineering diagnostics only: these are raw decoded ESC fields.
+            // Zero or constant fields do not establish sensor availability.
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 RPMraw=%lu THR=%u FAULT=%u",
+                          (unsigned long)hobbywing_v5_last_sample.rpm_field_x10,
+                          (unsigned)hobbywing_v5_last_sample.throttle_percent,
+                          (unsigned)hobbywing_v5_last_sample.fault_raw);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 BEC V10=%u I10=%u T=%d MT=%d",
+                          (unsigned)(hobbywing_v5_last_sample.bec_voltage_v * 10.0f + 0.5f),
+                          (unsigned)(hobbywing_v5_last_sample.bec_current_a * 10.0f + 0.5f),
+                          (int)hobbywing_v5_last_sample.bec_temp_c,
+                          (int)hobbywing_v5_last_sample.motor_temp_c);
+        }
     }
 #endif
 #endif
