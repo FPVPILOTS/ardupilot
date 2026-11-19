@@ -85,6 +85,7 @@ private:
     AP_Int8 hobbywing_rpm; // enable shaft RPM publication only after pole-count verification
     AP_Float hobbywing_current_gain; // ESC current display correction; default unity
     AP_Float hobbywing_current_offset; // ESC current offset in A; default zero
+    AP_Int8 hobbywing_pm_monitor; // diagnostic comparison only, never alters ESC or battery data
     // mask of channels with bi-directional dshot enabled
     AP_UInt32 channel_bidir_dshot_mask;
     
@@ -302,6 +303,10 @@ private:
     HobbywingV5::Stream hobbywing_v5_rx;
     HobbywingV5::Timing hobbywing_v5_timing;
     HobbywingV5::Sample hobbywing_v5_last_sample{};
+    // Paired ESC and battery monitor snapshot, sampled when a valid ESC frame arrives.
+    float hobbywing_pm_current_a = 0.0f;
+    float hobbywing_pm_voltage_v = 0.0f;
+    bool hobbywing_pm_sample_valid = false;
     uint32_t hobbywing_last_report_ms = 0;
     uint32_t hobbywing_rx_bytes = 0;
     uint32_t hobbywing_rx_fd = 0;
