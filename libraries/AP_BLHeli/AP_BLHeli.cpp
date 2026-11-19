@@ -162,21 +162,21 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWV5", 13, AP_BLHeli, hobbywing_v5, 0),
 
-    // @Param: HWV5_OUT
+    // @Param: HWOUT
     // @DisplayName: Hobbywing V5 ESC output channel for telemetry
     // @Description: Physical SERVO output connected to the Hobbywing throttle PWM (e.g. 3 for SERVO3), used ONLY to label incoming ESC telemetry. Does not affect the output signal. Zero disables ESC data publication; RX diagnostics continue.
     // @Range: 0 16
     // @RebootRequired: True
     // @User: Advanced
-    AP_GROUPINFO("HWV5_OUT", 14, AP_BLHeli, hobbywing_output, 0),
+    AP_GROUPINFO("HWOUT", 14, AP_BLHeli, hobbywing_output, 0),
 
-    // @Param: HWV5_RPM
+    // @Param: HWRPM
     // @DisplayName: Enable Hobbywing V5 mechanical RPM telemetry
     // @Description: When enabled, publishes eRPM converted with SERVO_BLH_POLES. Verify physical motor pole count and compare against independent tachometer first. Does not control the motor.
     // @Values: 0:Disabled,1:Enabled
     // @RebootRequired: True
     // @User: Advanced
-    AP_GROUPINFO("HWV5_RPM", 15, AP_BLHeli, hobbywing_rpm, 0),
+    AP_GROUPINFO("HWRPM", 15, AP_BLHeli, hobbywing_rpm, 0),
 
     AP_GROUPEND
 };
