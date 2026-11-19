@@ -178,6 +178,24 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWRPM", 15, AP_BLHeli, hobbywing_rpm, 0),
 
+    // @Param: HWCGAIN
+    // @DisplayName: Hobbywing V5 ESC current gain
+    // @Description: Multiplier applied only to published ESC current. Keep at 1 until calibrated with independent DC current measurement. Raw HWV5 I10 remains unchanged.
+    // @Range: 0.1 10
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO("HWCGAIN", 16, AP_BLHeli, hobbywing_current_gain, 1.0f),
+
+    // @Param: HWCOFF
+    // @DisplayName: Hobbywing V5 ESC current offset
+    // @Description: Offset in amperes added after gain to published ESC current when throttle is nonzero. No fabricated current when throttle is zero. Verify with trusted meter before changing.
+    // @Units: A
+    // @Range: -100 100
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("HWCOFF", 17, AP_BLHeli, hobbywing_current_offset, 0.0f),
+
+
     AP_GROUPEND
 };
 
@@ -1706,7 +1724,8 @@ void AP_BLHeli::update_hobbywing_v5()
             }
             if (sample.current_a < 6553.5f) {
                 // PL5 ESC repeats the last current after throttle reaches zero.
-                telemetry.current = sample.throttle_percent == 0 ? 0.0f : sample.current_a;
+                telemetry.current = HobbywingV5::corrected_current(sample.current_a,
+                    hobbywing_current_gain.get(), hobbywing_current_offset.get(), sample.throttle_percent);
                 data_mask |= AP_ESC_Telem_Backend::TelemetryType::CURRENT;
             }
             if (data_mask != 0) {
@@ -1765,6 +1784,16 @@ void AP_BLHeli::update_hobbywing_v5()
                           (unsigned long)(hobbywing_v5_last_sample.voltage_v * 10.0f + 0.5f),
                           (unsigned long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
                           (int)hobbywing_v5_last_sample.esc_temp_c);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 CUR raw=%.1f pub=%.1f g=%.2f off=%.1f",
+                          (double)hobbywing_v5_last_sample.current_a,
+                          (double)HobbywingV5::corrected_current(
+                              hobbywing_v5_last_sample.current_a,
+                              hobbywing_current_gain.get(),
+                              hobbywing_current_offset.get(),
+                              hobbywing_v5_last_sample.throttle_percent),
+                          (double)hobbywing_current_gain.get(),
+                          (double)hobbywing_current_offset.get());
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                           "HWV5 mapped=SERVO%d RPMpub=%d",
                           (int)hobbywing_output.get(),
