@@ -297,6 +297,12 @@ private:
     HobbywingV5::Timing hobbywing_v5_timing;
     HobbywingV5::Sample hobbywing_v5_last_sample{};
     uint32_t hobbywing_last_report_ms = 0;
+    uint32_t hobbywing_rx_bytes = 0;
+    uint32_t hobbywing_rx_fd = 0;
+    uint32_t hobbywing_rx_fe = 0;
+    uint32_t hobbywing_rx_other = 0;
+    uint8_t hobbywing_first_bytes[4]{};
+    uint8_t hobbywing_first_count = 0;
     void log_bidir_telemetry(void);
 
     // protocol handler hook
