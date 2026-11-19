@@ -5,6 +5,15 @@
 #pragma once
 #include <math.h>
 namespace HobbywingV5 {
+// Optional minimum total battery current used only to qualify an ESC current
+// for DISPLAY. This cannot restore ESC readings below the sensor's deadband.
+// A zero threshold disables the additional gate.
+inline bool current_above_pm_threshold(float min_pm_a, bool pm_valid, float pm_a)
+{
+    return !isfinite(min_pm_a) || min_pm_a <= 0.0f ||
+        (pm_valid && isfinite(pm_a) && pm_a >= min_pm_a);
+}
+
 // ESC current is not reliable at very low load on some units.
 // Preserve raw values, and never create artificial current at zero throttle.
 inline float corrected_current(float raw_a, float gain, float offset_a, unsigned throttle_percent)
