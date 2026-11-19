@@ -2,7 +2,7 @@
 
 **Status: EXPERIMENTAL BENCH-ONLY, NOT FLIGHT-READY.** This is an independent branch originating at ArduPilot upstream master commit `8a1dfc1dbdab55f18636feb4784bea4861e2145d`, on 2026-11-19. The first target is **Holybro Pixhawk 6C**, not the legacy Pixhawk 4 fork.
 
-Scope: Native, read-only serial telemetry from a Hobbywing Platinum 80A V5 for initial protocol verification; compatibility with 150A V5.1 requires separate evidence. **No DataLink V2. No ESC configuration, UART TX, reset, motor arming bypass, throttle, or governor control.**
+Scope: Initial target is the E-flite Viper 90mm EDF fixed-wing aircraft with a Holybro Pixhawk 6C and Hobbywing Platinum **150A V5.1** ESC. Compatibility with the Platinum 80A V5 on the separate Blade 500X helicopter requires separate evidence. **No DataLink V2. No ESC configuration, UART TX, reset, motor arming bypass, throttle, or governor control.**
 
 ## Initial working hypothesis
 
@@ -39,7 +39,7 @@ bash Tools/hobbywing_v5/run_host_tests.sh
 ./waf copter
 ```
 
-Record toolchain, commit, firmware binary hash, board ID, flash/RAM, warnings and build result. Do **not** flash based only on this README.
+Record toolchain, commit, firmware binary hash, board ID, flash/RAM, warnings and build result. For this aircraft the build command MUST be `./waf plane`, never `./waf copter`. Do **not** flash based only on this README.
 
 ## Bench parameter intent (custom build only)
 
@@ -53,7 +53,7 @@ Reboot after changing selection. Ensure TELEM1 is not needed for a MAVLink radio
 
 ## Next gates
 
-1. CI host tests and actual Pixhawk6C ArduCopter compile.
+1. CI host tests and actual Pixhawk6C ArduPlane compile.
 2. Review motor-independent UART startup and no-write guarantee.
 3. Scope/oscilloscope validate P signal and GND to UART RX; no ESC positive programming supply.
 4. First hardware trace, startup sequencing, valid frame counter and latency.
@@ -80,4 +80,4 @@ These fields are *raw decoded observations*, not approved control inputs. The fo
 
 ## Automated build gate
 
-A dedicated workflow `.github/workflows/hobbywing-v5-pixhawk6c-build.yml` was added to compile ArduCopter for `Pixhawk6C` using ArduPilot's ChibiOS development container, with checksum/artifact generation **only after a successful run**. GitHub Actions execution/availability and the resulting binary have not been confirmed. Do not describe the firmware as successfully built or flight-safe based on workflow presence.
+A dedicated workflow `.github/workflows/hobbywing-v5-pixhawk6c-build.yml` was added to compile ArduPlane for `Pixhawk6C` using ArduPilot's ChibiOS development container, with checksum/artifact generation **only after a successful run**. GitHub Actions execution/availability and the resulting binary have not been confirmed. Do not describe the firmware as successfully built or flight-safe based on workflow presence.
