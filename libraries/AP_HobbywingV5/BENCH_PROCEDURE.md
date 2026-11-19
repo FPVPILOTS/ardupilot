@@ -59,3 +59,31 @@ These are diagnostic formats, not real captures.
 - Parsed BEC values may be absent or not representative of an external servo BEC; standard MAVLink exposure requires further development.
 - Existing serial16 still belongs to the AP_BLHeli library. Upstream review may require a dedicated driver or serial protocol to be accepted.
 - Rotorflight simulator and synthetic tests are not a replacement for physical V5 evidence.
+
+## Zero-frame investigation (2026-11-19)
+
+The first live Pixhawk6C + ArduPlane 4.8.0-dev test log reported:
+```text
+HWV5 RX ok=0 bad=0 age=4294967295ms
+HWV5 RX Hz10=0 dt=0 max=0 us
+```
+Repeated 5-second messages confirm that the receiver update hook is running, but **do not prove any UART byte is present**. Uncalibrated sensors, safety switch, and arming warnings are separate issues; no need to arm or bypass checks for passive bench telemetry.
+
+A follow-up patch adds:
+```text
+HWV5 UART bytes=<count> FD=<count> FE=<count> other=<count>
+HWV5 first=<b0> <b1> <b2> <b3> n=<0..4>
+```
+These counters count bytes read from UART and candidate header bytes; only the first four received bytes are displayed and never transmitted to the ESC. Counters are cumulative since boot. For tests use the new SHA and rebuild firmware; old images cannot show these new diagnostics.
+
+- `bytes=0`: **no bytes delivered to this UART reader**; inspect physical connection, ESC output activity, serial port selection, actual UART waveform, and whether this ESC needs polling.
+- `bytes>0 FD=0 FE=0`: bytes are present, but no V5 header; verify baud/parity/inversion and genuine PL5 protocol.
+- `FD+FE>0` but `ok=0`: a potential frame start is seen; validate full byte capture and CRC.
+- `ok>0`: valid frames decoded. Then validate voltage/current/temp and whether numeric RPM values truly update.
+- If physical ESC remains silent at idle, first inspect the exact device's protocol and wiring. Do NOT assume this can be solved by increasing baud, arming the motor, or disabling pre-arm checks.
+
+Rotorflight states Hobbywing Platinum V5 telemetry is supported and its programming interface may operate on a bidirectional half-duplex telemetry line. This does **not** establish whether a specific Platinum **150A V5.1** spontaneously streams telemetry in receive-only mode. Confirm with scope and trace rather than sending undocumented traffic:
+- https://doc.rotorflight.org/stable/setup/esc-telemetry/
+- https://doc.rotorflight.org/2.4/setup/esc-programming/
+
+For the first electrical test, do not arm; disconnect motor phases/EDF, verify ESC P ground pinout, then observe P output with scope.
