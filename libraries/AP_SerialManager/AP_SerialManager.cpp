@@ -513,7 +513,7 @@ void AP_SerialManager::init()
                 case SerialProtocol_ESCTelemetry:
                     // ESC telemetry protocol from BLHeli32 ESCs. Note that baudrate is hardcoded to 115200
                     state[i].baud.set_and_default(115200 / 1000);
-                    uart->begin(state[i].baudrate(), 30, 30);
+                    uart->begin(state[i].baudrate(), 256, 30);
                     uart->set_flow_control(AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE);
                     break;
 
