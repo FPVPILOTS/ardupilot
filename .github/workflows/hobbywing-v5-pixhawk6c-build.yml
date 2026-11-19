@@ -1,4 +1,4 @@
-name: Hobbywing V5 Pixhawk6C experimental build
+name: Hobbywing V5 Pixhawk6C ArduPlane experimental build
 
 on:
   push:
@@ -33,14 +33,14 @@ jobs:
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           bash Tools/hobbywing_v5/run_host_tests.sh
-      - name: Configure and build ArduCopter Pixhawk6C
+      - name: Configure and build ArduPlane Pixhawk6C
         shell: bash
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:${PATH}"
           arm-none-eabi-gcc --version
           ./waf configure --board Pixhawk6C
-          ./waf copter
+          ./waf plane
       - name: Record experimental firmware evidence
         if: success()
         shell: bash
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: hobbywing-v5-pixhawk6c-BENCH-ONLY
+          name: hobbywing-v5-pixhawk6c-ARDUPLANE-BENCH-ONLY
           path: |
             build/Pixhawk6C/bin/
             build-commit.txt
