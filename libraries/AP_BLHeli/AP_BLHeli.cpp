@@ -1533,6 +1533,7 @@ void AP_BLHeli::update_hobbywing_v5(void)
         }
 
         hobbywing_last_valid_ms = AP_HAL::millis();
+        hobbywing_v5_timing.mark_valid(AP_HAL::micros());
         // One physical Hobbywing ESC; map to the existing motor output.
         const uint8_t motor_idx = motor_map[0];
         if (motor_idx >= chan_offset) {
@@ -1555,12 +1556,20 @@ void AP_BLHeli::update_hobbywing_v5(void)
     const uint32_t now_ms = AP_HAL::millis();
     if (now_ms - hobbywing_last_report_ms >= 5000U) {
         hobbywing_last_report_ms = now_ms;
+        // Report the actual valid-frame timing. This log interval is NOT
+        // the ESC telemetry sampling period.
+        const uint32_t age_ms = hobbywing_v5_timing.has_sample() ?
+            hobbywing_v5_timing.age_us(AP_HAL::micros()) / 1000U : UINT32_MAX;
         gcs().send_text(MAV_SEVERITY_INFO,
                         "HWV5 RX ok=%lu bad=%lu age=%lums",
                         (unsigned long)hobbywing_v5_rx.valid_count(),
                         (unsigned long)hobbywing_v5_rx.invalid_count(),
-                        (unsigned long)(hobbywing_last_valid_ms == 0 ? 0 :
-                            now_ms - hobbywing_last_valid_ms));
+                        (unsigned long)age_ms);
+        gcs().send_text(MAV_SEVERITY_INFO,
+                        "HWV5 RX Hz10=%lu dt=%lu max=%lu us",
+                        (unsigned long)hobbywing_v5_timing.frequency_hz_x10(),
+                        (unsigned long)hobbywing_v5_timing.interval_us(),
+                        (unsigned long)hobbywing_v5_timing.max_interval_us());
     }
 #endif
 }
