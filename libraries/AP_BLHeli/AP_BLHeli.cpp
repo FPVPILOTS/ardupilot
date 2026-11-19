@@ -211,6 +211,13 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWPMIN", 19, AP_BLHeli, hobbywing_pm_min_current, 0.0f),
 
+    // @Param: HWRAW
+    // @DisplayName: Hobbywing V5 CRC-validated raw frame diagnostic
+    // @Description: Every five seconds publish one complete 32-byte CRC-validated ESC frame in four numbered hex chunks for protocol research. Receive-only. Adds MAVLink traffic; enable during bench diagnostics only.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("HWRAW", 20, AP_BLHeli, hobbywing_raw_debug, 0),
+
 
     AP_GROUPEND
 };
@@ -1812,6 +1819,29 @@ void AP_BLHeli::update_hobbywing_v5()
                       (unsigned long)hobbywing_v5_timing.frequency_hz_x10(),
                       (unsigned long)hobbywing_v5_timing.interval_us(),
                       (unsigned long)hobbywing_v5_timing.max_interval_us());
+        // A frame is reported only if valid CRC and recent. Never dump noisy
+        // UART input; each 8-byte chunk shares one snapshot and frame ID.
+        if (hobbywing_raw_debug.get() != 0 && age_ms <= 1000U) {
+            uint8_t raw[HobbywingV5::TELEMETRY_FRAME_LENGTH]{};
+            if (hobbywing_v5_rx.copy_last_valid(raw, sizeof(raw))) {
+                const unsigned long frame_id =
+                    (unsigned long)hobbywing_v5_rx.valid_count();
+                for (uint8_t chunk = 0; chunk < 4; chunk++) {
+                    const uint8_t *r = raw + chunk * 8U;
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "HWRAW %lu %u:%02X%02X%02X%02X%02X%02X%02X%02X",
+                                  frame_id, (unsigned)chunk,
+                                  (unsigned)r[0], (unsigned)r[1],
+                                  (unsigned)r[2], (unsigned)r[3],
+                                  (unsigned)r[4], (unsigned)r[5],
+                                  (unsigned)r[6], (unsigned)r[7]);
+                }
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                              "HWRAW unknown10=%02X%02X tail=%02X%02X",
+                              (unsigned)raw[10], (unsigned)raw[11],
+                              (unsigned)raw[24], (unsigned)raw[29]);
+            }
+        }
         if (hobbywing_v5_timing.has_sample()) {
             // Engineering diagnostics only: these are raw decoded ESC fields.
             // Zero or constant fields do not establish sensor availability.
