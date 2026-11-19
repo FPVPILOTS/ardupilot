@@ -34,3 +34,13 @@ For every valid ESC frame, the ArduPilot driver snapshots the primary battery mo
 The power module measures **battery input current**. The Hobbywing reports its own internal motor/ESC current, and the BEC may contribute to input current depending on ESC design. A difference is not automatically a calibration error. A power-module-to-ESC ratio is not valid if the ESC is below its minimum measurable current. Evaluate paired samples with stable RPM and control input, across the useful range, and use an independent suitable DC ammeter to certify accuracy.
 
 For the 150A Platinum V5.1, BEC sensor payload bytes 20, 22 and 23 have so far been **0xFF (unavailable)**; 6 V configured BEC output must not be misrepresented as a measured BEC voltage. Rotorflight parses these bytes, but does not cause this ESC to populate them.
+
+## Optional display threshold for low-load sensor deadband
+
+The user's observed boundary was around **5 A on the primary power module**, not 5 A in the ESC telemetry. The optional `SERVO_BLH_HWPMIN` setting therefore gates the **published ESC current** based on **primary battery current**. Default **0 A (disabled)**. For this setup, start by testing **5.0 A**.
+
+At `HWPMIN=5`, when the PM reading is below 5 A or unavailable/unhealthy, published `esc3_curr` is **0 A (suppressed/untrusted)**; the UART raw ESC current is unchanged in diagnostic logs. This is not a claim of measured zero motor current. At or above the PM threshold, normal current calibration (`HWGAIN`, `HWCOFF`) is applied, but a raw ESC zero still stays zero. PM threshold only determines visibility; it does **not** prove ESC accuracy above 5 A.
+
+`SERVO_BLH_HWPMON=1` enables paired PM/ESC diagnostic messages independently. Observe `HWV5 CUR gate=0/1 PMmin10=50` and `HWPM I10=... ESC10=... D10=...` in Mission Planner. Raw and calibrated values are retained separately. No changes to BATT, battery failsafe, RPM, servo rail or reverse behavior.
+
+Note: a 5 A PM gate cannot guarantee 5 A of **motor** current, because the PM also measures other onboard loads. Tune the threshold only after collecting stable matched readings across a useful range. Because suppression publishes 0, users must not interpret the HUD reading below the threshold as an actual current measurement.
