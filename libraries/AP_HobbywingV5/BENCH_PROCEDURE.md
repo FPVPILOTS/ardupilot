@@ -1,10 +1,10 @@
-# Pixhawk6C + Hobbywing Platinum 80A V5 receive-only bench procedure
+# Pixhawk6C + Hobbywing Platinum 150A V5.1 / Viper EDF receive-only bench procedure
 
 This is a test plan, **not authorization to install unverified flight firmware**.
 
 ## Preparation and electrical verification
 
-1. Identify exact Pixhawk6C hardware revision and actual Platinum 80A V5 variant. Record firmware versions. Back up existing ArduPilot params and original firmware.
+1. Identify exact Pixhawk6C hardware revision and actual Platinum 150A V5.1 variant. Record firmware versions. Back up existing ArduPilot params and original firmware.
 2. Verify the official TELEM1 connector orientation/pin numbering with the Holybro hardware guide (do not infer numbering from MCU pin labels). Firmware maps TELEM1 to UART7: `PE7 UART7_RX`, `PE8 UART7_TX`.
 3. Verify the ESC's *P* signal, ground, signal polarity, idle/peak levels and line electrical type with an appropriate logic analyzer/oscilloscope. Previously reported 3.0–3.3 V via DMM is insufficient by itself.
 4. For first receive test connect **ESC P -> TELEM1 RX**, **ESC GND -> TELEM1 GND** only after confirming electrical compatibility. Do not connect programmer `+` to flight-controller header. No UART TX to ESC.
@@ -13,7 +13,7 @@ This is a test plan, **not authorization to install unverified flight firmware**
 
 ## Software gate
 
-- Pin full ArduPilot SHA, record build log and successful Pixhawk6C ArduCopter artifact.
+- Pin full ArduPilot SHA, record build log and successful Pixhawk6C ArduPlane artifact.
 - Run Python and C++ host regression tests plus firmware tests. Verify `SERVO_BLH_HWV5` metadata and default 0.
 - Review firmware change to ensure no UART writing, DShot telemetry requests or motor-control interactions in selected branch. If build/tests fail, **do not flash**.
 - With a successfully reviewed test image, set SERIAL1_PROTOCOL=16, SERIAL1_BAUD=115, SERVO_BLH_HWV5=1, then reboot.
