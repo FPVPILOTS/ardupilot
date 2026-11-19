@@ -86,6 +86,7 @@ private:
     AP_Float hobbywing_current_gain; // ESC current display correction; default unity
     AP_Float hobbywing_current_offset; // ESC current offset in A; default zero
     AP_Int8 hobbywing_pm_monitor; // diagnostic comparison only, never alters ESC or battery data
+    AP_Float hobbywing_pm_min_current; // optional display gating threshold in battery A
     // mask of channels with bi-directional dshot enabled
     AP_UInt32 channel_bidir_dshot_mask;
     
