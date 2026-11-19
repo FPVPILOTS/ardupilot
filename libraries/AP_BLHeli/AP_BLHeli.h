@@ -37,6 +37,7 @@
 #include <AP_HobbywingV5/Stream.h>
 #include <AP_HobbywingV5/Timing.h>
 #include <AP_HobbywingV5/Validity.h>
+#include <AP_HobbywingV5/CurrentCalibration.h>
 
 #define AP_BLHELI_MAX_ESCS 8
 
@@ -82,6 +83,8 @@ private:
     AP_Int8 hobbywing_v5; // 1: read-only Hobbywing V5 RX on SerialProtocol_ESCTelemetry
     AP_Int8 hobbywing_output; // 1-based SERVO output for ESC_TELEMETRY, 0 means not mapped
     AP_Int8 hobbywing_rpm; // enable shaft RPM publication only after pole-count verification
+    AP_Float hobbywing_current_gain; // ESC current display correction; default unity
+    AP_Float hobbywing_current_offset; // ESC current offset in A; default zero
     // mask of channels with bi-directional dshot enabled
     AP_UInt32 channel_bidir_dshot_mask;
     
