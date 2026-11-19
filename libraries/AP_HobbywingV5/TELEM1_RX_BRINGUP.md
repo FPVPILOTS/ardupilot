@@ -67,3 +67,25 @@ SERVO_BLH_HWV5   = 1          # NEW PARAMETER, development firmware ONLY; enable
 ## Why no live RX claim yet?
 
 Only code on the fork's new branch was modified. Until a verified build is flashed and physical serial frames are captured from TELEM1, the RX pin is **not known** to be receiving Hobbywing data.
+
+## Frame-rate diagnostic added (2026-11-19)
+
+Valid Hobbywing frames are stamped immediately when fully decoded with `AP_HAL::micros()`. The 5-second GCS report only summarizes these events; it does **not** throttle receive or ESC telemetry updates.
+
+Two messages (illustrative only, not hardware evidence):
+
+```text
+HWV5 RX ok=123 bad=1 age=75ms
+HWV5 RX Hz10=100 dt=100000 max=120000 us
+```
+
+- `Hz10`: 10 × estimated frames per second, e.g. 100 = 10.0 Hz (exponential moving average of valid-frame interarrival intervals).
+- `dt`: interval in microseconds between the two most recent valid frames.
+- `max`: maximum observed interval in microseconds since boot.
+- `age`: milliseconds since last valid frame; `4294967295` indicates no valid packet observed.
+- A frame rate is a **receive** rate, not a measurement of internal ESC sensor update rate or governor suitability.
+- Freshness threshold in test helper: 500 ms by default. Standard AP_ESC_Telem freshness handling still needs end-to-end validation.
+
+Current firmware integration publishes voltage/current/ESC temperature on each accepted frame, **not** every five seconds; RPM remains deliberately un-published until scale and timing are verified with the independent Align RPM sensor.
+
+Host regression `Tools/hobbywing_v5/test_timing.cpp` covers sample age, 10 Hz interval calculation, stale status and 32-bit microsecond timer wrap. GitHub Actions workflow is configured to run every `test_*.cpp` file. Remote CI/build results are not yet verified; do not flash for flight.
