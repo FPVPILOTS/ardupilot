@@ -202,6 +202,15 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWPMON", 18, AP_BLHeli, hobbywing_pm_monitor, 0),
 
+    // @Param: HWPMIN
+    // @DisplayName: Minimum primary battery current to show Hobbywing ESC current
+    // @Description: When nonzero, ESP current display is suppressed to zero while primary battery current is lower than this threshold or unavailable. Diagnostic-only display gate, not current sensor calibration. Does not affect battery failsafes or motor output.
+    // @Units: A
+    // @Range: 0 100
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("HWPMIN", 19, AP_BLHeli, hobbywing_pm_min_current, 0.0f),
+
 
     AP_GROUPEND
 };
@@ -1712,7 +1721,7 @@ void AP_BLHeli::update_hobbywing_v5()
         hobbywing_v5_last_sample = sample;
 #if AP_BATTERY_ENABLED
         // Capture values as closely in time as possible, not when the 5s report prints.
-        if (hobbywing_pm_monitor.get() != 0) {
+        if (hobbywing_pm_monitor.get() != 0 || hobbywing_pm_min_current.get() > 0.0f) {
             AP_BattMonitor &pm = AP::battery();
             float pm_current_a = 0.0f;
             hobbywing_pm_sample_valid = pm.healthy(AP_BATT_PRIMARY_INSTANCE) &&
@@ -1744,8 +1753,20 @@ void AP_BLHeli::update_hobbywing_v5()
             }
             if (sample.current_a < 6553.5f) {
                 // PL5 ESC repeats the last current after throttle reaches zero.
-                telemetry.current = HobbywingV5::corrected_current(sample.current_a,
-                    hobbywing_current_gain.get(), hobbywing_current_offset.get(), sample.throttle_percent);
+                // Mask unreliable low-load ESC readings using the primary PM threshold.
+                // Publishing zero (rather than leaving a stale previous value) is
+                // intentional: zero here means current is suppressed, not measured.
+                bool allow_current = true;
+#if AP_BATTERY_ENABLED
+                allow_current = HobbywingV5::current_above_pm_threshold(
+                    hobbywing_pm_min_current.get(), hobbywing_pm_sample_valid, hobbywing_pm_current_a);
+#else
+                allow_current = hobbywing_pm_min_current.get() <= 0.0f;
+#endif
+                telemetry.current = allow_current ?
+                    HobbywingV5::corrected_current(sample.current_a,
+                        hobbywing_current_gain.get(), hobbywing_current_offset.get(),
+                        sample.throttle_percent) : 0.0f;
                 data_mask |= AP_ESC_Telem_Backend::TelemetryType::CURRENT;
             }
             if (data_mask != 0) {
@@ -1814,6 +1835,20 @@ void AP_BLHeli::update_hobbywing_v5()
                           "HWV5 CUR raw10=%ld pub10=%ld",
                           (long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
                           (long)(current_pub_a * 10.0f + 0.5f));
+            if (hobbywing_pm_min_current.get() > 0.0f) {
+#if AP_BATTERY_ENABLED
+                const bool qualified = HobbywingV5::current_above_pm_threshold(
+                    hobbywing_pm_min_current.get(),
+                    hobbywing_pm_sample_valid && age_ms <= 1000U,
+                    hobbywing_pm_current_a);
+#else
+                const bool qualified = false;
+#endif
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                              "HWV5 CUR gate=%u PMmin10=%ld",
+                              (unsigned)qualified,
+                              (long)(hobbywing_pm_min_current.get() * 10.0f));
+            }
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                           "HWV5 mapped=SERVO%d RPMpub=%d",
                           (int)hobbywing_output.get(),
