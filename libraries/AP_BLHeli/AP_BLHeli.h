@@ -35,6 +35,7 @@
 #include <AP_MSP/msp_protocol.h>
 #include "blheli_4way_protocol.h"
 #include <AP_HobbywingV5/Stream.h>
+#include <AP_HobbywingV5/Timing.h>
 
 #define AP_BLHELI_MAX_ESCS 8
 
@@ -287,6 +288,7 @@ private:
     void read_telemetry_packet(void);
     void update_hobbywing_v5(void);
     HobbywingV5::Stream hobbywing_v5_rx;
+    HobbywingV5::Timing hobbywing_v5_timing;
     uint32_t hobbywing_last_report_ms;
     uint32_t hobbywing_last_valid_ms;
     void log_bidir_telemetry(void);
