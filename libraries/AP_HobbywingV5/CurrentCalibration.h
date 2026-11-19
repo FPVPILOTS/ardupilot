@@ -9,7 +9,7 @@ namespace HobbywingV5 {
 // Preserve raw values, and never create artificial current at zero throttle.
 inline float corrected_current(float raw_a, float gain, float offset_a, unsigned throttle_percent)
 {
-    if (throttle_percent == 0 || !isfinite(raw_a) || raw_a < 0.0f ||
+    if (throttle_percent == 0 || !isfinite(raw_a) || raw_a <= 0.0f ||
         !isfinite(gain) || gain <= 0.0f || !isfinite(offset_a)) {
         return 0.0f;
     }
