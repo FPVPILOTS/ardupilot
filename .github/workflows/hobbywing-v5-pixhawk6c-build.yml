@@ -1,0 +1,59 @@
+name: Hobbywing V5 Pixhawk6C experimental build
+
+on:
+  push:
+    branches: [feature/hobbywing-v5-pixhawk6c-upstream-20261119]
+    paths:
+      - 'libraries/AP_HobbywingV5/**'
+      - 'libraries/AP_BLHeli/**'
+      - 'libraries/AP_SerialManager/**'
+      - 'Tools/hobbywing_v5/**'
+      - '.github/workflows/hobbywing-v5-pixhawk6c-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: hobbywing-v5-pixhawk6c-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pixhawk6c:
+    runs-on: ubuntu-22.04
+    container: ardupilot/ardupilot-dev-chibios:v0.2.0
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - name: Compile host-side decoder tests
+        shell: bash
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+          bash Tools/hobbywing_v5/run_host_tests.sh
+      - name: Configure and build ArduCopter Pixhawk6C
+        shell: bash
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+          export PATH="/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:${PATH}"
+          arm-none-eabi-gcc --version
+          ./waf configure --board Pixhawk6C
+          ./waf copter
+      - name: Record experimental firmware evidence
+        if: success()
+        shell: bash
+        run: |
+          git rev-parse HEAD > build-commit.txt
+          find build/Pixhawk6C/bin -maxdepth 1 -type f -print -exec sha256sum {} \; > build-checksums.txt
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: hobbywing-v5-pixhawk6c-BENCH-ONLY
+          path: |
+            build/Pixhawk6C/bin/
+            build-commit.txt
+            build-checksums.txt
+          if-no-files-found: error
+          retention-days: 14
