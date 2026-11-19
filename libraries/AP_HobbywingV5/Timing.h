@@ -1,3 +1,13 @@
+/*
+ * Hobbywing Platinum V5 telemetry research support for ArduPilot.
+ * Copyright and license: GNU General Public License v3 or later,
+ * consistent with the ArduPilot and Rotorflight projects.
+ *
+ * Protocol field layout and serial framing are informed by Rotorflight:
+ * https://github.com/rotorflight/rotorflight-firmware/blob/2a0a8d10712499651f00a817af5559bab6582b87/src/main/sensors/esc_sensor.c
+ * Check original copyrights and preserve attribution if copying upstream code.
+ * Bench-only experimental implementation; not yet flight validated.
+ */
 #pragma once
 // Receive timing diagnostics only; no governor output or ESC commands.
 #include <stdint.h>
