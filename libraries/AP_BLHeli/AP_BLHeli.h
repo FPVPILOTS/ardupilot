@@ -295,6 +295,7 @@ private:
     void update_hobbywing_v5();
     HobbywingV5::Stream hobbywing_v5_rx;
     HobbywingV5::Timing hobbywing_v5_timing;
+    HobbywingV5::Sample hobbywing_v5_last_sample{};
     uint32_t hobbywing_last_report_ms = 0;
     void log_bidir_telemetry(void);
 
