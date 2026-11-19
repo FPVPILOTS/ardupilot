@@ -15,12 +15,12 @@ Aim for a narrow, transport-independent V5 decoder with explicit optional serial
 ## Must pass before an upstream PR is marked ready
 
 - [ ] Host Python and C++11 parser/stream/timing tests pass on clean environment.
-- [ ] ArduCopter builds for Pixhawk6C with correct board ID, verified firmware artifact.
-- [ ] ArduCopter SITL startup; default-off legacy ESC serial16 regression.
+- [ ] ArduPlane builds for Pixhawk6C with correct board ID, verified firmware artifact.
+- [ ] ArduPlane SITL startup; default-off legacy ESC serial16 regression.
 - [ ] Explicit collision check: exactly one consumer of ESC telemetry UART.
 - [ ] No ESC UART TX, BLHeli/DShot polling or motor-output modifications in V5 mode.
 - [ ] Verified 32-byte CRC-correct physical Hobbywing frames.
-- [ ] Test against representative genuine 80A hardware and separately 150A V5.1.
+- [ ] Test against genuine 150A V5.1 hardware for the Viper project and separately against 80A V5 hardware for the helicopter project.
 - [ ] Document electrical pinout/waveform, voltage levels and safe connector wiring.
 - [ ] Observe full unplug, stale, reconnect and ESC reboot sequences.
 - [ ] Standard ESC V/I/temp values compared against independent measurements.
