@@ -66,3 +66,18 @@ See [UPSTREAM_ACCEPTANCE.md](UPSTREAM_ACCEPTANCE.md) and [BENCH_PROCEDURE.md](BE
 ## Open-source provenance
 
 Protocol structure and decoding derived from Rotorflight: [esc_sensor.c](https://github.com/rotorflight/rotorflight-firmware/blob/2a0a8d10712499651f00a817af5559bab6582b87/src/main/sensors/esc_sensor.c), and [PL5 simulator](https://github.com/rotorflight/rotorflight-firmware/blob/2a0a8d10712499651f00a817af5559bab6582b87/src/utils/sitl/esc/pl5_esc.py). Keep all applicable GPL license conditions and attribution when preparing upstream contributions.
+
+## First hardware diagnostic messages
+
+With the experimental firmware **successfully built and validated**, the receive-only listener additionally reports (every 5 seconds, only after one valid frame):
+
+```text
+HWV5 RPMraw=<number> THR=<percent> FAULT=<raw byte>
+HWV5 BEC V10=<decivolts> I10=<deciamps> T=<degC> MT=<degC>
+```
+
+These fields are *raw decoded observations*, not approved control inputs. The four 5-second messages do not throttle UART receive. `RPMraw` is the unconverted decoded speed field; never use as mechanical rotor or governor RPM without calibration. BEC values may be placeholders on some ESC variants. The ESC remains in receive-only mode and the existing Align rotor-RPM sensor is not modified.
+
+## Automated build gate
+
+A dedicated workflow `.github/workflows/hobbywing-v5-pixhawk6c-build.yml` was added to compile ArduCopter for `Pixhawk6C` using ArduPilot's ChibiOS development container, with checksum/artifact generation **only after a successful run**. GitHub Actions execution/availability and the resulting binary have not been confirmed. Do not describe the firmware as successfully built or flight-safe based on workflow presence.
