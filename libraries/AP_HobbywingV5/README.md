@@ -95,11 +95,11 @@ AP_ESC_Telem only if `num_motors>0`; `num_motors` counts *digital*
 BLHeli/DShot outputs and can be zero for ArduPlane's normal PWM SERVO3.
 
 This revision adds:
-- `SERVO_BLH_HWV5_OUT` (0..16, default **0**): set **3** to publish decoded
+- `SERVO_BLH_HWOUT` (0..16, default **0**): set **3** to publish decoded
   telemetry to ESC index 2, corresponding to physically wired throttle
   **SERVO3**. This **does not write or change PWM output modes** and must
   **not** be set to the separate reverse control on SERVO11.
-- `SERVO_BLH_HWV5_RPM` (default **0**): optional mechanical shaft-RPM
+- `SERVO_BLH_HWRPM` (default **0**): optional mechanical shaft-RPM
   publication. Rotorflight PL5 reports **electrical** RPM = raw U16 * 10,
   converted here to mechanical RPM = electrical RPM * 2 / `SERVO_BLH_POLES`.
   Only turn on after reading the motor's genuine pole count and comparing
@@ -125,8 +125,8 @@ This revision adds:
    installing a custom image.
 4. First power-up with EDF motor phases disconnected and normal safety
    procedures: `SERIAL1_PROTOCOL=16`, `SERIAL1_BAUD=115`,
-   `SERVO_BLH_HWV5=1`, `SERVO_BLH_HWV5_OUT=3`,
-   `SERVO_BLH_HWV5_RPM=0`. Reboot after settings changes.
+   `SERVO_BLH_HWV5=1`, `SERVO_BLH_HWOUT=3`,
+   `SERVO_BLH_HWRPM=0`. Reboot after settings changes.
 5. Verify RX valid frame count increments, inspect `HWV5 ESC V10/I10/T`
    against independent LiPo voltage/current/temperature readings.
 6. Check Mission Planner ESC telemetry for ESC index 3 (zero-based index 2)
