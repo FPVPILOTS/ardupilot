@@ -1651,6 +1651,19 @@ void AP_BLHeli::update_hobbywing_v5()
         if (b < 0) {
             break;
         }
+        // Raw UART counters help distinguish no signal from an unexpected
+        // frame format. Never transmit or dump continuous raw data to MAVLink.
+        hobbywing_rx_bytes++;
+        if (hobbywing_first_count < 4) {
+            hobbywing_first_bytes[hobbywing_first_count++] = uint8_t(b);
+        }
+        if (b == 0xFD) {
+            hobbywing_rx_fd++;
+        } else if (b == 0xFE) {
+            hobbywing_rx_fe++;
+        } else {
+            hobbywing_rx_other++;
+        }
         if (!hobbywing_v5_rx.feed(uint8_t(b), sample)) {
             continue;
         }
@@ -1685,6 +1698,19 @@ void AP_BLHeli::update_hobbywing_v5()
                       (unsigned long)hobbywing_v5_rx.valid_count(),
                       (unsigned long)hobbywing_v5_rx.invalid_count(),
                       (unsigned long)age_ms);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "HWV5 UART bytes=%lu FD=%lu FE=%lu other=%lu",
+                      (unsigned long)hobbywing_rx_bytes,
+                      (unsigned long)hobbywing_rx_fd,
+                      (unsigned long)hobbywing_rx_fe,
+                      (unsigned long)hobbywing_rx_other);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "HWV5 first=%02X %02X %02X %02X n=%u",
+                      (unsigned)hobbywing_first_bytes[0],
+                      (unsigned)hobbywing_first_bytes[1],
+                      (unsigned)hobbywing_first_bytes[2],
+                      (unsigned)hobbywing_first_bytes[3],
+                      (unsigned)hobbywing_first_count);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                       "HWV5 RX Hz10=%lu dt=%lu max=%lu us",
                       (unsigned long)hobbywing_v5_timing.frequency_hz_x10(),
