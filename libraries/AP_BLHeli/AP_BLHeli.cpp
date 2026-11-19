@@ -162,6 +162,22 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWV5", 13, AP_BLHeli, hobbywing_v5, 0),
 
+    // @Param: HWV5_OUT
+    // @DisplayName: Hobbywing V5 ESC output channel for telemetry
+    // @Description: Physical SERVO output connected to the Hobbywing throttle PWM (e.g. 3 for SERVO3), used ONLY to label incoming ESC telemetry. Does not affect the output signal. Zero disables ESC data publication; RX diagnostics continue.
+    // @Range: 0 16
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("HWV5_OUT", 14, AP_BLHeli, hobbywing_output, 0),
+
+    // @Param: HWV5_RPM
+    // @DisplayName: Enable Hobbywing V5 mechanical RPM telemetry
+    // @Description: When enabled, publishes eRPM converted with SERVO_BLH_POLES. Verify physical motor pole count and compare against independent tachometer first. Does not control the motor.
+    // @Values: 0:Disabled,1:Enabled
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("HWV5_RPM", 15, AP_BLHeli, hobbywing_rpm, 0),
+
     AP_GROUPEND
 };
 
@@ -1669,20 +1685,40 @@ void AP_BLHeli::update_hobbywing_v5()
         }
         hobbywing_v5_timing.mark_valid(AP_HAL::micros());
         hobbywing_v5_last_sample = sample;
-        if (num_motors > 0) {
-            const uint8_t esc_index = motor_map[0];
+        // Direct PWM ESCs are not present in AP_BLHeli's digital motor_map.
+        // Choose the actual 1-based PWM output explicitly; never alter it.
+        const int8_t output = hobbywing_output.get();
+        if (output >= 1 && output <= 16) {
+            const uint8_t esc_index = uint8_t(output - 1);
             TelemetryData telemetry{};
-            telemetry.temperature_cdeg = int16_t(sample.esc_temp_c * 100);
-            telemetry.voltage = sample.voltage_v;
-            telemetry.current = sample.current_a;
-            telemetry.motor_temp_cdeg = int16_t(sample.motor_temp_c * 100);
-            update_telem_data(esc_index, telemetry,
-                AP_ESC_Telem_Backend::TelemetryType::TEMPERATURE |
-                AP_ESC_Telem_Backend::TelemetryType::VOLTAGE |
-                AP_ESC_Telem_Backend::TelemetryType::CURRENT);
-            // RPM is intentionally withheld until pole-pair and physical units
-            // have been checked against an independent tachometer.
-            // Consumption is not encoded in the 32-byte frame.
+            uint16_t data_mask = 0;
+            if (HobbywingV5::valid_byte_sensor(uint8_t(sample.esc_temp_c))) {
+                telemetry.temperature_cdeg = int16_t(sample.esc_temp_c * 100);
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::TEMPERATURE;
+            }
+            if (HobbywingV5::valid_byte_sensor(uint8_t(sample.motor_temp_c))) {
+                telemetry.motor_temp_cdeg = int16_t(sample.motor_temp_c * 100);
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::MOTOR_TEMPERATURE;
+            }
+            if (sample.voltage_v < 6553.5f) {
+                telemetry.voltage = sample.voltage_v;
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::VOLTAGE;
+            }
+            if (sample.current_a < 6553.5f) {
+                // PL5 ESC repeats the last current after throttle reaches zero.
+                telemetry.current = sample.throttle_percent == 0 ? 0.0f : sample.current_a;
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::CURRENT;
+            }
+            if (data_mask != 0) {
+                update_telem_data(esc_index, telemetry, data_mask);
+            }
+            if (hobbywing_rpm.get() != 0 && motor_poles.get() >= 2) {
+                // Rotorflight PL5 decodes this as electrical RPM.
+                // Explicit opt-in requires independent motor pole verification.
+                update_rpm(esc_index,
+                           HobbywingV5::mechanical_rpm(sample.rpm_field_x10, motor_poles.get()));
+            }
+            // Consumption is not encoded in the 32-byte PL5 frame.
         }
     }
 
@@ -1725,7 +1761,16 @@ void AP_BLHeli::update_hobbywing_v5()
                           (unsigned)hobbywing_v5_last_sample.throttle_percent,
                           (unsigned)hobbywing_v5_last_sample.fault_raw);
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "HWV5 BEC V10=%u I10=%u T=%d MT=%d",
+                          "HWV5 ESC V10=%lu I10=%lu T=%d",
+                          (unsigned long)(hobbywing_v5_last_sample.voltage_v * 10.0f + 0.5f),
+                          (unsigned long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
+                          (int)hobbywing_v5_last_sample.esc_temp_c);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 mapped=SERVO%d RPMpub=%d",
+                          (int)hobbywing_output.get(),
+                          (int)hobbywing_rpm.get());
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 BECraw V10=%u I10=%u T=%d MT=%d",
                           (unsigned)(hobbywing_v5_last_sample.bec_voltage_v * 10.0f + 0.5f),
                           (unsigned)(hobbywing_v5_last_sample.bec_current_a * 10.0f + 0.5f),
                           (int)hobbywing_v5_last_sample.bec_temp_c,
