@@ -44,3 +44,19 @@ At `HWPMIN=5`, when the PM reading is below 5 A or unavailable/unhealthy, publis
 `SERVO_BLH_HWPMON=1` enables paired PM/ESC diagnostic messages independently. Observe `HWV5 CUR gate=0/1 PMmin10=50` and `HWPM I10=... ESC10=... D10=...` in Mission Planner. Raw and calibrated values are retained separately. No changes to BATT, battery failsafe, RPM, servo rail or reverse behavior.
 
 Note: a 5 A PM gate cannot guarantee 5 A of **motor** current, because the PM also measures other onboard loads. Tune the threshold only after collecting stable matched readings across a useful range. Because suppression publishes 0, users must not interpret the HUD reading below the threshold as an actual current measurement.
+
+## HWRAW: complete CRC-validated 32-byte frames (research-only)
+
+Set `SERVO_BLH_HWRAW=1` in Mission Planner **after flashing the updated build**. Default is **0** to keep MAVLink traffic low. Every 5 seconds at most one complete, fresh (<=1000ms), CRC16-MODBUS-validated PL5 telemetry frame is emitted in four hex lines:
+
+```text
+HWRAW 1234 0:<16 hex digits>   # bytes 0..7
+HWRAW 1234 1:<16 hex digits>   # bytes 8..15
+HWRAW 1234 2:<16 hex digits>   # bytes 16..23
+HWRAW 1234 3:<16 hex digits>   # bytes 24..31
+HWRAW unknown10=<two bytes> tail=<byte24><byte29>
+```
+
+The same integer frame ID must appear on all four lines; reconstruct by ordering chunks 0,1,2,3 and joining hex data (64 hex characters = 32 bytes). Byte 10 and 11 have no defined meaning in Rotorflight's V5 decoder; bytes 24-29 are documented as reserved (normally 0xFF). These are hypotheses to explore, not new live BEC sensors.
+
+Compare frame snapshots with motor stopped, varying RPM, modest load, and independently known BEC servo-rail changes; retain the PM/ESC telemetry simultaneously using `SERVO_BLH_HWPMON=1`. Track patterns and do not assign meanings until independently verified. Logging is receive-only and never transmits ESC commands or changes throttle. Switch `HWRAW=0` after diagnosis. Old `HWV5` telemetry remains unchanged.
