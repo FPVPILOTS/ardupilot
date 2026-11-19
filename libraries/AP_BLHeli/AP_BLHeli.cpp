@@ -195,6 +195,13 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HWCOFF", 17, AP_BLHeli, hobbywing_current_offset, 0.0f),
 
+    // @Param: HWPMON
+    // @DisplayName: Hobbywing V5 paired power-module diagnostic
+    // @Description: Periodically reports ESC raw current/voltage beside primary battery monitor current/voltage sampled on the same ESC frame. For diagnosis only; never alters telemetry or battery failsafes.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("HWPMON", 18, AP_BLHeli, hobbywing_pm_monitor, 0),
+
 
     AP_GROUPEND
 };
@@ -1703,6 +1710,19 @@ void AP_BLHeli::update_hobbywing_v5()
         }
         hobbywing_v5_timing.mark_valid(AP_HAL::micros());
         hobbywing_v5_last_sample = sample;
+#if AP_BATTERY_ENABLED
+        // Capture values as closely in time as possible, not when the 5s report prints.
+        if (hobbywing_pm_monitor.get() != 0) {
+            AP_BattMonitor &pm = AP::battery();
+            float pm_current_a = 0.0f;
+            hobbywing_pm_sample_valid = pm.healthy(AP_BATT_PRIMARY_INSTANCE) &&
+                pm.current_amps(pm_current_a, AP_BATT_PRIMARY_INSTANCE);
+            if (hobbywing_pm_sample_valid) {
+                hobbywing_pm_current_a = pm_current_a;
+                hobbywing_pm_voltage_v = pm.voltage(AP_BATT_PRIMARY_INSTANCE);
+            }
+        }
+#endif
         // Direct PWM ESCs are not present in AP_BLHeli's digital motor_map.
         // Choose the actual 1-based PWM output explicitly; never alter it.
         const int8_t output = hobbywing_output.get();
@@ -1798,6 +1818,25 @@ void AP_BLHeli::update_hobbywing_v5()
                           "HWV5 mapped=SERVO%d RPMpub=%d",
                           (int)hobbywing_output.get(),
                           (int)hobbywing_rpm.get());
+#if AP_BATTERY_ENABLED
+            if (hobbywing_pm_monitor.get() != 0) {
+                if (hobbywing_pm_sample_valid && age_ms <= 1000U) {
+                    const float pm_minus_esc_a = hobbywing_pm_current_a -
+                        hobbywing_v5_last_sample.current_a;
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "HWPM I10=%ld ESC10=%ld D10=%ld",
+                                  (long)(hobbywing_pm_current_a * 10.0f),
+                                  (long)(hobbywing_v5_last_sample.current_a * 10.0f),
+                                  (long)(pm_minus_esc_a * 10.0f));
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "HWPM V10=%ld ESCV10=%ld",
+                                  (long)(hobbywing_pm_voltage_v * 10.0f),
+                                  (long)(hobbywing_v5_last_sample.voltage_v * 10.0f));
+                } else {
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "HWPM unavailable or stale");
+                }
+            }
+#endif
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                           "HWV5 BECraw V10=%u I10=%u T=%d MT=%d",
                           (unsigned)(hobbywing_v5_last_sample.bec_voltage_v * 10.0f + 0.5f),
