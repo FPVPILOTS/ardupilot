@@ -204,7 +204,7 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
 
     // @Param: HWPMIN
     // @DisplayName: Minimum primary battery current to show Hobbywing ESC current
-    // @Description: When nonzero, ESP current display is suppressed to zero while primary battery current is lower than this threshold or unavailable. Diagnostic-only display gate, not current sensor calibration. Does not affect battery failsafes or motor output.
+    // @Description: When nonzero, ESC current display is suppressed to zero while primary battery current is lower than this threshold or unavailable. Diagnostic-only display gate, not current sensor calibration. Does not affect battery failsafes or motor output.
     // @Units: A
     // @Range: 0 100
     // @Increment: 0.1
