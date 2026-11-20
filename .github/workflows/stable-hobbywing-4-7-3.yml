@@ -1,0 +1,25 @@
+name: ArduPilot 4.7.3 Hobbywing host validation
+on:
+  push:
+    branches:
+      - stable/ardupilot-4.7.3-hobbywing-kst
+  pull_request:
+    paths:
+      - 'libraries/AP_HobbywingV5/**'
+      - 'libraries/AP_BLHeli/**'
+      - 'Tools/hobbywing_v5/**'
+      - '.github/workflows/stable-hobbywing-4-7-3.yml'
+jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate official version markers
+        run: |
+          grep -q '^#define FIRMWARE_VERSION 4,7,3,FIRMWARE_VERSION_TYPE_OFFICIAL$' ArduPlane/version.h
+          grep -q '^#define FIRMWARE_VERSION 4,7,3,FIRMWARE_VERSION_TYPE_OFFICIAL$' ArduCopter/version.h
+      - name: Hobbywing decoder regression tests
+        run: bash Tools/hobbywing_v5/run_host_tests.sh
+      - name: Build script syntax
+        run: bash -n Tools/hobbywing_v5/build_stable_pair.sh
