@@ -3,9 +3,9 @@
 ## Firmware identity and module rules
 
 - The **ArduPilot vehicle version is authoritative**: `ArduPlane X.Y.Z`, as defined by `ArduPlane/version.h`. Do not fake a version or change DEV to OFFICIAL merely for cosmetic branding.
-- Variant name: `ArduPlane-X.Y.Z[_dev]_Pixhawk6C_Hobbywing-V5.1_KST-disabled`. A module suffix is descriptive, **not** the core autopilot version.
+- Variant name: `ArduPlane-X.Y.Z[_dev]_Pixhawk6C_Hobbywing-V5.1+KST-760us-560Hz`. A module suffix is descriptive, **not** the core autopilot version.
 - **ESC product**: Hobbywing Platinum **150A V5.1**, Platinum **V5 series** serial telemetry.
-- **KST 760µs/560Hz**: not present in this current Viper branch, so its effective behavior is standard ArduPlane servo PWM. Keep physically stock servos and factory pulse ranges. Never enable the 760µs mode on stock 1520µs servos. The future joint driver integration must be ported and validated as a separate task.
+- **KST 760µs/560Hz**: the intended shared feature name is `Hobbywing V5.1 + KST 760µs/560Hz`; no `disabled` suffix. Like other optional ArduPilot features, KST will be controlled through parameters and default to ordinary servo operation. **The KST code has not yet been ported into this branch**, so naming the planned feature does not imply it is executable today. The Viper currently uses original 1520µs servos and standard PWM. Never apply 760µs pulses to these servos.
 - **ArduPlane 4.8.0-dev is what this branch actually uses**. Official stable Plane **4.7.3** was announced on **19 Nov 2026**. A build from this branch must keep the `-dev` marker until the code has actually been rebased/ported against verified stable 4.7.3 source, compiled and regression-tested. See https://github.com/ArduPilot/ardupilot/releases .
 - No `HWV5`, `HWPM` or `HWRAW` boot/status debug spam in default operation. Standard `AP_ESC_Telem` and MAVLink `ESC_TELEMETRY_*` carry ESC status. Diagnostics available with `SERVO_BLH_HWPMON=1` or `SERVO_BLH_HWRAW=1`.
 
@@ -40,8 +40,8 @@ Keep the operator-verified battery low/critical failsafe, arming, home, RTL, ser
 ```bash
 cd ~/ardupilot-hobbywing-v5-pixhawk6c
 git fetch origin
-git switch integration/viper90-hobbywing-v5-kst-disabled
-git pull --ff-only origin integration/viper90-hobbywing-v5-kst-disabled
+git switch integration/viper90-hobbywing-v5-kst
+git pull --ff-only origin integration/viper90-hobbywing-v5-kst
 source .venv/bin/activate
 bash Tools/hobbywing_v5/build_viper_release.sh
 ```
@@ -52,9 +52,9 @@ The package filename and `BUILD_INFO.txt` use the version that firmware actually
 
 1. Fetch **upstream `ArduPilot/ardupilot`** and checkout its **Plane-4.7.3** release tag (actual resolved SHA), not this development branch. Do not copy `ArduPlane/version.h` from the stable tree onto a newer dev checkout; that is not a port.
 2. Integrate the isolated `libraries/AP_HobbywingV5` protocol parser and host tests. Port the minimal AP_BLHeli hook, source registrations and params to the stable tree, resolving changed APIs/indices. Build Pixhawk6C Plane. Confirm no inadvertent changes to standard BLHeli/ArduPlane behavior with Hobbywing disabled.
-3. Carry over the *saved aircraft .param settings* for PWM/RC reverse and failsafes. Verify all channels and timers on real Pixhawk6C. KST remains disabled/absent until intentionally integrated; stock Viper servos stay 1520µs.
-4. Only then identify the build as `ArduPlane 4.7.3 | Hobbywing V5.1 | KST disabled`, along with unique Git SHA. If firmware itself still says `4.8.0-dev`, do **not** label it stable 4.7.3.
-5. For the helicopter, use independently verified **Copter stable** source, then port Hobbywing and KST as *separate optional features*, with KST 760µs/560Hz explicitly disabled by default. Verify Pixhawk4 MAIN/AUX timer grouping, IOMCU, pulserange failsafe, RPM/tach and ESC PWM before enabling the KST mode. Plane firmware cannot be flashed as Copter.
+3. Carry over the *saved aircraft .param settings* for PWM/RC reverse and failsafes. Verify all channels and timers on real Pixhawk6C. KST will be an optional parameter-controlled function once ported; until then it is not compiled into this branch. Stock Viper servos stay on standard 1520µs PWM.
+4. Only then identify the build as `ArduPlane 4.7.3 | Hobbywing V5.1 + KST 760µs/560Hz`, along with unique Git SHA. If firmware itself still says `4.8.0-dev`, do **not** label it stable 4.7.3.
+5. For the helicopter, use independently verified **Copter stable** source, then port Hobbywing and KST as *separate optional features*, with KST 760µs/560Hz as a parameter-controlled feature whose default is standard servo operation. Verify Pixhawk4 MAIN/AUX timer grouping, IOMCU, pulserange failsafe, RPM/tach and ESC PWM before enabling the KST mode. Plane firmware cannot be flashed as Copter.
 
 ## Normal messages (not developer test data)
 
