@@ -34,6 +34,11 @@
 #include <Filter/LowPassFilter.h>
 #include <AP_MSP/msp_protocol.h>
 #include "blheli_4way_protocol.h"
+#include <AP_HobbywingV5/Stream.h>
+#include <AP_HobbywingV5/Timing.h>
+#include <AP_HobbywingV5/Validity.h>
+#include <AP_HobbywingV5/CurrentCalibration.h>
+
 
 #define AP_BLHELI_MAX_ESCS 8
 
@@ -76,6 +81,14 @@ private:
     AP_Int8 output_type;
     AP_Int8 control_port;
     AP_Int8 motor_poles;
+    AP_Int8 hobbywing_v5; // 1: read-only Hobbywing V5 RX on SerialProtocol_ESCTelemetry
+    AP_Int8 hobbywing_output; // 1-based SERVO output for ESC_TELEMETRY, 0 means not mapped
+    AP_Int8 hobbywing_rpm; // enable shaft RPM publication only after pole-count verification
+    AP_Float hobbywing_current_gain; // ESC current display correction; default unity
+    AP_Float hobbywing_current_offset; // ESC current offset in A; default zero
+    AP_Int8 hobbywing_pm_monitor; // diagnostic comparison only, never alters ESC or battery data
+    AP_Float hobbywing_pm_min_current; // optional display gating threshold in battery A
+    AP_Int8 hobbywing_raw_debug; // 32-byte CRC-verified frame snapshot, rate-limited GCS report
     // mask of channels with bi-directional dshot enabled
     AP_Int32 channel_bidir_dshot_mask;
     
@@ -289,6 +302,21 @@ private:
     void blheli_process_command(void);
     void run_connection_test(uint8_t chan);
     void read_telemetry_packet(void);
+    void update_hobbywing_v5();
+    HobbywingV5::Stream hobbywing_v5_rx;
+    HobbywingV5::Timing hobbywing_v5_timing;
+    HobbywingV5::Sample hobbywing_v5_last_sample{};
+    // Paired ESC and battery monitor snapshot, sampled when a valid ESC frame arrives.
+    float hobbywing_pm_current_a = 0.0f;
+    float hobbywing_pm_voltage_v = 0.0f;
+    bool hobbywing_pm_sample_valid = false;
+    uint32_t hobbywing_last_report_ms = 0;
+    uint32_t hobbywing_rx_bytes = 0;
+    uint32_t hobbywing_rx_fd = 0;
+    uint32_t hobbywing_rx_fe = 0;
+    uint32_t hobbywing_rx_other = 0;
+    uint8_t hobbywing_first_bytes[4]{};
+    uint8_t hobbywing_first_count = 0;
     void log_bidir_telemetry(void);
 
     // protocol handler hook
