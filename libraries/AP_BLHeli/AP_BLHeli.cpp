@@ -1850,7 +1850,7 @@ void AP_BLHeli::update_hobbywing_v5()
             }
         }
         }
-        if (hobbywing_v5_timing.has_sample()) {
+        if (hobbywing_diagnostics && hobbywing_v5_timing.has_sample()) {
             // Engineering diagnostics only: these are raw decoded ESC fields.
             // Zero or constant fields do not establish sensor availability.
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
@@ -1916,7 +1916,6 @@ void AP_BLHeli::update_hobbywing_v5()
                           (unsigned)(hobbywing_v5_last_sample.bec_current_a * 10.0f + 0.5f),
                           (int)hobbywing_v5_last_sample.bec_temp_c,
                           (int)hobbywing_v5_last_sample.motor_temp_c);
-        }
         }
     }
 #endif
