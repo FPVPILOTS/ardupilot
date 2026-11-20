@@ -1791,7 +1791,13 @@ void AP_BLHeli::update_hobbywing_v5()
 
 #if HAL_GCS_ENABLED
     const uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - hobbywing_last_report_ms >= 5000U) {
+    // Release mode: keep detailed MAVLink diagnostics opt-in.
+    // In normal use emit a lightweight periodic health report rather than
+    // dozens of GCS STATUSTEXT lines every few seconds.
+    const bool hobbywing_diagnostics = hobbywing_pm_monitor.get() != 0 ||
+                                       hobbywing_raw_debug.get() != 0;
+    const uint32_t report_period_ms = hobbywing_diagnostics ? 5000U : 60000U;
+    if (now_ms - hobbywing_last_report_ms >= report_period_ms) {
         hobbywing_last_report_ms = now_ms;
         const uint32_t age_ms = hobbywing_v5_timing.has_sample()
             ? hobbywing_v5_timing.age_us(AP_HAL::micros()) / 1000U
@@ -1801,6 +1807,7 @@ void AP_BLHeli::update_hobbywing_v5()
                       (unsigned long)hobbywing_v5_rx.valid_count(),
                       (unsigned long)hobbywing_v5_rx.invalid_count(),
                       (unsigned long)age_ms);
+        if (hobbywing_diagnostics) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                       "HWV5 UART bytes=%lu FD=%lu FE=%lu other=%lu",
                       (unsigned long)hobbywing_rx_bytes,
@@ -1841,6 +1848,7 @@ void AP_BLHeli::update_hobbywing_v5()
                               (unsigned)raw[10], (unsigned)raw[11],
                               (unsigned)raw[24], (unsigned)raw[29]);
             }
+        }
         }
         if (hobbywing_v5_timing.has_sample()) {
             // Engineering diagnostics only: these are raw decoded ESC fields.
@@ -1908,6 +1916,7 @@ void AP_BLHeli::update_hobbywing_v5()
                           (unsigned)(hobbywing_v5_last_sample.bec_current_a * 10.0f + 0.5f),
                           (int)hobbywing_v5_last_sample.bec_temp_c,
                           (int)hobbywing_v5_last_sample.motor_temp_c);
+        }
         }
     }
 #endif
