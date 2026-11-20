@@ -8,7 +8,7 @@ test -d .git || { echo "ArduPilot git checkout not found" >&2; exit 2; }
 
 SHA="$(git rev-parse HEAD)"
 BRANCH="$(git branch --show-current)"
-if [[ "$BRANCH" != "integration/viper90-hobbywing-v5-kst-disabled" ]]; then
+if [[ "$BRANCH" != "integration/viper90-hobbywing-v5-kst" ]]; then
     echo "Wrong branch: $BRANCH" >&2; exit 2
 fi
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
@@ -35,7 +35,7 @@ elif [[ "$TYPE" == "FIRMWARE_VERSION_TYPE_BETA" ]]; then
 elif [[ "$TYPE" != "FIRMWARE_VERSION_TYPE_OFFICIAL" ]]; then
     echo "Unrecognized firmware release type: $TYPE" >&2; exit 2
 fi
-NAME="ArduPlane-${VERSION}_Pixhawk6C_Hobbywing-V5.1_KST-disabled"
+NAME="ArduPlane-${VERSION}_Pixhawk6C_Hobbywing-V5.1+KST-760us-560Hz"
 
 echo "== Hobbywing host verification =="
 bash Tools/hobbywing_v5/run_host_tests.sh
@@ -50,7 +50,7 @@ cp "$FW" "$OUT/${NAME}.apj"
 {
     echo "Firmware identity: ArduPlane $VERSION"
     echo "Build target: Pixhawk6C"
-    echo "Modules: Hobbywing Platinum V5.1 UART telemetry enabled by SERVO_BLH_HWV5=1; KST not integrated / disabled"
+    echo "Module family: Hobbywing V5.1 + KST 760us/560Hz"\n    echo "Built functionality: Hobbywing V5 telemetry; KST implementation not yet ported into this branch"
     echo "Vehicle: E-flite Viper 90mm"
     echo "Firmware branch: $BRANCH"
     echo "Exact commit: $SHA"
