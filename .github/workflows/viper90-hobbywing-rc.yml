@@ -1,0 +1,23 @@
+name: Viper90 Hobbywing RC host verification
+on:
+  push:
+    branches:
+      - release/viper90-hobbywing-v5-pixhawk6c-rc1
+  pull_request:
+    paths:
+      - 'libraries/AP_HobbywingV5/**'
+      - 'libraries/AP_BLHeli/**'
+      - 'Tools/hobbywing_v5/**'
+      - '.github/workflows/viper90-hobbywing-rc.yml'
+jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python and C++ Hobbywing parser tests
+        run: bash Tools/hobbywing_v5/run_host_tests.sh
+      - name: Syntax-check release build helper
+        run: bash -n Tools/hobbywing_v5/build_viper_release.sh
+      - name: Syntax-check release audit
+        run: python3 -m py_compile Tools/hobbywing_v5/audit_viper_plane.py
