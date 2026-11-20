@@ -156,7 +156,7 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
 
     // @Param: HWV5
     // @DisplayName: Hobbywing Platinum V5 receive-only serial ESC telemetry
-    // @Description: Experimental RX-only Hobbywing V5 telemetry decoder on SERIALx_PROTOCOL=16. Disables BLHeli serial telemetry requests while enabled. Does not write to ESC. Bench testing only.
+    // @Description: Enable receive-only Hobbywing Platinum V5 ESC telemetry on SERIALx_PROTOCOL=16. Disables BLHeli serial telemetry requests while enabled. Does not change motor output or transmit ESC commands.
     // @Values: 0:Disabled,1:Enabled
     // @RebootRequired: True
     // @User: Advanced
@@ -1796,8 +1796,9 @@ void AP_BLHeli::update_hobbywing_v5()
     // dozens of GCS STATUSTEXT lines every few seconds.
     const bool hobbywing_diagnostics = hobbywing_pm_monitor.get() != 0 ||
                                        hobbywing_raw_debug.get() != 0;
-    const uint32_t report_period_ms = hobbywing_diagnostics ? 5000U : 60000U;
-    if (now_ms - hobbywing_last_report_ms >= report_period_ms) {
+    // Standard operation uses AP_ESC_Telem/MAVLink ESC telemetry, not GCS debug text.
+    // Optional diagnostic text is rate limited and always explicitly enabled.
+    if (hobbywing_diagnostics && now_ms - hobbywing_last_report_ms >= 5000U) {
         hobbywing_last_report_ms = now_ms;
         const uint32_t age_ms = hobbywing_v5_timing.has_sample()
             ? hobbywing_v5_timing.age_us(AP_HAL::micros()) / 1000U
