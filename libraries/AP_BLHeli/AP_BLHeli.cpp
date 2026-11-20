@@ -158,6 +158,71 @@ const AP_Param::GroupInfo AP_BLHeli::var_info[] = {
     // @RebootRequired: True
     AP_GROUPINFO("RVMASK",  12, AP_BLHeli, channel_reversed_mask, 0),
 
+    // @Param: HWV5
+    // @DisplayName: Hobbywing Platinum V5 receive-only serial ESC telemetry
+    // @Description: Enable receive-only Hobbywing Platinum V5 ESC telemetry on SERIALx_PROTOCOL=16. Disables BLHeli serial telemetry requests while enabled. Does not change motor output or transmit ESC commands.
+    // @Values: 0:Disabled,1:Enabled
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("HWV5", 13, AP_BLHeli, hobbywing_v5, 0),
+
+    // @Param: HWOUT
+    // @DisplayName: Hobbywing V5 ESC output channel for telemetry
+    // @Description: Physical SERVO output connected to the Hobbywing throttle PWM (e.g. 3 for SERVO3), used ONLY to label incoming ESC telemetry. Does not affect the output signal. Zero disables ESC data publication; RX diagnostics continue.
+    // @Range: 0 16
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("HWOUT", 14, AP_BLHeli, hobbywing_output, 0),
+
+    // @Param: HWRPM
+    // @DisplayName: Enable Hobbywing V5 mechanical RPM telemetry
+    // @Description: When enabled, publishes eRPM converted with SERVO_BLH_POLES. Verify physical motor pole count and compare against independent tachometer first. Does not control the motor.
+    // @Values: 0:Disabled,1:Enabled
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("HWRPM", 15, AP_BLHeli, hobbywing_rpm, 0),
+
+    // @Param: HWGAIN
+    // @DisplayName: Hobbywing V5 ESC current gain
+    // @Description: Multiplier applied only to published ESC current. Keep at 1 until calibrated with independent DC current measurement. Raw HWV5 I10 remains unchanged.
+    // @Range: 0.1 10
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO("HWGAIN", 16, AP_BLHeli, hobbywing_current_gain, 1.0f),
+
+    // @Param: HWCOFF
+    // @DisplayName: Hobbywing V5 ESC current offset
+    // @Description: Offset in amperes added after gain to published ESC current when throttle is nonzero. No fabricated current when throttle is zero. Verify with trusted meter before changing.
+    // @Units: A
+    // @Range: -100 100
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("HWCOFF", 17, AP_BLHeli, hobbywing_current_offset, 0.0f),
+
+    // @Param: HWPMON
+    // @DisplayName: Hobbywing V5 paired power-module diagnostic
+    // @Description: Periodically reports ESC raw current/voltage beside primary battery monitor current/voltage sampled on the same ESC frame. For diagnosis only; never alters telemetry or battery failsafes.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("HWPMON", 18, AP_BLHeli, hobbywing_pm_monitor, 0),
+
+    // @Param: HWPMIN
+    // @DisplayName: Minimum primary battery current to show Hobbywing ESC current
+    // @Description: When nonzero, ESC current display is suppressed to zero while primary battery current is lower than this threshold or unavailable. Diagnostic-only display gate, not current sensor calibration. Does not affect battery failsafes or motor output.
+    // @Units: A
+    // @Range: 0 100
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("HWPMIN", 19, AP_BLHeli, hobbywing_pm_min_current, 0.0f),
+
+    // @Param: HWRAW
+    // @DisplayName: Hobbywing V5 CRC-validated raw frame diagnostic
+    // @Description: Every five seconds publish one complete 32-byte CRC-validated ESC frame in four numbered hex chunks for protocol research. Receive-only. Adds MAVLink traffic; enable during bench diagnostics only.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("HWRAW", 20, AP_BLHeli, hobbywing_raw_debug, 0),
+
+
     AP_GROUPEND
 };
 
@@ -1509,7 +1574,7 @@ void AP_BLHeli::init(uint32_t mask, AP_HAL::RCOutput::output_mode otype)
     // check if we have a combination of reversible and normal
     mixed_type = (mask != (mask & channel_reversible_mask.get())) && (channel_reversible_mask.get() != 0);
 
-    if (num_motors != 0 && telem_rate > 0) {
+    if ((num_motors != 0 && telem_rate > 0) || hobbywing_v5 != 0) {
         AP_SerialManager *serial_manager = AP_SerialManager::get_singleton();
         if (serial_manager) {
             telem_uart = serial_manager->find_serial(AP_SerialManager::SerialProtocol_ESCTelemetry,0);
@@ -1622,8 +1687,247 @@ void AP_BLHeli::log_bidir_telemetry(void)
   update BLHeli telemetry handling
   This is called on push() in SRV_Channels
  */
+void AP_BLHeli::update_hobbywing_v5()
+{
+#if HAL_WITH_ESC_TELEM
+    if (telem_uart == nullptr) {
+        return;
+    }
+    if (!telem_uart_started || !telem_uart->is_owned_by_current_thread()) {
+        // 32-byte V5 frames need more than BLHeli's 30-byte RX buffer.
+        telem_uart->begin(115200, 256, 16);
+        telem_uart_started = true;
+        hobbywing_v5_rx.reset();
+    }
+
+    HobbywingV5::Sample sample{};
+    uint16_t budget = 256;
+    while (budget-- > 0 && telem_uart->available() > 0) {
+        const int16_t b = telem_uart->read();
+        if (b < 0) {
+            break;
+        }
+        // Raw UART counters help distinguish no signal from an unexpected
+        // frame format. Never transmit or dump continuous raw data to MAVLink.
+        hobbywing_rx_bytes++;
+        if (hobbywing_first_count < 4) {
+            hobbywing_first_bytes[hobbywing_first_count++] = uint8_t(b);
+        }
+        if (b == 0xFD) {
+            hobbywing_rx_fd++;
+        } else if (b == 0xFE) {
+            hobbywing_rx_fe++;
+        } else {
+            hobbywing_rx_other++;
+        }
+        if (!hobbywing_v5_rx.feed(uint8_t(b), sample)) {
+            continue;
+        }
+        hobbywing_v5_timing.mark_valid(AP_HAL::micros());
+        hobbywing_v5_last_sample = sample;
+#if AP_BATTERY_ENABLED
+        // Capture values as closely in time as possible, not when the 5s report prints.
+        if (hobbywing_pm_monitor.get() != 0 || hobbywing_pm_min_current.get() > 0.0f) {
+            AP_BattMonitor &pm = AP::battery();
+            float pm_current_a = 0.0f;
+            hobbywing_pm_sample_valid = pm.healthy(AP_BATT_PRIMARY_INSTANCE) &&
+                pm.current_amps(pm_current_a, AP_BATT_PRIMARY_INSTANCE);
+            if (hobbywing_pm_sample_valid) {
+                hobbywing_pm_current_a = pm_current_a;
+                hobbywing_pm_voltage_v = pm.voltage(AP_BATT_PRIMARY_INSTANCE);
+            }
+        }
+#endif
+        // Direct PWM ESCs are not present in AP_BLHeli's digital motor_map.
+        // Choose the actual 1-based PWM output explicitly; never alter it.
+        const int8_t output = hobbywing_output.get();
+        if (output >= 1 && output <= 16) {
+            const uint8_t esc_index = uint8_t(output - 1);
+            TelemetryData telemetry{};
+            uint16_t data_mask = 0;
+            if (HobbywingV5::valid_byte_sensor(uint8_t(sample.esc_temp_c))) {
+                telemetry.temperature_cdeg = int16_t(sample.esc_temp_c * 100);
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::TEMPERATURE;
+            }
+            if (HobbywingV5::valid_byte_sensor(uint8_t(sample.motor_temp_c))) {
+                telemetry.motor_temp_cdeg = int16_t(sample.motor_temp_c * 100);
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::MOTOR_TEMPERATURE;
+            }
+            if (sample.voltage_v < 6553.5f) {
+                telemetry.voltage = sample.voltage_v;
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::VOLTAGE;
+            }
+            if (sample.current_a < 6553.5f) {
+                // PL5 ESC repeats the last current after throttle reaches zero.
+                // Mask unreliable low-load ESC readings using the primary PM threshold.
+                // Publishing zero (rather than leaving a stale previous value) is
+                // intentional: zero here means current is suppressed, not measured.
+                bool allow_current = true;
+#if AP_BATTERY_ENABLED
+                allow_current = HobbywingV5::current_above_pm_threshold(
+                    hobbywing_pm_min_current.get(), hobbywing_pm_sample_valid, hobbywing_pm_current_a);
+#else
+                allow_current = hobbywing_pm_min_current.get() <= 0.0f;
+#endif
+                telemetry.current = allow_current ?
+                    HobbywingV5::corrected_current(sample.current_a,
+                        hobbywing_current_gain.get(), hobbywing_current_offset.get(),
+                        sample.throttle_percent) : 0.0f;
+                data_mask |= AP_ESC_Telem_Backend::TelemetryType::CURRENT;
+            }
+            if (data_mask != 0) {
+                update_telem_data(esc_index, telemetry, data_mask);
+            }
+            if (hobbywing_rpm.get() != 0 && motor_poles.get() >= 2) {
+                // Rotorflight PL5 decodes this as electrical RPM.
+                // Explicit opt-in requires independent motor pole verification.
+                update_rpm(esc_index,
+                           HobbywingV5::mechanical_rpm(sample.rpm_field_x10, motor_poles.get()));
+            }
+            // Consumption is not encoded in the 32-byte PL5 frame.
+        }
+    }
+
+#if HAL_GCS_ENABLED
+    const uint32_t now_ms = AP_HAL::millis();
+    // Release mode: keep detailed MAVLink diagnostics opt-in.
+    // In normal use emit a lightweight periodic health report rather than
+    // dozens of GCS STATUSTEXT lines every few seconds.
+    const bool hobbywing_diagnostics = hobbywing_pm_monitor.get() != 0 ||
+                                       hobbywing_raw_debug.get() != 0;
+    // Standard operation uses AP_ESC_Telem/MAVLink ESC telemetry, not GCS debug text.
+    // Optional diagnostic text is rate limited and always explicitly enabled.
+    if (hobbywing_diagnostics && now_ms - hobbywing_last_report_ms >= 5000U) {
+        hobbywing_last_report_ms = now_ms;
+        const uint32_t age_ms = hobbywing_v5_timing.has_sample()
+            ? hobbywing_v5_timing.age_us(AP_HAL::micros()) / 1000U
+            : UINT32_MAX;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "HWV5 RX ok=%lu bad=%lu age=%lums",
+                      (unsigned long)hobbywing_v5_rx.valid_count(),
+                      (unsigned long)hobbywing_v5_rx.invalid_count(),
+                      (unsigned long)age_ms);
+        if (hobbywing_diagnostics) {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "HWV5 UART bytes=%lu FD=%lu FE=%lu other=%lu",
+                      (unsigned long)hobbywing_rx_bytes,
+                      (unsigned long)hobbywing_rx_fd,
+                      (unsigned long)hobbywing_rx_fe,
+                      (unsigned long)hobbywing_rx_other);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "HWV5 first=%02X %02X %02X %02X n=%u",
+                      (unsigned)hobbywing_first_bytes[0],
+                      (unsigned)hobbywing_first_bytes[1],
+                      (unsigned)hobbywing_first_bytes[2],
+                      (unsigned)hobbywing_first_bytes[3],
+                      (unsigned)hobbywing_first_count);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "HWV5 RX Hz10=%lu dt=%lu max=%lu us",
+                      (unsigned long)hobbywing_v5_timing.frequency_hz_x10(),
+                      (unsigned long)hobbywing_v5_timing.interval_us(),
+                      (unsigned long)hobbywing_v5_timing.max_interval_us());
+        // A frame is reported only if valid CRC and recent. Never dump noisy
+        // UART input; each 8-byte chunk shares one snapshot and frame ID.
+        if (hobbywing_raw_debug.get() != 0 && age_ms <= 1000U) {
+            uint8_t raw[HobbywingV5::TELEMETRY_FRAME_LENGTH]{};
+            if (hobbywing_v5_rx.copy_last_valid(raw, sizeof(raw))) {
+                const unsigned long frame_id =
+                    (unsigned long)hobbywing_v5_rx.valid_count();
+                for (uint8_t chunk = 0; chunk < 4; chunk++) {
+                    const uint8_t *r = raw + chunk * 8U;
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "HWRAW %lu %u:%02X%02X%02X%02X%02X%02X%02X%02X",
+                                  frame_id, (unsigned)chunk,
+                                  (unsigned)r[0], (unsigned)r[1],
+                                  (unsigned)r[2], (unsigned)r[3],
+                                  (unsigned)r[4], (unsigned)r[5],
+                                  (unsigned)r[6], (unsigned)r[7]);
+                }
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                              "HWRAW unknown10=%02X%02X tail=%02X%02X",
+                              (unsigned)raw[10], (unsigned)raw[11],
+                              (unsigned)raw[24], (unsigned)raw[29]);
+            }
+        }
+        }
+        if (hobbywing_diagnostics && hobbywing_v5_timing.has_sample()) {
+            // Engineering diagnostics only: these are raw decoded ESC fields.
+            // Zero or constant fields do not establish sensor availability.
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 RPMraw=%lu THR=%u FAULT=%u",
+                          (unsigned long)hobbywing_v5_last_sample.rpm_field_x10,
+                          (unsigned)hobbywing_v5_last_sample.throttle_percent,
+                          (unsigned)hobbywing_v5_last_sample.fault_raw);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 ESC V10=%lu I10=%lu T=%d",
+                          (unsigned long)(hobbywing_v5_last_sample.voltage_v * 10.0f + 0.5f),
+                          (unsigned long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
+                          (int)hobbywing_v5_last_sample.esc_temp_c);
+            // Use integer formatting to avoid float printf overhead on embedded targets.
+            const float current_pub_a = HobbywingV5::corrected_current(
+                hobbywing_v5_last_sample.current_a,
+                hobbywing_current_gain.get(),
+                hobbywing_current_offset.get(),
+                hobbywing_v5_last_sample.throttle_percent);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 CUR raw10=%ld pub10=%ld",
+                          (long)(hobbywing_v5_last_sample.current_a * 10.0f + 0.5f),
+                          (long)(current_pub_a * 10.0f + 0.5f));
+            if (hobbywing_pm_min_current.get() > 0.0f) {
+#if AP_BATTERY_ENABLED
+                const bool qualified = HobbywingV5::current_above_pm_threshold(
+                    hobbywing_pm_min_current.get(),
+                    hobbywing_pm_sample_valid && age_ms <= 1000U,
+                    hobbywing_pm_current_a);
+#else
+                const bool qualified = false;
+#endif
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                              "HWV5 CUR gate=%u PMmin10=%ld",
+                              (unsigned)qualified,
+                              (long)(hobbywing_pm_min_current.get() * 10.0f));
+            }
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 mapped=SERVO%d RPMpub=%d",
+                          (int)hobbywing_output.get(),
+                          (int)hobbywing_rpm.get());
+#if AP_BATTERY_ENABLED
+            if (hobbywing_pm_monitor.get() != 0) {
+                if (hobbywing_pm_sample_valid && age_ms <= 1000U) {
+                    const float pm_minus_esc_a = hobbywing_pm_current_a -
+                        hobbywing_v5_last_sample.current_a;
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "HWPM I10=%ld ESC10=%ld D10=%ld",
+                                  (long)(hobbywing_pm_current_a * 10.0f),
+                                  (long)(hobbywing_v5_last_sample.current_a * 10.0f),
+                                  (long)(pm_minus_esc_a * 10.0f));
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "HWPM V10=%ld ESCV10=%ld",
+                                  (long)(hobbywing_pm_voltage_v * 10.0f),
+                                  (long)(hobbywing_v5_last_sample.voltage_v * 10.0f));
+                } else {
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "HWPM unavailable or stale");
+                }
+            }
+#endif
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "HWV5 BECraw V10=%u I10=%u T=%d MT=%d",
+                          (unsigned)(hobbywing_v5_last_sample.bec_voltage_v * 10.0f + 0.5f),
+                          (unsigned)(hobbywing_v5_last_sample.bec_current_a * 10.0f + 0.5f),
+                          (int)hobbywing_v5_last_sample.bec_temp_c,
+                          (int)hobbywing_v5_last_sample.motor_temp_c);
+        }
+    }
+#endif
+#endif
+}
+
 void AP_BLHeli::update_telemetry(void)
 {
+    if (hobbywing_v5 != 0) {
+        update_hobbywing_v5();
+        return;
+    }
 #ifdef HAL_WITH_BIDIR_DSHOT
     // we might only have bi-dir dshot
     if (channel_bidir_dshot_mask.get() != 0 && !telem_uart) {
