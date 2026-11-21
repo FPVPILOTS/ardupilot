@@ -92,7 +92,8 @@ private:
     // parameters
     AP_Int8  _swashplate_type;                   // Swash Type Setting
     AP_Int8  _swash_coll_dir;                    // Collective control direction, normal or reversed
-    AP_Int8  _linear_swash_servo;                // linearize swashplate output
+    AP_Int8  _linear_swash_servo;
+    AP_Int8  _swash_pwm_mode;  // 0 legacy 1000-2000, 1 servo MIN/TRIM/MAX                // linearize swashplate output
     AP_Int8  enable;
     AP_Int16 _servo1_pos;                        // servo1 azimuth position on swashplate with front of heli being 0 deg
     AP_Int16 _servo2_pos;                        // servo2 azimuth position on swashplate with front of heli being 0 deg
