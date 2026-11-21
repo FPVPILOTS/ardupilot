@@ -38,7 +38,7 @@ ArduCopter target: Pixhawk4
 Common firmware identity: ArduPilot 4.7.3 (official vehicle version metadata)
 Module family label: Hobbywing V5.1 + KST 760us/560Hz
 Hobbywing receive-only telemetry driver: integrated; default OFF
-KST 760us/560Hz: NOT INTEGRATED IN THIS STABLE PORT YET
+KST swash endpoint mode: INTEGRATED (H_SW_PWM_MODE=1; default 0), awaiting target build and bench validation\nKST 560Hz: IOMCU first PWM group only, explicit 560 Hz request; default unchanged\nKST safety: never select 560Hz with ordinary 1500us servos; 560Hz mode clamps active pulses to 560..960us
 Vehicle parameter presets: NONE (stock firmware defaults)
 Post-flash hardware verification: NOT PERFORMED BY SCRIPT
 EOF
