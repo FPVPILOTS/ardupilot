@@ -6,7 +6,7 @@
 - **Plane**: original `ArduPlane/version.h` from official Plane-4.7.3, target `Pixhawk6C`.
 - **Copter**: original `ArduCopter/version.h` from official Copter-4.7.3, target `Pixhawk4`.
 - The custom branch carries the receive-only Hobbywing V5 decoder and its AP_BLHeli integration. **Do not alter firmware version headers or standard default parameter tables** to disguise upstream provenance.
-- **KST support is not yet ported into this new stable branch**. Product family label includes KST, but this exact build does NOT claim operational 760us/560Hz support until implemented and tested. Keep original normal servo behavior.
+- **KST code is now ported as an opt-in feature** in the 4.7.3 branch, with default standard servo behavior. Its true 560Hz physical timing and 760us electrical pulses still require two-target build and Pixhawk4 hardware validation before flight use. See `Tools/hobbywing_v5/KST_760_560_STABLE_SETUP.md`.
 
 ## Build both (no vehicle-specific defaults embedded)
 
@@ -57,14 +57,14 @@ After compiling and flashing the correctly targeted APJ, ordinary ArduPlane star
 - Firmware uses standard ArduCopter defaults. Airframe heli parameters are applied separately from the saved heli `.param`.
 - Motor ESC UART telemetry `SERIALx_PROTOCOL=16`, `SERIALx_BAUD=115` and `SERVO_BLH_HWV5=1` only after verifying the **actual 80A ESC** transmits compatible V5.1 32-byte frames. Set `SERVO_BLH_HWOUT` to the real motor/HeliRSC servo output, not automatically 3.
 - `SERVO_BLH_POLES` = actual heli motor pole count, `SERVO_BLH_HWRPM=1` only after verification; motor shaft RPM is not rotor headspeed RPM without a gear ratio. Keep independent headspeed sensor for closed loop governor unless separately validated.
-- **KST 760us/560Hz remains unavailable in this exact port**. Do not apply 560/760 parameter values to normal servos; leave stock ranges and rates. After completing the KST patch on this same official 4.7.3 base, add opt-in parameters with defaults preserving normal PWM on Plane and Copter, test IOMCU and FMU groups on Pixhawk4, and rebuild both.
+- **KST 760us/560Hz code is now present but requires hardware verification**. `H_SW_PWM_MODE=0` defaults to conventional swash behavior; `H_SW_PWM_MODE=1` opts in to the servo endpoint mapping. 560Hz is a separate explicit rate selection limited to the first IOMCU PWM group and clamps the nonzero output pulse to 560–960us. Never enable it on 1520us servos. See `KST_760_560_STABLE_SETUP.md`.
 - Standard servo power, battery failsafe, flight control and governor parameters are vehicle-specific, not included in firmware defaults.
 
 ## Pending engineering verification
 
 1. Build stable branch and resolve any 4.7.3 API incompatibility revealed by compilation (do not transplant 4.8 source wholesale).
 2. Flash and regression-test ESC telemetry, speed, motor reverse, failsafe and 333Hz output on Pixhawk6C; stable-base differences may change timer grouping or PWM setup.
-3. Port tested KST patches only with new per-output opt-in, default 1520us PWM; validate on Plane and Copter including IOMCU independently.
+3. KST swash mode and IOMCU 560Hz fast-path are ported as optional features; validate default-off behavior, Plane/Copter builds, Pixhawk4 IOMCU timing and physical pulse widths independently.
 4. Mark combined two-module variant complete only once both builds and hardware checks pass.
 
 Official releases: https://github.com/ArduPilot/ardupilot/releases
