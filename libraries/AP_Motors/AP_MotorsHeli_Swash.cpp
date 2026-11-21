@@ -89,6 +89,7 @@ const AP_Param::GroupInfo AP_MotorsHeli_Swash::var_info[] = {
     // @DisplayName: Swashplate servo PWM endpoint selection
     // @Description: Selects legacy 1000-2000us swash output or per-servo MIN/TRIM/MAX. Required for 760us-centre KST servos. Do not enable until matching physical servos and pulse ranges are installed. Does not set the output frequency.
     // @Values: 0:Legacy1000-2000,1:ServoMinTrimMax
+    // @RebootRequired: True
     // @User: Advanced
     AP_GROUPINFO("PWM_MODE", 9, AP_MotorsHeli_Swash, _swash_pwm_mode, 0),
 
