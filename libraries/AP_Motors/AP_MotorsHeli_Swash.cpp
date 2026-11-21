@@ -84,6 +84,14 @@ const AP_Param::GroupInfo AP_MotorsHeli_Swash::var_info[] = {
     // @User: Advanced
     // @Increment: 1
     AP_GROUPINFO("H3_PHANG", 8, AP_MotorsHeli_Swash, _phase_angle, 0),
+
+    // @Param: PWM_MODE
+    // @DisplayName: Swashplate servo PWM endpoint selection
+    // @Description: Selects legacy 1000-2000us swash output or per-servo MIN/TRIM/MAX. Required for 760us-centre KST servos. Do not enable until matching physical servos and pulse ranges are installed. Does not set the output frequency.
+    // @Values: 0:Legacy1000-2000,1:ServoMinTrimMax
+    // @User: Advanced
+    AP_GROUPINFO("PWM_MODE", 9, AP_MotorsHeli_Swash, _swash_pwm_mode, 0),
+
    
     AP_GROUPEND
 };
@@ -201,11 +209,15 @@ void AP_MotorsHeli_Swash::add_servo_raw(uint8_t num, float roll, float pitch, fl
     SRV_Channel::Function function = SRV_Channels::get_motor_function(_motor_num[num]);
     SRV_Channels::set_aux_channel_default(function, _motor_num[num]);
 
-    // outputs are defined on a -500 to 500 range for swash servos
-    SRV_Channels::set_range(function, 1000);
-
-    // swash servos always use full endpoints as restricting them would lead to scaling errors
-    SRV_Channels::set_output_min_max(function, 1000, 2000);
+    if (_swash_pwm_mode.get() == 1) {
+        // Opt-in: retain SERVOx_MIN/TRIM/MAX and map -1..1 around
+        // the configured SERVOx_TRIM (e.g. 560/760/960us).
+        SRV_Channels::set_angle(function, 500);
+    } else {
+        // Identical to the official 4.7.3 legacy behavior.
+        SRV_Channels::set_range(function, 1000);
+        SRV_Channels::set_output_min_max(function, 1000, 2000);
+    }
 
 }
 
@@ -271,9 +283,15 @@ void AP_MotorsHeli_Swash::output()
 // multiplied by 500 to get PWM output.
 void AP_MotorsHeli_Swash::rc_write(uint8_t chan, float swash_in)
 {
-    uint16_t pwm = (uint16_t)(1500 + 500 * swash_in);
     SRV_Channel::Function function = SRV_Channels::get_motor_function(chan);
-    SRV_Channels::set_output_pwm_trimmed(function, pwm);
+    if (_swash_pwm_mode.get() == 1) {
+        // With set_angle(500) this maps around SERVOx_TRIM, observing
+        // the distinct positive/negative endpoint spans and reversal.
+        SRV_Channels::set_output_norm(function, constrain_float(swash_in, -1.0f, 1.0f));
+    } else {
+        const uint16_t pwm = uint16_t(1500 + 500 * swash_in);
+        SRV_Channels::set_output_pwm_trimmed(function, pwm);
+    }
 }
 
 // Get function output mask
